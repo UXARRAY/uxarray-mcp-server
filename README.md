@@ -70,7 +70,7 @@ Try asking Claude:
 ```
 This is an MPAS format mesh with:
 - 1,791 faces (ocean cells)
-- 3,947 nodes (corner points)  
+- 3,947 nodes (corner points)
 - 5,754 edges
 - Hexagonal cells (max 6 nodes per face)
 - File size: 4.61 MB
