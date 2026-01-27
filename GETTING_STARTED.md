@@ -73,9 +73,9 @@ uv run pytest
 
 **Expected output:**
 ```
-tests/unit/test_inspection_tool.py ........                              [ 66%]
-tests/integration/test_inspection_integration.py .                       [ 75%]
-tests/unit/test_server.py .                                              [100%]
+tests/test_inspection_tool.py ........                                   [ 66%]
+tests/test_inspection_integration.py .                                   [ 75%]
+tests/test_server.py .                                                   [100%]
 
 ============================== 12 passed in 1.32s ==============================
 ```
