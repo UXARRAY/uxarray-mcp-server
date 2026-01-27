@@ -73,11 +73,10 @@ uv run pytest
 
 **Expected output:**
 ```
-tests/test_inspection_tool.py ........                                   [ 66%]
-tests/test_inspection_integration.py .                                   [ 75%]
+tests/test_inspect_mesh.py .......                                       [ 87%]
 tests/test_server.py .                                                   [100%]
 
-============================== 12 passed in 1.32s ==============================
+=============================== 8 passed in 1.32s ==============================
 ```
 
 If you see green passes, the tool is ready!
