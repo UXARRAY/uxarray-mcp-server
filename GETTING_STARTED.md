@@ -62,42 +62,25 @@ This installs:
 - globus-compute-sdk (remote execution)
 - pytest (testing)
 
-### Step 3: Get Test Mesh Files
+### Step 3: Run Tests
 
-Clone the uxarray repository for test files:
-
-```bash
-cd ~/Desktop
-git clone https://github.com/UXARRAY/uxarray.git
-```
-
-Test files will be at: `~/Desktop/uxarray/test/meshfiles/`
-
-### Step 4: Test Locally
+Run the automated test suite (no external files required):
 
 ```bash
 cd ~/Desktop/uxarray-mcp-server
-uv run python test_local.py
+uv run pytest
 ```
 
 **Expected output:**
 ```
-[TEST] Testing UXarray MCP Server - inspect_mesh tool
+tests/unit/test_inspection_tool.py ........                              [ 66%]
+tests/integration/test_inspection_integration.py .                       [ 75%]
+tests/unit/test_server.py .                                              [100%]
 
-============================================================
-Testing MPAS Ocean Mesh
-============================================================
-
-[OK] Successfully inspected mesh!
-
-Format: MPAS
-Faces: 1,791
-Nodes: 3,947
-Edges: 5,754
-...
+============================== 12 passed in 1.32s ==============================
 ```
 
-If you see [OK], the tool works correctly!
+If you see green passes, the tool is ready!
 
 ### Step 5: Configure Claude Desktop
 
@@ -217,8 +200,8 @@ Claude will call the tool and respond with mesh statistics like:
 
 ### Problem: "File not found" errors
 
-**Solution:** 
-- Use absolute paths to mesh files
+**Solution:**
+- Use absolute paths to mesh filespyte
 - Verify test files exist: `ls ~/Desktop/uxarray/test/meshfiles/mpas/QU/`
 - Clone uxarray if needed: `git clone https://github.com/UXARRAY/uxarray.git ~/Desktop/uxarray`
 
