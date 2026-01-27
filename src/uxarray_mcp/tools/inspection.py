@@ -2,6 +2,7 @@ import uxarray as ux
 from pathlib import Path
 from typing import Dict, Any
 
+
 def inspect_mesh(file_path: str) -> Dict[str, Any]:
     """
     Inspect an unstructured mesh file and return basic topology information.
@@ -38,11 +39,13 @@ def inspect_mesh(file_path: str) -> Dict[str, Any]:
         try:
             # Expected format: "healpix:<zoom_level>" or just "healpix" (default zoom?)
             parts = file_path.split(":")
-            zoom = int(parts[1]) if len(parts) > 1 else 1 # Default to zoom 1 if not specified
-            
+            zoom = (
+                int(parts[1]) if len(parts) > 1 else 1
+            )  # Default to zoom 1 if not specified
+
             grid = ux.Grid.from_healpix(zoom=zoom)
-            file_size_mb = 0.0 # Virtual mesh, no file size
-            
+            file_size_mb = 0.0  # Virtual mesh, no file size
+
             # Extract topology information
             result = {
                 "format": "HEALPix",
@@ -50,11 +53,13 @@ def inspect_mesh(file_path: str) -> Dict[str, Any]:
                 "n_node": int(grid.n_node),
                 "n_edge": int(grid.n_edge),
                 "n_max_face_nodes": int(grid.n_max_face_nodes),
-                "file_size_mb": 0.0
+                "file_size_mb": 0.0,
             }
             return result
         except ValueError:
-             raise ValueError("Invalid HEALPix format. Use 'healpix:<zoom_level>' (e.g., 'healpix:2').")
+            raise ValueError(
+                "Invalid HEALPix format. Use 'healpix:<zoom_level>' (e.g., 'healpix:2')."
+            )
         except Exception as e:
             raise RuntimeError(f"Failed to generate HEALPix mesh: {str(e)}")
 
@@ -78,7 +83,7 @@ def inspect_mesh(file_path: str) -> Dict[str, Any]:
         "n_node": int(grid.n_node),
         "n_edge": int(grid.n_edge),
         "n_max_face_nodes": int(grid.n_max_face_nodes),
-        "file_size_mb": round(file_size_mb, 2)
+        "file_size_mb": round(file_size_mb, 2),
     }
 
     return result
