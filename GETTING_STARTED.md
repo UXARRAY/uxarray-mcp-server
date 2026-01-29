@@ -2,6 +2,8 @@
 
 This guide walks you through setting up the UXarray MCP Server from scratch.
 
+**Note:** This guide uses Claude Desktop as an example MCP client. This server works with any MCP-compatible client (Cline, Zed, Continue, etc.). Configuration steps are similar - refer to your client's documentation for MCP setup.
+
 ---
 
 ## Prerequisites
@@ -10,7 +12,7 @@ Before you begin, ensure you have:
 
 - [ ] **Python 3.13+** - Check with: `python3 --version`
 - [ ] **pip** - Check with: `pip --version`
-- [ ] **Claude Desktop** - Download from [claude.ai](https://claude.ai)
+- [ ] **MCP Client** - Claude Desktop ([claude.ai](https://claude.ai)) or any MCP-compatible client
 - [ ] **Git** (optional) - For cloning the repository
 
 ---
