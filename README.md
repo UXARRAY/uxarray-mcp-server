@@ -27,7 +27,7 @@ Tests are self-contained and do not require external mesh files.
 
 ## MCP Client Integration
 
-This server works with any MCP-compatible client. The examples below use Claude Desktop, but you can integrate with other MCP clients (e.g., Cline, Zed, Continue, etc.) by following similar configuration steps. Refer to your client's documentation for MCP server setup.
+This server works with any MCP-compatible client. The examples below use Claude Desktop, but you can integrate with other MCP clients by following similar configuration steps. Refer to your client's documentation for MCP server setup.
 
 ## Connecting to Claude Desktop
 
