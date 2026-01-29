@@ -15,15 +15,15 @@ An MCP (Model Context Protocol) server that provides AI agents with tools for an
 uv sync
 ```
 
-## Testing Locally
+## Testing
 
-Run the test script to verify the tool works:
+Run the automated test suite:
 
 ```bash
-uv run python test_local.py
+uv run pytest
 ```
 
-This will test the `inspect_mesh` tool with sample mesh files from the uxarray test directory.
+Tests are self-contained and do not require external mesh files.
 
 ## Connecting to Claude Desktop
 
@@ -41,10 +41,10 @@ Add this to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "uxarray": {
-      "command": "uv",
+      "command": "/path/to/uv",
       "args": [
         "--directory",
-        "/Users/dayanabdulla/Desktop/uxarray-mcp-server",
+        "/path/to/uxarray-mcp-server",
         "run",
         "python",
         "-m",
@@ -55,6 +55,8 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
+Replace `/path/to/uv` with output from `which uv` and `/path/to/uxarray-mcp-server` with your project directory.
+
 ### Step 3: Restart Claude Desktop
 
 Close and reopen Claude Desktop completely.
@@ -63,7 +65,9 @@ Close and reopen Claude Desktop completely.
 
 Try asking Claude:
 
-> "Use the inspect_mesh tool to analyze this file: /Users/dayanabdulla/Desktop/uxarray/test/meshfiles/mpas/QU/oQU480.231010.nc"
+> "Use the inspect_mesh tool to analyze a mesh file at: /path/to/your/mesh.nc"
+>
+> Or generate a HEALPix mesh: "Use inspect_mesh with healpix:2"
 
 ## Example Output
 
@@ -82,20 +86,40 @@ This is an MPAS format mesh with:
 
 Analyzes an unstructured mesh file and returns topology information.
 
+**Parameters:**
+- `file_path`: Path to mesh file, or `healpix:<zoom>` to generate HEALPix mesh
+
+**Returns:**
+- `format`: Mesh format (MPAS, UGRID, SCRIP, HEALPix, etc.)
+- `n_face`: Number of faces (cells)
+- `n_node`: Number of nodes (vertices)
+- `n_edge`: Number of edges
+- `n_max_face_nodes`: Maximum nodes per face
+- `file_size_mb`: File size in MB
+
 **Supported Formats:**
-MPAS, UGRID, SCRIP, ESMF, Exodus, FESOM, ICON, and more
+MPAS, UGRID, SCRIP, ESMF, Exodus, FESOM, ICON, HEALPix, and more
 
 ## Project Structure
 
 ```
 uxarray-mcp-server/
+├── .github/workflows/
+│   └── ci.yml                      # CI/CD pipeline
 ├── src/uxarray_mcp/
-│   ├── server.py       # MCP tools (inspect_mesh)
-│   ├── __init__.py     # Package exports
-│   └── __main__.py     # Server entry point
-├── test_local.py       # Local testing script
-├── pyproject.toml      # Dependencies
-└── README.md           # This file
+│   ├── server.py                   # MCP server entry point
+│   ├── __init__.py                 # Package exports
+│   ├── __main__.py                 # CLI entry point
+│   └── tools/
+│       ├── __init__.py             # Tool exports
+│       └── inspection.py           # inspect_mesh tool
+├── tests/
+│   ├── conftest.py                 # Test fixtures
+│   ├── test_inspect_mesh.py        # Unit & integration tests
+│   └── test_server.py              # Server tests
+├── pyproject.toml                  # Dependencies & config
+├── pytest.ini                      # Pytest configuration
+└── README.md                       # This file
 ```
 
 ## Running the Server
@@ -110,18 +134,11 @@ uv run python -m uxarray_mcp.server
 
 ## Development
 
-**Add new tools:** Edit `src/uxarray_mcp/server.py` and add functions with the `@mcp.tool()` decorator.
+**Add new tools:** Create new functions in `src/uxarray_mcp/tools/` and register them in `server.py`.
 
-**Test changes:** Run `uv run python test_local.py` after modifications.
+**Test changes:** Run `uv run pytest` after modifications.
 
 **Update dependencies:** Run `uv add <package-name>` to add new packages.
-
-## Bi-Weekly Milestones
-
-- **[DONE] Bi-Weekly 1 (Jan 19-30):** `inspect_mesh` tool with local file support
-- **[TODO] Bi-Weekly 2 (Jan 31-Feb 13):** `inspect_variables`, `calculate_area`, remote execution
-- **[TODO] Bi-Weekly 3 (Feb 14-27):** Regridding with GPU acceleration
-- **[TODO] Bi-Weekly 4 (Feb 28-Mar 13):** Autonomous agent with resource management
 
 ## Resources
 
