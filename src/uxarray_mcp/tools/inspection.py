@@ -293,3 +293,106 @@ def calculate_area(file_path: str) -> Dict[str, Any]:
     }
 
     return result
+
+
+def calculate_zonal_mean(
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+    lat_spec: Optional[tuple | float | list] = None,
+    conservative: bool = False,
+) -> Dict[str, Any]:
+    """
+    Calculate zonal mean of a face-centered variable along latitude bands.
+
+    This tool computes averages along lines of constant latitude (non-conservative)
+    or over latitude bands (conservative) using UXarray's built-in zonal_mean method.
+
+    Args:
+        grid_path: Path to the mesh grid file
+        data_path: Path to the data file with variables
+        variable_name: Name of the variable to compute zonal mean for
+        lat_spec: Latitude specification:
+            - None: Uses default (-90, 90, 10)
+            - tuple (start, end, step): Latitude range and interval
+            - float: Single latitude for non-conservative
+            - list: Explicit latitudes or band edges
+        conservative: If True, performs area-weighted averaging over latitude bands.
+                     If False, performs intersection-weighted averaging at latitude lines.
+
+    Returns:
+        Dictionary containing:
+        - variable_name: Name of the original variable
+        - latitudes: List of latitude values/bands
+        - zonal_mean_values: List of computed zonal mean values
+        - conservative: Whether conservative method was used
+        - grid_info: Grid summary {n_face, n_node, n_edge}
+
+    Example:
+        >>> calculate_zonal_mean("grid.nc", "data.nc", "temperature")
+        {
+            "variable_name": "temperature",
+            "latitudes": [-90, -80, -70, ..., 80, 90],
+            "zonal_mean_values": [271.5, 273.2, ..., 268.9],
+            "conservative": False,
+            "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
+        }
+    """
+    # Validate file paths exist
+    grid_path_obj = Path(grid_path)
+    data_path_obj = Path(data_path)
+
+    if not grid_path_obj.exists():
+        raise FileNotFoundError(f"Grid file not found: {grid_path}")
+    if not data_path_obj.exists():
+        raise FileNotFoundError(f"Data file not found: {data_path}")
+
+    # Load the dataset using UXarray
+    try:
+        uxds = ux.open_dataset(grid_path, data_path)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load dataset: {str(e)}")
+
+    # Validate variable exists
+    if variable_name not in uxds.data_vars:
+        available = list(uxds.data_vars.keys())
+        raise ValueError(
+            f"Variable '{variable_name}' not found. Available variables: {available}"
+        )
+
+    # Get the data array
+    var = uxds[variable_name]
+
+    # Validate variable is face-centered
+    if "n_face" not in var.dims and "nCells" not in var.dims:
+        raise ValueError(
+            f"Variable '{variable_name}' is not face-centered. Zonal mean only supports face-centered data."
+        )
+
+    # Compute zonal mean using UXarray's built-in method
+    try:
+        if lat_spec is not None:
+            zonal_result = var.zonal_mean(lat=lat_spec, conservative=conservative)
+        else:
+            zonal_result = var.zonal_mean(conservative=conservative)
+    except Exception as e:
+        raise RuntimeError(f"Failed to compute zonal mean: {str(e)}")
+
+    # Extract results
+    latitudes = zonal_result.coords["latitudes"].values.tolist()
+    zonal_mean_values = zonal_result.values.tolist()
+
+    # Get grid context
+    grid_info = {
+        "n_face": int(uxds.uxgrid.n_face),
+        "n_node": int(uxds.uxgrid.n_node),
+        "n_edge": int(uxds.uxgrid.n_edge),
+    }
+
+    return {
+        "variable_name": variable_name,
+        "latitudes": latitudes,
+        "zonal_mean_values": zonal_mean_values,
+        "conservative": conservative,
+        "grid_info": grid_info,
+    }
