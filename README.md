@@ -104,6 +104,47 @@ Analyzes an unstructured mesh file and returns topology information.
 **Supported Formats:**
 MPAS, UGRID, SCRIP, ESMF, Exodus, FESOM, ICON, HEALPix, and more
 
+### `inspect_variable(grid_path: str, data_path: str, variable_name: str = None)`
+
+Inspects data variables in mesh datasets and returns their metadata.
+
+**Parameters:**
+- `grid_path`: Path to mesh grid file
+- `data_path`: Path to data file with variables
+- `variable_name`: Optional - inspect specific variable, or all if None
+
+**Returns:**
+- `variables`: List of variable info including:
+  - `name`: Variable name
+  - `dims`: Dimension names
+  - `shape`: Array shape
+  - `dtype`: Data type
+  - `location`: Where data lives ("faces", "nodes", "edges", or "other")
+  - `attrs`: Variable attributes (units, long_name, etc.)
+  - `statistics`: Min, max, mean (if numeric)
+- `grid_info`: Grid summary (n_face, n_node, n_edge)
+
+**Example:**
+Ask Claude: "Use inspect_variable to analyze variables in grid.nc and data.nc"
+
+### `calculate_area(file_path: str)`
+
+Calculates face areas for an unstructured mesh.
+
+**Parameters:**
+- `file_path`: Path to mesh file, or `healpix:<zoom>` to generate HEALPix mesh
+
+**Returns:**
+- `total_area`: Total surface area of the mesh
+- `mean_area`: Mean face area
+- `min_area`: Minimum face area
+- `max_area`: Maximum face area
+- `area_units`: Units of the area (m^2, km^2, etc.)
+- `n_face`: Number of faces
+
+**Example:**
+Ask Claude: "Use calculate_area to compute face areas for mesh.nc"
+
 ## Project Structure
 
 ```
