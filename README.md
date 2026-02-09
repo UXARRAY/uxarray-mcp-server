@@ -145,6 +145,31 @@ Calculates face areas for an unstructured mesh.
 **Example:**
 Ask Claude: "Use calculate_area to compute face areas for mesh.nc"
 
+### `calculate_zonal_mean(grid_path: str, data_path: str, variable_name: str, lat_spec: tuple | float | list = None, conservative: bool = False)`
+
+Calculates zonal mean (latitude-band average) of a face-centered variable.
+
+**Parameters:**
+- `grid_path`: Path to mesh grid file
+- `data_path`: Path to data file with variables
+- `variable_name`: Name of the variable to compute zonal mean for (must be face-centered)
+- `lat_spec`: Optional latitude specification:
+  - `None`: Uses default (-90, 90, 10)
+  - `tuple (start, end, step)`: Latitude range and interval
+  - `float`: Single latitude for non-conservative
+  - `list`: Explicit latitudes or band edges
+- `conservative`: If True, performs area-weighted averaging over latitude bands. If False (default), performs intersection-weighted averaging at latitude lines.
+
+**Returns:**
+- `variable_name`: Name of the original variable
+- `latitudes`: List of latitude values/bands
+- `zonal_mean_values`: List of computed zonal mean values
+- `conservative`: Whether conservative method was used
+- `grid_info`: Grid summary (n_face, n_node, n_edge)
+
+**Example:**
+Ask Claude: "Use calculate_zonal_mean to compute the zonal mean of temperature from -60 to 60 degrees with 20 degree intervals"
+
 ## Project Structure
 
 ```
