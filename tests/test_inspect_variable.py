@@ -236,9 +236,6 @@ class TestInspectVariableErrorHandling:
     def test_variable_not_found(self):
         """Test handling of invalid variable name."""
         mock_uxds = MagicMock()
-        # Use MagicMock for data_vars that returns the right dict
-        mock_temp = MagicMock()
-        mock_sal = MagicMock()
         mock_data_vars = MagicMock()
         mock_data_vars.__contains__ = lambda self, key: key in ["temperature", "salinity"]
         mock_data_vars.keys.return_value = ["temperature", "salinity"]
