@@ -1,0 +1,9 @@
+# UXarray MCP Server Configuration
+
+hpc:
+  globus_compute:
+    endpoint_id: null
+
+  execution_mode: "local"
+
+  timeout_seconds: 300

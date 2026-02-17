@@ -170,6 +170,78 @@ Calculates zonal mean (latitude-band average) of a face-centered variable.
 **Example:**
 Ask Claude: "Use calculate_zonal_mean to compute the zonal mean of temperature from -60 to 60 degrees with 20 degree intervals"
 
+## HPC Remote Execution
+
+The server supports remote execution on HPC systems via Globus Compute and Academy. This enables offloading computationally intensive operations to remote resources while maintaining local fallback.
+
+### HPC-Enabled Tools
+
+#### `calculate_area_hpc(file_path: str, use_remote: bool = False)`
+
+Calculate face areas locally or on HPC.
+
+**Parameters:**
+- `file_path`: Path to mesh file, or `healpix:<zoom>`
+- `use_remote`: Set to `True` for HPC execution
+
+**Returns:** Same as `calculate_area`
+
+**Example:**
+Ask Claude: "Use calculate_area_hpc with remote execution for mesh.nc"
+
+#### `inspect_variable_hpc(grid_path: str, data_path: str, variable_name: str = None, use_remote: bool = False)`
+
+Inspect variables locally or on HPC.
+
+**Parameters:**
+- `grid_path`: Path to mesh grid file
+- `data_path`: Path to data file
+- `variable_name`: Optional variable to inspect
+- `use_remote`: Set to `True` for HPC execution
+
+**Returns:** Same as `inspect_variable`
+
+**Example:**
+Ask Claude: "Use inspect_variable_hpc with remote execution to analyze grid.nc and data.nc"
+
+#### `calculate_zonal_mean_hpc(grid_path: str, data_path: str, variable_name: str, lat_spec: tuple | float | list = None, conservative: bool = False, use_remote: bool = False)`
+
+Calculate zonal means locally or on HPC.
+
+**Parameters:**
+- `grid_path`: Path to mesh grid file
+- `data_path`: Path to data file
+- `variable_name`: Name of variable
+- `lat_spec`: Optional latitude specification
+- `conservative`: Area-weighted averaging
+- `use_remote`: Set to `True` for HPC execution
+
+**Returns:** Same as `calculate_zonal_mean`
+
+**Example:**
+Ask Claude: "Use calculate_zonal_mean_hpc with remote execution for temperature"
+
+### HPC Configuration
+
+Edit `config.yaml` to enable remote execution:
+
+```yaml
+hpc:
+  globus_compute:
+    endpoint_id: "your-endpoint-uuid"  # null for local-only
+  execution_mode: "local"
+  timeout_seconds: 300
+```
+
+**Setup steps:**
+
+1. Configure a Globus Compute endpoint on your HPC system
+2. Add the endpoint ID to `config.yaml`
+3. Ensure UXarray is installed on the remote environment
+4. Ask Claude to use HPC tools with `use_remote=True`
+
+**Local fallback:** When `endpoint_id` is `null` or `use_remote=False`, operations execute locally. The server works immediately without HPC configuration.
+
 ## Project Structure
 
 ```
@@ -180,13 +252,21 @@ uxarray-mcp-server/
 │   ├── server.py                   # MCP server entry point
 │   ├── __init__.py                 # Package exports
 │   ├── __main__.py                 # CLI entry point
+│   ├── remote/
+│   │   ├── __init__.py             # Remote execution exports
+│   │   ├── config.py               # HPC configuration
+│   │   ├── agent.py                # Academy agent
+│   │   └── compute_functions.py   # Globus Compute functions
 │   └── tools/
 │       ├── __init__.py             # Tool exports
-│       └── inspection.py           # inspect_mesh tool
+│       ├── inspection.py           # Local tools
+│       └── remote_tools.py         # HPC-enabled tools
 ├── tests/
 │   ├── conftest.py                 # Test fixtures
 │   ├── test_inspect_mesh.py        # Unit & integration tests
-│   └── test_server.py              # Server tests
+│   ├── test_server.py              # Server tests
+│   └── test_remote_agent.py        # HPC agent tests
+├── config.yaml                     # HPC configuration
 ├── pyproject.toml                  # Dependencies & config
 ├── pytest.ini                      # Pytest configuration
 └── README.md                       # This file
