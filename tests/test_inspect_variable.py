@@ -67,7 +67,9 @@ class TestInspectVariableBasic:
         mock_sal.values = np.array([32.0, 34.0, 36.0])
 
         mock_uxds.data_vars = {"temperature": mock_temp, "salinity": mock_sal}
-        mock_uxds.__getitem__ = lambda self, key: mock_temp if key == "temperature" else mock_sal
+        mock_uxds.__getitem__ = (
+            lambda self, key: mock_temp if key == "temperature" else mock_sal
+        )
         mock_uxds.uxgrid.n_face = 100
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
@@ -237,7 +239,10 @@ class TestInspectVariableErrorHandling:
         """Test handling of invalid variable name."""
         mock_uxds = MagicMock()
         mock_data_vars = MagicMock()
-        mock_data_vars.__contains__ = lambda self, key: key in ["temperature", "salinity"]
+        mock_data_vars.__contains__ = lambda self, key: key in [
+            "temperature",
+            "salinity",
+        ]
         mock_data_vars.keys.return_value = ["temperature", "salinity"]
 
         mock_uxds.data_vars = mock_data_vars

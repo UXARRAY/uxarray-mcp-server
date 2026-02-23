@@ -110,9 +110,7 @@ class TestUXarrayComputeAgent:
         mock_executor = MagicMock()
         mock_executor.submit.return_value = mock_future
 
-        with patch(
-            "globus_compute_sdk.Executor", return_value=mock_executor
-        ):
+        with patch("globus_compute_sdk.Executor", return_value=mock_executor):
             result = await agent.calculate_area_remote("test.nc", use_remote=True)
 
             assert result["total_area"] == 1.0

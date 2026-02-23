@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import patch, MagicMock
-import numpy as np
 from uxarray_mcp.tools.inspection import calculate_area
 
 
@@ -109,7 +108,9 @@ class TestCalculateAreaErrorHandling:
         """Test handling of area calculation errors."""
         mock_grid = MagicMock()
         # Make face_areas property raise an exception when accessed
-        type(mock_grid).face_areas = property(lambda self: (_ for _ in ()).throw(Exception("Calculation error")))
+        type(mock_grid).face_areas = property(
+            lambda self: (_ for _ in ()).throw(Exception("Calculation error"))
+        )
 
         with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
             "uxarray.open_grid", return_value=mock_grid
