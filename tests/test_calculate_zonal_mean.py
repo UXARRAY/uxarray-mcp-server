@@ -24,11 +24,50 @@ class TestCalculateZonalMeanUnit:
         # Mock the zonal mean result
         mock_zonal_result.coords = {"latitudes": MagicMock()}
         mock_zonal_result.coords["latitudes"].values = np.array(
-            [-90, -80, -70, -60, -50, -40, -30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+            [
+                -90,
+                -80,
+                -70,
+                -60,
+                -50,
+                -40,
+                -30,
+                -20,
+                -10,
+                0,
+                10,
+                20,
+                30,
+                40,
+                50,
+                60,
+                70,
+                80,
+                90,
+            ]
         )
         mock_zonal_result.values = np.array(
-            [271.5, 273.2, 275.0, 277.1, 280.3, 283.5, 286.2, 288.0, 289.5, 290.0,
-             289.5, 288.0, 286.2, 283.5, 280.3, 277.1, 275.0, 273.2, 271.5]
+            [
+                271.5,
+                273.2,
+                275.0,
+                277.1,
+                280.3,
+                283.5,
+                286.2,
+                288.0,
+                289.5,
+                290.0,
+                289.5,
+                288.0,
+                286.2,
+                283.5,
+                280.3,
+                277.1,
+                275.0,
+                273.2,
+                271.5,
+            ]
         )
 
         # Mock grid info
@@ -106,8 +145,12 @@ class TestCalculateZonalMeanUnit:
         mock_var.zonal_mean.return_value = mock_zonal_result
 
         mock_zonal_result.coords = {"latitudes": MagicMock()}
-        mock_zonal_result.coords["latitudes"].values = np.array([-60, -40, -20, 0, 20, 40, 60])
-        mock_zonal_result.values = np.array([275.0, 280.0, 285.0, 290.0, 285.0, 280.0, 275.0])
+        mock_zonal_result.coords["latitudes"].values = np.array(
+            [-60, -40, -20, 0, 20, 40, 60]
+        )
+        mock_zonal_result.values = np.array(
+            [275.0, 280.0, 285.0, 290.0, 285.0, 280.0, 275.0]
+        )
 
         mock_uxds.uxgrid.n_face = 100
         mock_uxds.uxgrid.n_node = 200
@@ -230,7 +273,10 @@ class TestCalculateZonalMeanUnit:
         """Test error handling when variable doesn't exist."""
         mock_uxds = MagicMock()
         mock_uxds.data_vars = MagicMock()
-        mock_uxds.data_vars.__contains__ = lambda self, key: key in ["pressure", "salinity"]
+        mock_uxds.data_vars.__contains__ = lambda self, key: key in [
+            "pressure",
+            "salinity",
+        ]
         mock_uxds.data_vars.keys.return_value = ["pressure", "salinity"]
 
         with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(

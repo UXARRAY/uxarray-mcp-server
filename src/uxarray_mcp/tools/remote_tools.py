@@ -99,11 +99,15 @@ def inspect_variable_hpc(
     loop = asyncio.get_event_loop()
     if loop.is_running():
         return asyncio.create_task(
-            agent.inspect_variable_remote(grid_path, data_path, variable_name, use_remote)
+            agent.inspect_variable_remote(
+                grid_path, data_path, variable_name, use_remote
+            )
         )
     else:
         return loop.run_until_complete(
-            agent.inspect_variable_remote(grid_path, data_path, variable_name, use_remote)
+            agent.inspect_variable_remote(
+                grid_path, data_path, variable_name, use_remote
+            )
         )
 
 
