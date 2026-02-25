@@ -75,11 +75,19 @@ def load_config(config_path: Optional[Path] = None) -> HPCConfig:
     if not config_path.exists():
         return HPCConfig()
 
-    with open(config_path, "r") as f:
-        data = yaml.safe_load(f)
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    if not isinstance(data, dict):
+        return HPCConfig()
 
     hpc_config = data.get("hpc", {})
+    if not isinstance(hpc_config, dict):
+        hpc_config = {}
+
     globus_config = hpc_config.get("globus_compute", {})
+    if not isinstance(globus_config, dict):
+        globus_config = {}
 
     return HPCConfig(
         endpoint_id=globus_config.get("endpoint_id"),

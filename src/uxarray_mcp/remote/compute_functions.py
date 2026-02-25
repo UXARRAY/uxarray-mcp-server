@@ -74,15 +74,18 @@ def remote_inspect_variable(
 
     uxds = ux.open_dataset(grid_path, data_path)
 
-    variables_to_inspect = (
-        [variable_name] if variable_name else list(uxds.data_vars.keys())
-    )
+    if variable_name:
+        if variable_name not in uxds.data_vars:
+            available = list(uxds.data_vars.keys())
+            raise ValueError(
+                f"Variable '{variable_name}' not found. Available variables: {available}"
+            )
+        variables_to_inspect = [variable_name]
+    else:
+        variables_to_inspect = list(uxds.data_vars.keys())
 
     variables_info = []
     for var_name in variables_to_inspect:
-        if var_name not in uxds.data_vars:
-            continue
-
         var = uxds[var_name]
 
         location = "other"
@@ -157,7 +160,19 @@ def remote_calculate_zonal_mean(
     import uxarray as ux
 
     uxds = ux.open_dataset(grid_path, data_path)
+
+    if variable_name not in uxds.data_vars:
+        available = list(uxds.data_vars.keys())
+        raise ValueError(
+            f"Variable '{variable_name}' not found. Available variables: {available}"
+        )
+
     var = uxds[variable_name]
+
+    if "n_face" not in var.dims and "nCells" not in var.dims:
+        raise ValueError(
+            f"Variable '{variable_name}' is not face-centered. Zonal mean only supports face-centered data."
+        )
 
     if lat_spec is not None:
         zonal_result = var.zonal_mean(lat=lat_spec, conservative=conservative)
