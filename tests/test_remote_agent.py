@@ -29,6 +29,16 @@ class TestHPCConfig:
         assert config.endpoint_id is None
         assert config.execution_mode == "local"
 
+    def test_config_load_empty_file(self, tmp_path):
+        """Test loading config when file exists but is empty."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("", encoding="utf-8")
+
+        config = load_config(config_file)
+        assert config.endpoint_id is None
+        assert config.execution_mode == "local"
+        assert config.timeout_seconds == 300
+
 
 class TestUXarrayComputeAgent:
     """Tests for UXarray Compute Agent."""
@@ -156,3 +166,22 @@ class TestRemoteTools:
 
         assert "variable_name" in result
         assert result["variable_name"] == "temperature"
+
+    @pytest.mark.asyncio
+    async def test_calculate_area_hpc_local_inside_running_loop(self):
+        """Test wrapper returns result dict even when an event loop is running."""
+        from uxarray_mcp.tools import calculate_area_hpc
+
+        result = calculate_area_hpc("healpix:2", use_remote=False)
+
+        assert isinstance(result, dict)
+        assert result["n_face"] == 192
+
+    def test_remote_inspect_variable_invalid_name(self, synthetic_mesh_with_data):
+        """Test remote inspect_variable mirrors local invalid-variable behavior."""
+        from uxarray_mcp.remote.compute_functions import remote_inspect_variable
+
+        grid_file, data_file = synthetic_mesh_with_data
+
+        with pytest.raises(ValueError, match="Variable 'salinity' not found"):
+            remote_inspect_variable(grid_file, data_file, "salinity")

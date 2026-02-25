@@ -1,7 +1,41 @@
 """MCP tools with remote execution support."""
 
 import asyncio
-from typing import Dict, Any, Optional
+from threading import Thread
+from typing import Dict, Any, Optional, Callable
+
+
+def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
+    """Run an async call from sync code and always return the final result.
+
+    This handles both:
+    - normal sync contexts (no running loop)
+    - sync calls made while an event loop is already running (Python 3.14-safe)
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(async_call())
+
+    result: Dict[str, Any] = {}
+    error: Dict[str, BaseException] = {}
+
+    def _runner() -> None:
+        try:
+            result["value"] = asyncio.run(async_call())
+        except (
+            BaseException
+        ) as exc:  # pragma: no cover - exercised via caller assertions
+            error["value"] = exc
+
+    thread = Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join()
+
+    if "value" in error:
+        raise error["value"]
+
+    return result["value"]
 
 
 def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]:
@@ -41,17 +75,20 @@ def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, An
         ...
     }
     """
+    if not use_remote:
+        from .inspection import calculate_area
+
+        return calculate_area(file_path)
+
     from uxarray_mcp.remote.agent import get_agent
 
     agent = get_agent()
+    if not agent.config.has_endpoint:
+        from .inspection import calculate_area
 
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        return asyncio.create_task(agent.calculate_area_remote(file_path, use_remote))
-    else:
-        return loop.run_until_complete(
-            agent.calculate_area_remote(file_path, use_remote)
-        )
+        return calculate_area(file_path)
+
+    return _run_sync(lambda: agent.calculate_area_remote(file_path, use_remote))
 
 
 def inspect_variable_hpc(
@@ -92,23 +129,24 @@ def inspect_variable_hpc(
         "grid_info": {...}
     }
     """
+    if not use_remote:
+        from .inspection import inspect_variable
+
+        return inspect_variable(grid_path, data_path, variable_name)
+
     from uxarray_mcp.remote.agent import get_agent
 
     agent = get_agent()
+    if not agent.config.has_endpoint:
+        from .inspection import inspect_variable
 
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        return asyncio.create_task(
-            agent.inspect_variable_remote(
-                grid_path, data_path, variable_name, use_remote
-            )
+        return inspect_variable(grid_path, data_path, variable_name)
+
+    return _run_sync(
+        lambda: agent.inspect_variable_remote(
+            grid_path, data_path, variable_name, use_remote
         )
-    else:
-        return loop.run_until_complete(
-            agent.inspect_variable_remote(
-                grid_path, data_path, variable_name, use_remote
-            )
-        )
+    )
 
 
 def calculate_zonal_mean_hpc(
@@ -156,20 +194,25 @@ def calculate_zonal_mean_hpc(
         ...
     }
     """
+    if not use_remote:
+        from .inspection import calculate_zonal_mean
+
+        return calculate_zonal_mean(
+            grid_path, data_path, variable_name, lat_spec, conservative
+        )
+
     from uxarray_mcp.remote.agent import get_agent
 
     agent = get_agent()
+    if not agent.config.has_endpoint:
+        from .inspection import calculate_zonal_mean
 
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        return asyncio.create_task(
-            agent.calculate_zonal_mean_remote(
-                grid_path, data_path, variable_name, lat_spec, conservative, use_remote
-            )
+        return calculate_zonal_mean(
+            grid_path, data_path, variable_name, lat_spec, conservative
         )
-    else:
-        return loop.run_until_complete(
-            agent.calculate_zonal_mean_remote(
-                grid_path, data_path, variable_name, lat_spec, conservative, use_remote
-            )
+
+    return _run_sync(
+        lambda: agent.calculate_zonal_mean_remote(
+            grid_path, data_path, variable_name, lat_spec, conservative, use_remote
         )
+    )
