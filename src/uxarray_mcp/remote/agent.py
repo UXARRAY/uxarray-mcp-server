@@ -39,8 +39,15 @@ class UXarrayComputeAgent(Agent):
         """Get or create Globus Compute executor."""
         if self._executor is None and self.config.has_endpoint:
             from globus_compute_sdk import Executor
+            from globus_compute_sdk.serialize import (
+                ComputeSerializer,
+                AllCodeStrategies,
+            )
 
             self._executor = Executor(endpoint_id=self.config.endpoint_id)
+            self._executor.serializer = ComputeSerializer(
+                strategy_code=AllCodeStrategies()
+            )
         return self._executor
 
     @action
