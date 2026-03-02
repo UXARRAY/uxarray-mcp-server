@@ -1,6 +1,6 @@
 import uxarray as ux
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
 
 
@@ -394,5 +394,158 @@ def calculate_zonal_mean(
         "latitudes": latitudes,
         "zonal_mean_values": zonal_mean_values,
         "conservative": conservative,
+        "grid_info": grid_info,
+    }
+
+
+def validate_dataset(
+    grid_path: str, data_path: str
+) -> Dict[str, Any]:
+    """
+    Validate dataset quality and detect common data issues.
+
+    Checks for NaN/Inf values, coordinate validity, and provides data quality
+    summary for all variables in the dataset.
+
+    Args:
+        grid_path: Path to the mesh grid file
+        data_path: Path to the data file with variables
+
+    Returns:
+        Dictionary containing:
+        - is_valid: Overall validation status (bool)
+        - issues: List of detected issues
+        - variables: Per-variable validation results with:
+          - name: Variable name
+          - has_nan: Boolean, True if NaN values present
+          - has_inf: Boolean, True if Inf values present
+          - nan_count: Number of NaN values
+          - inf_count: Number of Inf values
+          - total_values: Total number of values
+          - nan_percentage: Percentage of NaN values
+          - value_range: [min, max] for numeric variables
+        - grid_info: Grid summary {n_face, n_node, n_edge}
+
+    Example:
+        >>> validate_dataset("grid.nc", "data.nc")
+        {
+            "is_valid": True,
+            "issues": [],
+            "variables": [
+                {
+                    "name": "temperature",
+                    "has_nan": False,
+                    "has_inf": False,
+                    "nan_count": 0,
+                    "inf_count": 0,
+                    "total_values": 40962,
+                    "nan_percentage": 0.0,
+                    "value_range": [271.5, 303.2]
+                }
+            ],
+            "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
+        }
+    """
+    grid_path_obj = Path(grid_path)
+    data_path_obj = Path(data_path)
+
+    if not grid_path_obj.exists():
+        raise FileNotFoundError(f"Grid file not found: {grid_path}")
+    if not data_path_obj.exists():
+        raise FileNotFoundError(f"Data file not found: {data_path}")
+
+    try:
+        uxds = ux.open_dataset(grid_path, data_path)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load dataset: {str(e)}")
+
+    issues = []
+    variable_results = []
+
+    for var_name in uxds.data_vars:
+        try:
+            var = uxds[var_name]
+            values = var.values
+
+            if not np.issubdtype(values.dtype, np.number):
+                continue
+
+            nan_mask = np.isnan(values)
+            inf_mask = np.isinf(values)
+            nan_count = int(np.sum(nan_mask))
+            inf_count = int(np.sum(inf_mask))
+            total_values = int(values.size)
+            nan_percentage = (nan_count / total_values * 100) if total_values > 0 else 0.0
+
+            fill_value = var.attrs.get("_FillValue", None)
+            has_fill_value = fill_value is not None
+            fill_value_count = 0
+            if has_fill_value:
+                fill_value_mask = np.isclose(values, fill_value, rtol=0, atol=0)
+                fill_value_count = int(np.sum(fill_value_mask))
+
+            common_fill_values = [9999, -9999, 999999, -999999, 9.96921e36]
+            suspicious_fill_count = 0
+            for fill_val in common_fill_values:
+                suspicious_mask = np.isclose(values, fill_val, rtol=1e-5)
+                suspicious_fill_count += int(np.sum(suspicious_mask))
+
+            valid_values = values[~nan_mask & ~inf_mask]
+            value_range = None
+            if valid_values.size > 0:
+                value_range = [float(np.min(valid_values)), float(np.max(valid_values))]
+
+            has_nan = nan_count > 0
+            has_inf = inf_count > 0
+
+            if has_nan:
+                issues.append(f"{var_name}: contains {nan_count} NaN values ({nan_percentage:.2f}%)")
+            if has_inf:
+                issues.append(f"{var_name}: contains {inf_count} Inf values")
+            if fill_value_count > 0:
+                issues.append(f"{var_name}: contains {fill_value_count} fill values ({fill_value})")
+            if suspicious_fill_count > 0:
+                issues.append(f"{var_name}: contains {suspicious_fill_count} suspicious fill-like values")
+
+            coord_issues = []
+            if "lat" in var_name.lower() or "latitude" in var_name.lower():
+                if value_range and (value_range[0] < -90 or value_range[1] > 90):
+                    coord_issues.append("latitude out of valid range [-90, 90]")
+            if "lon" in var_name.lower() or "longitude" in var_name.lower():
+                if value_range and (value_range[0] < -180 or value_range[1] > 360):
+                    coord_issues.append("longitude out of valid range [-180, 360]")
+
+            if coord_issues:
+                issues.extend([f"{var_name}: {issue}" for issue in coord_issues])
+
+            variable_results.append({
+                "name": var_name,
+                "has_nan": has_nan,
+                "has_inf": has_inf,
+                "nan_count": nan_count,
+                "inf_count": inf_count,
+                "fill_value_count": fill_value_count,
+                "suspicious_fill_count": suspicious_fill_count,
+                "total_values": total_values,
+                "nan_percentage": round(nan_percentage, 2),
+                "value_range": value_range,
+                "coordinate_issues": coord_issues if coord_issues else None,
+            })
+
+        except Exception as e:
+            issues.append(f"{var_name}: validation failed - {str(e)}")
+
+    grid_info = {
+        "n_face": int(uxds.uxgrid.n_face),
+        "n_node": int(uxds.uxgrid.n_node),
+        "n_edge": int(uxds.uxgrid.n_edge),
+    }
+
+    is_valid = len(issues) == 0
+
+    return {
+        "is_valid": is_valid,
+        "issues": issues,
+        "variables": variable_results,
         "grid_info": grid_info,
     }

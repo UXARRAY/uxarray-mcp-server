@@ -170,6 +170,40 @@ Calculates zonal mean (latitude-band average) of a face-centered variable.
 **Example:**
 Ask Claude: "Use calculate_zonal_mean to compute the zonal mean of temperature from -60 to 60 degrees with 20 degree intervals"
 
+### `validate_dataset(grid_path: str, data_path: str)`
+
+Validates dataset quality and detects common data issues.
+
+**Parameters:**
+- `grid_path`: Path to mesh grid file
+- `data_path`: Path to data file with variables
+
+**Returns:**
+- `is_valid`: Overall validation status (True if no issues found)
+- `issues`: List of detected issues with descriptions
+- `variables`: Per-variable validation results including:
+  - `name`: Variable name
+  - `has_nan`: Boolean indicating NaN presence
+  - `has_inf`: Boolean indicating Inf presence
+  - `nan_count`: Number of NaN values
+  - `inf_count`: Number of Inf values
+  - `fill_value_count`: Count of NetCDF _FillValue occurrences
+  - `suspicious_fill_count`: Count of common fill value patterns (9999, -9999, etc.)
+  - `total_values`: Total number of values
+  - `nan_percentage`: Percentage of NaN values
+  - `value_range`: [min, max] for numeric variables
+  - `coordinate_issues`: List of coordinate validation issues (e.g., latitude/longitude out of range)
+- `grid_info`: Grid summary (n_face, n_node, n_edge)
+
+**Checks performed:**
+- NaN and Inf value detection
+- NetCDF fill value detection
+- Common fill value patterns (9999, -9999, 999999, -999999, 9.96921e36)
+- Coordinate range validation (latitude: -90 to 90, longitude: -180 to 360)
+
+**Example:**
+Ask Claude: "Use validate_dataset to check data quality in grid.nc and data.nc"
+
 ## HPC Remote Execution
 
 The server supports remote execution on HPC systems via Globus Compute and Academy. This enables offloading computationally intensive operations to remote resources while maintaining local fallback.
@@ -295,3 +329,4 @@ uv run python -m uxarray_mcp.server
 - [UXarray Documentation](https://uxarray.readthedocs.io/)
 - [FastMCP Documentation](https://github.com/jlowin/fastmcp)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
+
