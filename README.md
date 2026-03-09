@@ -329,4 +329,3 @@ uv run python -m uxarray_mcp.server
 - [UXarray Documentation](https://uxarray.readthedocs.io/)
 - [FastMCP Documentation](https://github.com/jlowin/fastmcp)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
-

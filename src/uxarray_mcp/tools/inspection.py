@@ -1,6 +1,6 @@
 import uxarray as ux
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 import numpy as np
 
 
@@ -398,9 +398,7 @@ def calculate_zonal_mean(
     }
 
 
-def validate_dataset(
-    grid_path: str, data_path: str
-) -> Dict[str, Any]:
+def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
     """
     Validate dataset quality and detect common data issues.
 
@@ -475,7 +473,9 @@ def validate_dataset(
             nan_count = int(np.sum(nan_mask))
             inf_count = int(np.sum(inf_mask))
             total_values = int(values.size)
-            nan_percentage = (nan_count / total_values * 100) if total_values > 0 else 0.0
+            nan_percentage = (
+                (nan_count / total_values * 100) if total_values > 0 else 0.0
+            )
 
             fill_value = var.attrs.get("_FillValue", None)
             has_fill_value = fill_value is not None
@@ -499,13 +499,19 @@ def validate_dataset(
             has_inf = inf_count > 0
 
             if has_nan:
-                issues.append(f"{var_name}: contains {nan_count} NaN values ({nan_percentage:.2f}%)")
+                issues.append(
+                    f"{var_name}: contains {nan_count} NaN values ({nan_percentage:.2f}%)"
+                )
             if has_inf:
                 issues.append(f"{var_name}: contains {inf_count} Inf values")
             if fill_value_count > 0:
-                issues.append(f"{var_name}: contains {fill_value_count} fill values ({fill_value})")
+                issues.append(
+                    f"{var_name}: contains {fill_value_count} fill values ({fill_value})"
+                )
             if suspicious_fill_count > 0:
-                issues.append(f"{var_name}: contains {suspicious_fill_count} suspicious fill-like values")
+                issues.append(
+                    f"{var_name}: contains {suspicious_fill_count} suspicious fill-like values"
+                )
 
             coord_issues = []
             if "lat" in var_name.lower() or "latitude" in var_name.lower():
@@ -518,19 +524,21 @@ def validate_dataset(
             if coord_issues:
                 issues.extend([f"{var_name}: {issue}" for issue in coord_issues])
 
-            variable_results.append({
-                "name": var_name,
-                "has_nan": has_nan,
-                "has_inf": has_inf,
-                "nan_count": nan_count,
-                "inf_count": inf_count,
-                "fill_value_count": fill_value_count,
-                "suspicious_fill_count": suspicious_fill_count,
-                "total_values": total_values,
-                "nan_percentage": round(nan_percentage, 2),
-                "value_range": value_range,
-                "coordinate_issues": coord_issues if coord_issues else None,
-            })
+            variable_results.append(
+                {
+                    "name": var_name,
+                    "has_nan": has_nan,
+                    "has_inf": has_inf,
+                    "nan_count": nan_count,
+                    "inf_count": inf_count,
+                    "fill_value_count": fill_value_count,
+                    "suspicious_fill_count": suspicious_fill_count,
+                    "total_values": total_values,
+                    "nan_percentage": round(nan_percentage, 2),
+                    "value_range": value_range,
+                    "coordinate_issues": coord_issues if coord_issues else None,
+                }
+            )
 
         except Exception as e:
             issues.append(f"{var_name}: validation failed - {str(e)}")
