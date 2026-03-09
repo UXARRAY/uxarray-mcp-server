@@ -35,7 +35,9 @@ class TestValidateDataset:
             assert len(result["issues"]) == 0
             assert len(result["variables"]) == 2
 
-            temp_result = next(v for v in result["variables"] if v["name"] == "temperature")
+            temp_result = next(
+                v for v in result["variables"] if v["name"] == "temperature"
+            )
             assert temp_result["has_nan"] is False
             assert temp_result["has_inf"] is False
             assert temp_result["nan_count"] == 0
@@ -249,7 +251,10 @@ class TestValidateDataset:
             result = validate_dataset("grid.nc", "data.nc")
 
             assert result["is_valid"] is False
-            assert any("latitude" in issue and "out of valid range" in issue for issue in result["issues"])
+            assert any(
+                "latitude" in issue and "out of valid range" in issue
+                for issue in result["issues"]
+            )
 
             lat_result = result["variables"][0]
             assert lat_result["coordinate_issues"] is not None
@@ -276,7 +281,10 @@ class TestValidateDataset:
             result = validate_dataset("grid.nc", "data.nc")
 
             assert result["is_valid"] is False
-            assert any("longitude" in issue and "out of valid range" in issue for issue in result["issues"])
+            assert any(
+                "longitude" in issue and "out of valid range" in issue
+                for issue in result["issues"]
+            )
 
             lon_result = result["variables"][0]
             assert lon_result["coordinate_issues"] is not None
