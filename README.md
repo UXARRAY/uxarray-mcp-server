@@ -2,6 +2,15 @@
 
 An MCP (Model Context Protocol) server that provides AI agents with tools for analyzing unstructured meshes using UXarray.
 
+**Requirements:** Python 3.11+, macOS or Linux (Windows untested)
+
+**Stable tools:** `inspect_mesh`, `inspect_variable`, `calculate_area`, `calculate_zonal_mean`, `validate_dataset` — work out of the box, no extra setup needed.
+
+**Experimental HPC tools:** `calculate_area_hpc`, `inspect_variable_hpc`, `calculate_zonal_mean_hpc` — require a personal Globus Compute endpoint on an HPC cluster. See [GETTING_STARTED.md](GETTING_STARTED.md) for setup instructions. Install with:
+```bash
+uv sync --extra hpc
+```
+
 ## Features
 
 - **inspect_mesh**: Analyze mesh topology (faces, nodes, edges, format)

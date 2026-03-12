@@ -2,8 +2,8 @@
 
 hpc:
   globus_compute:
-    endpoint_id: "14e272c4-5c79-4bbc-a69a-43172cbc2ed2"
+    endpoint_id: null
 
-  execution_mode: "auto"
+  execution_mode: "local"
 
   timeout_seconds: 300
