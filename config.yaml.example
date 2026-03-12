@@ -1,0 +1,16 @@
+# UXarray MCP Server Configuration
+# Copy this file to config.yaml and fill in your own values.
+# config.yaml is gitignored so your personal endpoint UUID won't be committed.
+
+hpc:
+  globus_compute:
+    # Your personal Globus Compute endpoint UUID.
+    # See GETTING_STARTED.md for instructions on setting up an endpoint.
+    endpoint_id: null
+
+  # "local"  — always run tools on this machine (default)
+  # "auto"   — use HPC when endpoint_id is set, otherwise run locally
+  # "remote" — always require HPC (fail if no endpoint configured)
+  execution_mode: "local"
+
+  timeout_seconds: 300

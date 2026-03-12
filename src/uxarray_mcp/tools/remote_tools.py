@@ -1,41 +1,20 @@
 """MCP tools with remote execution support."""
 
 import asyncio
-from threading import Thread
-from typing import Dict, Any, Optional, Callable
+import concurrent.futures
+from typing import Any, Dict, Optional
 
 
-def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
-    """Run an async call from sync code and always return the final result.
-
-    This handles both:
-    - normal sync contexts (no running loop)
-    - sync calls made while an event loop is already running (Python 3.14-safe)
-    """
+def _run_sync(coro):
+    """Run a coroutine synchronously, works inside or outside a running event loop."""
     try:
         asyncio.get_running_loop()
+        # Inside async context (e.g. FastMCP) — run in a new thread
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(asyncio.run, coro).result()
     except RuntimeError:
-        return asyncio.run(async_call())
-
-    result: Dict[str, Any] = {}
-    error: Dict[str, BaseException] = {}
-
-    def _runner() -> None:
-        try:
-            result["value"] = asyncio.run(async_call())
-        except (
-            BaseException
-        ) as exc:  # pragma: no cover - exercised via caller assertions
-            error["value"] = exc
-
-    thread = Thread(target=_runner, daemon=True)
-    thread.start()
-    thread.join()
-
-    if "value" in error:
-        raise error["value"]
-
-    return result["value"]
+        # No event loop running (tests, CLI) — run directly
+        return asyncio.run(coro)
 
 
 def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]:
@@ -75,20 +54,14 @@ def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, An
         ...
     }
     """
-    if not use_remote:
-        from .inspection import calculate_area
+    try:
+        from uxarray_mcp.remote.agent import get_agent
+
+        return _run_sync(get_agent().calculate_area_remote(file_path, use_remote))
+    except ImportError:
+        from uxarray_mcp.tools.inspection import calculate_area
 
         return calculate_area(file_path)
-
-    from uxarray_mcp.remote.agent import get_agent
-
-    agent = get_agent()
-    if not agent.config.has_endpoint:
-        from .inspection import calculate_area
-
-        return calculate_area(file_path)
-
-    return _run_sync(lambda: agent.calculate_area_remote(file_path, use_remote))
 
 
 def inspect_variable_hpc(
@@ -129,24 +102,18 @@ def inspect_variable_hpc(
         "grid_info": {...}
     }
     """
-    if not use_remote:
-        from .inspection import inspect_variable
+    try:
+        from uxarray_mcp.remote.agent import get_agent
 
-        return inspect_variable(grid_path, data_path, variable_name)
-
-    from uxarray_mcp.remote.agent import get_agent
-
-    agent = get_agent()
-    if not agent.config.has_endpoint:
-        from .inspection import inspect_variable
-
-        return inspect_variable(grid_path, data_path, variable_name)
-
-    return _run_sync(
-        lambda: agent.inspect_variable_remote(
-            grid_path, data_path, variable_name, use_remote
+        return _run_sync(
+            get_agent().inspect_variable_remote(
+                grid_path, data_path, variable_name, use_remote
+            )
         )
-    )
+    except ImportError:
+        from uxarray_mcp.tools.inspection import inspect_variable
+
+        return inspect_variable(grid_path, data_path, variable_name)
 
 
 def calculate_zonal_mean_hpc(
@@ -194,25 +161,17 @@ def calculate_zonal_mean_hpc(
         ...
     }
     """
-    if not use_remote:
-        from .inspection import calculate_zonal_mean
+    try:
+        from uxarray_mcp.remote.agent import get_agent
+
+        return _run_sync(
+            get_agent().calculate_zonal_mean_remote(
+                grid_path, data_path, variable_name, lat_spec, conservative, use_remote
+            )
+        )
+    except ImportError:
+        from uxarray_mcp.tools.inspection import calculate_zonal_mean
 
         return calculate_zonal_mean(
             grid_path, data_path, variable_name, lat_spec, conservative
         )
-
-    from uxarray_mcp.remote.agent import get_agent
-
-    agent = get_agent()
-    if not agent.config.has_endpoint:
-        from .inspection import calculate_zonal_mean
-
-        return calculate_zonal_mean(
-            grid_path, data_path, variable_name, lat_spec, conservative
-        )
-
-    return _run_sync(
-        lambda: agent.calculate_zonal_mean_remote(
-            grid_path, data_path, variable_name, lat_spec, conservative, use_remote
-        )
-    )
