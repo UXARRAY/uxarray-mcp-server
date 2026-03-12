@@ -2,7 +2,16 @@
 
 import asyncio
 from typing import Dict, Any, Optional
-from academy.agent import Agent, action
+
+try:
+    from academy.agent import Agent as _AcademyAgent, action
+except ImportError:
+    _AcademyAgent = object
+
+    def action(fn):
+        """No-op decorator when academy is not installed."""
+        return fn
+
 
 from .config import HPCConfig
 from .compute_functions import (
@@ -12,7 +21,7 @@ from .compute_functions import (
 )
 
 
-class UXarrayComputeAgent(Agent):
+class UXarrayComputeAgent(_AcademyAgent):
     """Academy agent for UXarray computations with HPC support.
 
     This agent orchestrates execution of UXarray operations either locally
@@ -39,8 +48,15 @@ class UXarrayComputeAgent(Agent):
         """Get or create Globus Compute executor."""
         if self._executor is None and self.config.has_endpoint:
             from globus_compute_sdk import Executor
+            from globus_compute_sdk.serialize import (
+                ComputeSerializer,
+                AllCodeStrategies,
+            )
 
             self._executor = Executor(endpoint_id=self.config.endpoint_id)
+            self._executor.serializer = ComputeSerializer(
+                strategy_code=AllCodeStrategies()
+            )
         return self._executor
 
     @action
