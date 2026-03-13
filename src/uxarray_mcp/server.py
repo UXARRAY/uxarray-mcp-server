@@ -2,6 +2,8 @@
 
 from fastmcp import FastMCP
 from uxarray_mcp.tools import (
+    get_capabilities,
+    run_scientific_agent,
     inspect_mesh,
     inspect_variable,
     calculate_area,
@@ -13,6 +15,12 @@ from uxarray_mcp.tools import (
 
 # Initialize the MCP server
 mcp = FastMCP("uxarray-mcp-server")
+
+# Tool discovery — always call this first with a new dataset
+mcp.tool()(get_capabilities)
+
+# Autonomous scientific agent — Analyze → Plan → Execute → Verify
+mcp.tool()(run_scientific_agent)
 
 # Register local tools
 mcp.tool()(inspect_mesh)
