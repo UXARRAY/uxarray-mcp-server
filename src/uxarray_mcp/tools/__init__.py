@@ -1,3 +1,5 @@
+from .capabilities import get_capabilities
+from .scientific_agent import run_scientific_agent
 from .inspection import (
     inspect_mesh,
     inspect_variable,
@@ -11,6 +13,8 @@ from .remote_tools import (
 )
 
 __all__ = [
+    "get_capabilities",
+    "run_scientific_agent",
     "inspect_mesh",
     "inspect_variable",
     "calculate_area",
