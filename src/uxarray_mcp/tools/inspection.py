@@ -1,7 +1,14 @@
 import uxarray as ux
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-import numpy as np
+from typing import Dict, Any, Optional
+
+from uxarray_mcp.domain import (
+    load_grid,
+    compute_area_stats,
+    compute_variable_info,
+    compute_zonal_mean_stats,
+)
+from uxarray_mcp.provenance import attach_provenance
 
 
 def inspect_mesh(file_path: str) -> Dict[str, Any]:
@@ -35,28 +42,21 @@ def inspect_mesh(file_path: str) -> Dict[str, Any]:
             "file_size_mb": 4.6
         }
     """
-    # Handle HEALPix generation
     if file_path.lower().startswith("healpix"):
         try:
-            # Expected format: "healpix:<zoom_level>" or just "healpix" (default zoom?)
-            parts = file_path.split(":")
-            zoom = (
-                int(parts[1]) if len(parts) > 1 else 1
-            )  # Default to zoom 1 if not specified
-
-            grid = ux.Grid.from_healpix(zoom=zoom)
-            file_size_mb = 0.0  # Virtual mesh, no file size
-
-            # Extract topology information
-            result = {
-                "format": "HEALPix",
-                "n_face": int(grid.n_face),
-                "n_node": int(grid.n_node),
-                "n_edge": int(grid.n_edge),
-                "n_max_face_nodes": int(grid.n_max_face_nodes),
-                "file_size_mb": 0.0,
-            }
-            return result
+            grid = load_grid(file_path)
+            return attach_provenance(
+                {
+                    "format": "HEALPix",
+                    "n_face": int(grid.n_face),
+                    "n_node": int(grid.n_node),
+                    "n_edge": int(grid.n_edge),
+                    "n_max_face_nodes": int(grid.n_max_face_nodes),
+                    "file_size_mb": 0.0,
+                },
+                tool="inspect_mesh",
+                inputs={"file_path": file_path},
+            )
         except ValueError:
             raise ValueError(
                 "Invalid HEALPix format. Use 'healpix:<zoom_level>' (e.g., 'healpix:2')."
@@ -64,30 +64,29 @@ def inspect_mesh(file_path: str) -> Dict[str, Any]:
         except Exception as e:
             raise RuntimeError(f"Failed to generate HEALPix mesh: {str(e)}")
 
-    # Validate file exists
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"Mesh file not found: {file_path}")
 
     file_size_mb = path.stat().st_size / (1024 * 1024)
 
-    # Load the mesh using UXarray
     try:
         grid = ux.open_grid(file_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load mesh file: {str(e)}")
 
-    # Extract topology information
-    result = {
-        "format": grid.source_grid_spec,
-        "n_face": int(grid.n_face),
-        "n_node": int(grid.n_node),
-        "n_edge": int(grid.n_edge),
-        "n_max_face_nodes": int(grid.n_max_face_nodes),
-        "file_size_mb": round(file_size_mb, 2),
-    }
-
-    return result
+    return attach_provenance(
+        {
+            "format": grid.source_grid_spec,
+            "n_face": int(grid.n_face),
+            "n_node": int(grid.n_node),
+            "n_edge": int(grid.n_edge),
+            "n_max_face_nodes": int(grid.n_max_face_nodes),
+            "file_size_mb": round(file_size_mb, 2),
+        },
+        tool="inspect_mesh",
+        inputs={"file_path": file_path},
+    )
 
 
 def inspect_variable(
@@ -134,81 +133,25 @@ def inspect_variable(
             "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
         }
     """
-    # Validate file paths exist
-    grid_path_obj = Path(grid_path)
-    data_path_obj = Path(data_path)
-
-    if not grid_path_obj.exists():
+    if not Path(grid_path).exists():
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if not data_path_obj.exists():
+    if not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
-    # Load the dataset using UXarray
     try:
         uxds = ux.open_dataset(grid_path, data_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
-    # Determine which variables to inspect
-    if variable_name:
-        if variable_name not in uxds.data_vars:
-            available = list(uxds.data_vars.keys())
-            raise ValueError(
-                f"Variable '{variable_name}' not found. Available variables: {available}"
-            )
-        variables_to_inspect = [variable_name]
-    else:
-        variables_to_inspect = list(uxds.data_vars.keys())
-
-    # Inspect each variable
-    variables_info: List[Dict[str, Any]] = []
-    for var_name in variables_to_inspect:
-        var = uxds[var_name]
-
-        # Extract basic metadata
-        var_info = {
-            "name": var_name,
-            "dims": var.dims,
-            "shape": var.shape,
-            "dtype": str(var.dtype),
-            "attrs": dict(var.attrs),
-        }
-
-        # Determine variable location (faces, nodes, or edges)
-        location = "other"
-        if "n_face" in var.dims or "nCells" in var.dims:
-            location = "faces"
-        elif "n_node" in var.dims or "nVertices" in var.dims:
-            location = "nodes"
-        elif "n_edge" in var.dims or "nEdges" in var.dims:
-            location = "edges"
-        var_info["location"] = location
-
-        # Compute statistics if numeric
-        try:
-            if np.issubdtype(var.dtype, np.number):
-                values = var.values
-                var_info["statistics"] = {
-                    "min": float(np.nanmin(values)),
-                    "max": float(np.nanmax(values)),
-                    "mean": float(np.nanmean(values)),
-                }
-            else:
-                var_info["statistics"] = None
-        except Exception:
-            # If statistics computation fails, set to None
-            var_info["statistics"] = None
-
-        variables_info.append(var_info)
-
-    # Get grid context
-    grid_info = {
-        "n_face": int(uxds.uxgrid.n_face),
-        "n_node": int(uxds.uxgrid.n_node),
-        "n_edge": int(uxds.uxgrid.n_edge),
-    }
-
-    return {"variables": variables_info, "grid_info": grid_info}
+    return attach_provenance(
+        compute_variable_info(uxds, variable_name),
+        tool="inspect_variable",
+        inputs={
+            "grid_path": grid_path,
+            "data_path": data_path,
+            "variable_name": variable_name,
+        },
+    )
 
 
 def calculate_area(file_path: str) -> Dict[str, Any]:
@@ -241,58 +184,28 @@ def calculate_area(file_path: str) -> Dict[str, Any]:
             "n_face": 40962
         }
     """
-    # Handle HEALPix generation
-    if file_path.lower().startswith("healpix"):
-        try:
-            parts = file_path.split(":")
-            zoom = int(parts[1]) if len(parts) > 1 else 1
-
-            grid = ux.Grid.from_healpix(zoom=zoom)
-        except ValueError:
-            raise ValueError(
-                "Invalid HEALPix format. Use 'healpix:<zoom_level>' (e.g., 'healpix:2')."
-            )
-        except Exception as e:
-            raise RuntimeError(f"Failed to generate HEALPix mesh: {str(e)}")
-    else:
-        # Validate file exists
+    if not file_path.lower().startswith("healpix"):
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Mesh file not found: {file_path}")
 
-        # Load the mesh using UXarray
-        try:
-            grid = ux.open_grid(file_path)
-        except Exception as e:
-            raise RuntimeError(f"Failed to load mesh file: {str(e)}")
-
-    # Calculate face areas
     try:
-        face_areas = grid.face_areas
+        grid = load_grid(file_path)
+    except ValueError:
+        raise ValueError(
+            "Invalid HEALPix format. Use 'healpix:<zoom_level>' (e.g., 'healpix:2')."
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to load mesh file: {str(e)}")
+
+    try:
+        result = compute_area_stats(grid)
     except Exception as e:
         raise RuntimeError(f"Failed to calculate face areas: {str(e)}")
 
-    # Compute statistics
-    total_area = float(face_areas.sum())
-    mean_area = float(face_areas.mean())
-    min_area = float(face_areas.min())
-    max_area = float(face_areas.max())
-
-    # Determine units (UXarray typically uses square meters)
-    area_units = "m^2"
-    if hasattr(face_areas, "attrs") and "units" in face_areas.attrs:
-        area_units = face_areas.attrs["units"]
-
-    result = {
-        "total_area": total_area,
-        "mean_area": mean_area,
-        "min_area": min_area,
-        "max_area": max_area,
-        "area_units": area_units,
-        "n_face": int(grid.n_face),
-    }
-
-    return result
+    return attach_provenance(
+        result, tool="calculate_area", inputs={"file_path": file_path}
+    )
 
 
 def calculate_zonal_mean(
@@ -338,61 +251,31 @@ def calculate_zonal_mean(
             "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
         }
     """
-    # Validate file paths exist
-    grid_path_obj = Path(grid_path)
-    data_path_obj = Path(data_path)
-
-    if not grid_path_obj.exists():
+    if not Path(grid_path).exists():
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if not data_path_obj.exists():
+    if not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
-    # Load the dataset using UXarray
     try:
         uxds = ux.open_dataset(grid_path, data_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
-    # Validate variable exists
-    if variable_name not in uxds.data_vars:
-        available = list(uxds.data_vars.keys())
-        raise ValueError(
-            f"Variable '{variable_name}' not found. Available variables: {available}"
-        )
-
-    # Get the data array
-    var = uxds[variable_name]
-
-    # Validate variable is face-centered
-    if "n_face" not in var.dims and "nCells" not in var.dims:
-        raise ValueError(
-            f"Variable '{variable_name}' is not face-centered. Zonal mean only supports face-centered data."
-        )
-
-    # Compute zonal mean using UXarray's built-in method
     try:
-        if lat_spec is not None:
-            zonal_result = var.zonal_mean(lat=lat_spec, conservative=conservative)
-        else:
-            zonal_result = var.zonal_mean(conservative=conservative)
+        result = compute_zonal_mean_stats(uxds, variable_name, lat_spec, conservative)
+    except ValueError:
+        raise
     except Exception as e:
         raise RuntimeError(f"Failed to compute zonal mean: {str(e)}")
 
-    # Extract results
-    latitudes = zonal_result.coords["latitudes"].values.tolist()
-    zonal_mean_values = zonal_result.values.tolist()
-
-    # Get grid context
-    grid_info = {
-        "n_face": int(uxds.uxgrid.n_face),
-        "n_node": int(uxds.uxgrid.n_node),
-        "n_edge": int(uxds.uxgrid.n_edge),
-    }
-
-    return {
-        "variable_name": variable_name,
-        "latitudes": latitudes,
-        "zonal_mean_values": zonal_mean_values,
-        "conservative": conservative,
-        "grid_info": grid_info,
-    }
+    return attach_provenance(
+        result,
+        tool="calculate_zonal_mean",
+        inputs={
+            "grid_path": grid_path,
+            "data_path": data_path,
+            "variable_name": variable_name,
+            "lat_spec": lat_spec,
+            "conservative": conservative,
+        },
+    )
