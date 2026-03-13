@@ -2,8 +2,12 @@
 
 hpc:
   globus_compute:
-    endpoint_id: null
+    endpoint_id: null #    14e272c4-5c79-4bbc-a69a-43172cbc2ed2
 
-  execution_mode: "local"
+
+  execution_mode: "local" #Remote
 
   timeout_seconds: 300
+
+#run this
+#uv sync --extra hpc
