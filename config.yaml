@@ -2,7 +2,7 @@
 
 hpc:
   globus_compute:
-    endpoint_id: "14e272c4-5c79-4bbc-a69a-43172cbc2ed2"  # Argonne Improv
+    endpoint_id: null  # set your Globus Compute endpoint UUID here
 
   execution_mode: "auto"             # uses HPC when endpoint is available, local otherwise
 
