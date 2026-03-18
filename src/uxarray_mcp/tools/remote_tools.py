@@ -5,6 +5,20 @@ from threading import Thread
 from typing import Dict, Any, Optional, Callable
 
 
+def _endpoint_is_ready(agent) -> tuple[bool, str]:
+    """Pre-flight check: return (ready, reason) before submitting an HPC job.
+
+    Fails fast instead of waiting for the full timeout_seconds.
+    """
+    from uxarray_mcp.remote.health import check_endpoint_health
+
+    health = check_endpoint_health(agent.config)
+    status = health.get("status", "unknown")
+    if status in ("online", "healthy"):
+        return True, "ok"
+    return False, f"endpoint status={status!r}: {health.get('error', health.get('message', ''))}"
+
+
 def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
     """Run an async call from sync code and always return the final result.
 
@@ -36,6 +50,58 @@ def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
         raise error["value"]
 
     return result["value"]
+
+
+def inspect_mesh_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]:
+    """Inspect mesh topology with optional HPC execution.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to mesh file (supports UGRID, MPAS, SCRIP, ESMF, etc.)
+        Can be local path or HPC filesystem path if use_remote=True
+    use_remote : bool
+        If True and HPC is configured, execute on remote endpoint
+
+    Returns
+    -------
+    dict
+        Dictionary containing mesh topology info:
+        - n_face: Number of faces
+        - n_node: Number of nodes
+        - n_edge: Number of edges
+        - source: File path
+
+    Examples
+    --------
+    >>> inspect_mesh_hpc("mesh.nc", use_remote=False)
+    {"n_face": 2562, "n_node": 5762, ...}
+
+    >>> inspect_mesh_hpc("/hpc/data/mesh.nc", use_remote=True)
+    {"n_face": 2562, ...}
+    """
+    if not use_remote:
+        from .inspection import inspect_mesh
+
+        return inspect_mesh(file_path)
+
+    from uxarray_mcp.remote.agent import get_agent
+
+    agent = get_agent()
+    if not agent.config.has_endpoint:
+        from .inspection import inspect_mesh
+
+        return inspect_mesh(file_path)
+
+    ready, reason = _endpoint_is_ready(agent)
+    if not ready:
+        from .inspection import inspect_mesh
+
+        result = inspect_mesh(file_path)
+        result["_provenance"]["warnings"].append(f"HPC endpoint not ready ({reason}); ran locally.")
+        return result
+
+    return _run_sync(lambda: agent.inspect_mesh_remote(file_path, use_remote))
 
 
 def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]:
@@ -87,6 +153,14 @@ def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, An
         from .inspection import calculate_area
 
         return calculate_area(file_path)
+
+    ready, reason = _endpoint_is_ready(agent)
+    if not ready:
+        from .inspection import calculate_area
+
+        result = calculate_area(file_path)
+        result["_provenance"]["warnings"].append(f"HPC endpoint not ready ({reason}); ran locally.")
+        return result
 
     return _run_sync(lambda: agent.calculate_area_remote(file_path, use_remote))
 
@@ -141,6 +215,14 @@ def inspect_variable_hpc(
         from .inspection import inspect_variable
 
         return inspect_variable(grid_path, data_path, variable_name)
+
+    ready, reason = _endpoint_is_ready(agent)
+    if not ready:
+        from .inspection import inspect_variable
+
+        result = inspect_variable(grid_path, data_path, variable_name)
+        result["_provenance"]["warnings"].append(f"HPC endpoint not ready ({reason}); ran locally.")
+        return result
 
     return _run_sync(
         lambda: agent.inspect_variable_remote(
@@ -210,6 +292,14 @@ def calculate_zonal_mean_hpc(
         return calculate_zonal_mean(
             grid_path, data_path, variable_name, lat_spec, conservative
         )
+
+    ready, reason = _endpoint_is_ready(agent)
+    if not ready:
+        from .inspection import calculate_zonal_mean
+
+        result = calculate_zonal_mean(grid_path, data_path, variable_name, lat_spec, conservative)
+        result["_provenance"]["warnings"].append(f"HPC endpoint not ready ({reason}); ran locally.")
+        return result
 
     return _run_sync(
         lambda: agent.calculate_zonal_mean_remote(

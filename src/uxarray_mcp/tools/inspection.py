@@ -1,3 +1,4 @@
+import numpy as np
 import uxarray as ux
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -278,4 +279,142 @@ def calculate_zonal_mean(
             "lat_spec": lat_spec,
             "conservative": conservative,
         },
+    )
+
+
+def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
+    """
+    Validate a mesh dataset for common data quality issues.
+
+    Checks every variable in the dataset for NaN values, Inf values, and
+    common fill values (1e20, 9.97e36, -999, -9999). Returns a per-variable
+    summary and an overall passed flag so downstream tools can gate on results.
+
+    Args:
+        grid_path: Path to the mesh grid file.
+        data_path: Path to the data file with variables.
+
+    Returns:
+        Dictionary containing:
+        - passed: True if all variables pass all checks.
+        - n_variables_checked: Number of variables inspected.
+        - n_variables_failed: Number of variables with issues.
+        - variables: List of per-variable result dicts, each with:
+          - name: Variable name.
+          - passed: True if no issues found.
+          - n_nan: Count of NaN values.
+          - n_inf: Count of Inf values.
+          - n_fill_values: Count of detected fill values.
+          - detected_fill_value: The fill value found, or None.
+          - shape: Variable shape.
+          - dtype: Variable dtype string.
+          - warnings: List of issue descriptions for this variable.
+
+    Example:
+        >>> validate_dataset("grid.nc", "data.nc")
+        {
+            "passed": False,
+            "n_variables_checked": 3,
+            "n_variables_failed": 1,
+            "variables": [
+                {"name": "temperature", "passed": True, "n_nan": 0, ...},
+                {"name": "pressure", "passed": False, "n_nan": 142, ...},
+            ]
+        }
+    """
+    if not Path(grid_path).exists():
+        raise FileNotFoundError(f"Grid file not found: {grid_path}")
+    if not Path(data_path).exists():
+        raise FileNotFoundError(f"Data file not found: {data_path}")
+
+    try:
+        uxds = ux.open_dataset(grid_path, data_path)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load dataset: {str(e)}")
+
+    _FILL_VALUE_CANDIDATES = [1e20, 9.96920996838687e36, -999.0, -9999.0]
+
+    overall_passed = True
+    validation_results = []
+    all_warnings: list[str] = []
+
+    for var_name in uxds.data_vars:
+        var = uxds[var_name]
+        var_warnings: list[str] = []
+
+        try:
+            values = var.values
+            is_float = np.issubdtype(values.dtype, np.floating)
+
+            n_nan = int(np.sum(np.isnan(values))) if is_float else 0
+            n_inf = int(np.sum(np.isinf(values))) if is_float else 0
+
+            n_fill = 0
+            detected_fill = None
+            if is_float:
+                for fv in _FILL_VALUE_CANDIDATES:
+                    count = int(np.sum(np.isclose(values, fv, rtol=1e-3)))
+                    if count > 0:
+                        n_fill = count
+                        detected_fill = fv
+                        break
+
+            var_passed = n_nan == 0 and n_inf == 0 and n_fill == 0
+            if not var_passed:
+                overall_passed = False
+
+            if n_nan > 0:
+                msg = f"{var_name}: {n_nan} NaN value(s)"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+            if n_inf > 0:
+                msg = f"{var_name}: {n_inf} Inf value(s)"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+            if n_fill > 0:
+                msg = f"{var_name}: {n_fill} fill value(s) matching {detected_fill}"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+
+            validation_results.append(
+                {
+                    "name": var_name,
+                    "passed": var_passed,
+                    "n_nan": n_nan,
+                    "n_inf": n_inf,
+                    "n_fill_values": n_fill,
+                    "detected_fill_value": detected_fill,
+                    "shape": list(values.shape),
+                    "dtype": str(values.dtype),
+                    "warnings": var_warnings,
+                }
+            )
+
+        except Exception as e:
+            msg = f"Could not validate {var_name}: {e}"
+            all_warnings.append(msg)
+            overall_passed = False
+            validation_results.append(
+                {
+                    "name": var_name,
+                    "passed": False,
+                    "error": str(e),
+                    "warnings": [msg],
+                }
+            )
+
+    result = {
+        "passed": overall_passed,
+        "n_variables_checked": len(validation_results),
+        "n_variables_failed": sum(
+            1 for v in validation_results if not v.get("passed", False)
+        ),
+        "variables": validation_results,
+    }
+
+    return attach_provenance(
+        result,
+        tool="validate_dataset",
+        inputs={"grid_path": grid_path, "data_path": data_path},
+        warnings=all_warnings,
     )

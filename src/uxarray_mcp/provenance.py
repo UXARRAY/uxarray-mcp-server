@@ -12,6 +12,7 @@ from typing import Any
 def _get_uxarray_version() -> str:
     try:
         import uxarray
+
         return uxarray.__version__
     except Exception:
         return "unknown"
@@ -22,6 +23,7 @@ def attach_provenance(
     tool: str,
     inputs: dict[str, Any],
     venue: str = "local",
+    warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     """Attach a _provenance block to a tool result dict.
 
@@ -48,6 +50,6 @@ def attach_provenance(
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "uxarray_version": _get_uxarray_version(),
         "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-        "warnings": [],
+        "warnings": warnings if warnings is not None else [],
     }
     return result

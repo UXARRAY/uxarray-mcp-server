@@ -6,6 +6,7 @@ from academy.agent import Agent, action
 
 from .config import HPCConfig
 from .compute_functions import (
+    remote_inspect_mesh,
     remote_calculate_area,
     remote_inspect_variable,
     remote_calculate_zonal_mean,
@@ -36,12 +37,47 @@ class UXarrayComputeAgent(Agent):
         self._executor = None
 
     def _get_executor(self):
-        """Get or create Globus Compute executor."""
+        """Get or create Globus Compute executor with AllCodeStrategies.
+
+        AllCodeStrategies serializes the actual function code instead of
+        just the module reference, so the HPC endpoint does not need
+        uxarray_mcp installed — only uxarray and its dependencies.
+        """
         if self._executor is None and self.config.has_endpoint:
             from globus_compute_sdk import Executor
+            from globus_compute_sdk.serialize import (
+                AllCodeStrategies,
+                ComputeSerializer,
+            )
 
-            self._executor = Executor(endpoint_id=self.config.endpoint_id)
+            self._executor = Executor(
+                endpoint_id=self.config.endpoint_id,
+                serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
+            )
         return self._executor
+
+    @action
+    async def inspect_mesh_remote(
+        self, file_path: str, use_remote: bool = False
+    ) -> Dict[str, Any]:
+        """Inspect mesh topology with optional remote execution.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to mesh file
+        use_remote : bool
+            If True, execute on HPC; if False, execute locally
+
+        Returns
+        -------
+        dict
+            Mesh topology info (n_face, n_node, n_edge, source)
+        """
+        if use_remote and self.config.has_endpoint:
+            return await self._run_on_hpc(remote_inspect_mesh, file_path)
+        else:
+            return self._run_local_inspect_mesh(file_path)
 
     @action
     async def calculate_area_remote(
@@ -178,6 +214,12 @@ class UXarrayComputeAgent(Agent):
         )
 
         return result
+
+    def _run_local_inspect_mesh(self, file_path: str) -> Dict[str, Any]:
+        """Execute inspect_mesh locally as fallback."""
+        from uxarray_mcp.tools import inspect_mesh
+
+        return inspect_mesh(file_path)
 
     def _run_local_calculate_area(self, file_path: str) -> Dict[str, Any]:
         """Execute calculate_area locally as fallback."""
