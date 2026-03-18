@@ -5,10 +5,17 @@ validate_dataset, and provenance correctness. These must pass before
 and after any refactor so the HPC path stays intact.
 """
 
+import importlib.util
+
 import pytest
 from unittest.mock import MagicMock, patch
 
 from uxarray_mcp.remote.config import HPCConfig
+
+globus_available = importlib.util.find_spec("globus_compute_sdk") is not None
+requires_globus = pytest.mark.skipif(
+    not globus_available, reason="globus_compute_sdk not installed (HPC extra required)"
+)
 from uxarray_mcp.remote.health import check_endpoint_health
 from uxarray_mcp.tools.inspection import validate_dataset
 from uxarray_mcp.tools.remote_tools import (
@@ -33,6 +40,7 @@ class TestCheckEndpointHealth:
         assert result["status"] == "no_endpoint"
         assert "message" in result
 
+    @requires_globus
     def test_healthy_endpoint(self):
         """Returns online status when Globus SDK reports the endpoint is up."""
         config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="remote")
@@ -45,6 +53,7 @@ class TestCheckEndpointHealth:
         assert result["status"] == "online"
         assert result["endpoint_id"] == "fake-uuid-1234"
 
+    @requires_globus
     def test_unreachable_endpoint(self):
         """Returns unreachable with error message when Globus SDK raises."""
         config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="remote")
@@ -58,6 +67,7 @@ class TestCheckEndpointHealth:
         assert result["endpoint_id"] == "fake-uuid-1234"
         assert "error" in result
 
+    @requires_globus
     def test_unknown_status_passed_through(self):
         """Passes through whatever status string the Globus SDK returns."""
         config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="remote")
@@ -91,6 +101,7 @@ class TestEndpointIsReady:
         assert ready is False
         assert "no_endpoint" in reason
 
+    @requires_globus
     def test_healthy_endpoint_returns_ready(self):
         """Returns (True, 'ok') when the endpoint reports online."""
         agent = self._make_agent(endpoint_id="fake-uuid")
@@ -103,6 +114,7 @@ class TestEndpointIsReady:
         assert ready is True
         assert reason == "ok"
 
+    @requires_globus
     def test_unreachable_endpoint_returns_not_ready(self):
         """Returns (False, reason) when the Globus SDK raises an exception."""
         agent = self._make_agent(endpoint_id="fake-uuid")
