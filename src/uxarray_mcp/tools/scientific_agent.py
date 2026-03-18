@@ -72,6 +72,7 @@ def run_scientific_agent(
         inspect_variable,
         calculate_area,
         calculate_zonal_mean,
+        validate_dataset,
     )
     from uxarray_mcp.tools.remote_tools import (
         inspect_mesh_hpc,
@@ -154,6 +155,33 @@ def run_scientific_agent(
                 }
             )
 
+        # Run validation — results gate downstream tools (Criterion 1 + 5)
+        reasoning_trace.append(
+            {"stage": "analyze", "action": f"validate_dataset({data_path!r})"}
+        )
+        try:
+            validation_result = validate_dataset(file_path, data_path)
+            validation_summary = {
+                "passed": validation_result["passed"],
+                "n_variables_checked": validation_result["n_variables_checked"],
+                "n_variables_failed": validation_result["n_variables_failed"],
+                "warnings": validation_result["_provenance"]["warnings"],
+            }
+            if not validation_result["passed"]:
+                reasoning_trace.append(
+                    {
+                        "stage": "analyze",
+                        "warning": f"validation failed: {validation_result['n_variables_failed']} variable(s) have issues",
+                    }
+                )
+        except Exception as exc:
+            validation_summary = {"passed": None, "error": str(exc)}
+            reasoning_trace.append(
+                {"stage": "analyze", "warning": f"validation skipped: {exc}"}
+            )
+    else:
+        validation_summary = None
+
     # ── STAGE 2: PLAN ─────────────────────────────────────────────────────────
     venue = _decide_venue(file_path, n_face)
     use_remote = venue == "hpc"
@@ -173,8 +201,17 @@ def run_scientific_agent(
     )
 
     planned_ops = ["calculate_area"]
-    if face_centered_var:
+    validation_passed = validation_summary is None or validation_summary.get("passed") is not False
+    if face_centered_var and validation_passed:
         planned_ops.append("calculate_zonal_mean")
+    elif face_centered_var and not validation_passed:
+        reasoning_trace.append(
+            {
+                "stage": "plan",
+                "decision": "skip calculate_zonal_mean",
+                "reason": "validation failed — results may be unreliable",
+            }
+        )
 
     reasoning_trace.append({"stage": "plan", "operations": planned_ops})
 
@@ -265,6 +302,37 @@ def run_scientific_agent(
 
     from uxarray_mcp.provenance import attach_provenance
 
+    # ── BUILD ARTIFACT LIST ───────────────────────────────────────────────────
+    artifacts: list[dict] = []
+
+    if mesh_summary:
+        artifacts.append({
+            "type": "mesh_topology",
+            "n_face": mesh_summary.get("n_face"),
+            "n_node": mesh_summary.get("n_node"),
+            "format": mesh_summary.get("format"),
+        })
+    if area_results:
+        artifacts.append({
+            "type": "face_areas",
+            "total_area": area_results.get("total_area"),
+            "n_face": area_results.get("n_face"),
+            "area_units": area_results.get("area_units"),
+        })
+    if validation_summary:
+        artifacts.append({
+            "type": "validation",
+            "passed": validation_summary.get("passed"),
+            "n_variables_checked": validation_summary.get("n_variables_checked"),
+            "n_variables_failed": validation_summary.get("n_variables_failed"),
+        })
+    if zonal_mean_results:
+        artifacts.append({
+            "type": "zonal_mean",
+            "variable": face_centered_var,
+            "n_latitudes": len(zonal_mean_results.get("latitudes", [])),
+        })
+
     result = {
         "file_path": file_path,
         "execution_venue": venue,
@@ -273,6 +341,7 @@ def run_scientific_agent(
         "area_results": area_results,
         "variable_results": variable_results,
         "zonal_mean_results": zonal_mean_results,
+        "validation_summary": validation_summary,
         "verification": {"passed": passed, "warnings": warnings},
     }
 
@@ -286,4 +355,7 @@ def run_scientific_agent(
         },
         venue=venue,
         warnings=warnings,
+        validation_summary=validation_summary,
+        selected_variable=face_centered_var,
+        artifacts=artifacts,
     )

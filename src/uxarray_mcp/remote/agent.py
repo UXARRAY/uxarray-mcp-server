@@ -213,7 +213,16 @@ class UXarrayComputeAgent(Agent):
             None, future.result, self.config.timeout_seconds
         )
 
-        return result
+        # Attach provenance with the correct HPC venue — the remote functions
+        # are self contained and don't call attach_provenance themselves.
+        from uxarray_mcp.provenance import attach_provenance
+
+        return attach_provenance(
+            result,
+            tool=func.__name__,
+            inputs={"args": [str(a) for a in args]},
+            venue=f"hpc:{self.config.endpoint_id}",
+        )
 
     def _run_local_inspect_mesh(self, file_path: str) -> Dict[str, Any]:
         """Execute inspect_mesh locally as fallback."""
