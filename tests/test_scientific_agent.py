@@ -1,7 +1,35 @@
 """Tests for the autonomous scientific agent tool."""
 
-import pytest
-from uxarray_mcp.tools.scientific_agent import run_scientific_agent, _decide_venue
+from unittest.mock import patch
+
+from uxarray_mcp.tools.scientific_agent import (
+    run_scientific_agent,
+    _decide_venue,
+    _is_hpc_path,
+)
+
+
+class TestIsHpcPath:
+    def test_home_path(self):
+        assert _is_hpc_path("/home/user/mesh.nc") is True
+
+    def test_lus_path(self):
+        assert _is_hpc_path("/lus/grand/mesh.nc") is True
+
+    def test_scratch_path(self):
+        assert _is_hpc_path("/scratch/user/mesh.nc") is True
+
+    def test_projects_path(self):
+        assert _is_hpc_path("/projects/atm/mesh.nc") is True
+
+    def test_gpfs_path(self):
+        assert _is_hpc_path("/gpfs/data/mesh.nc") is True
+
+    def test_local_path(self):
+        assert _is_hpc_path("mesh.nc") is False
+
+    def test_healpix(self):
+        assert _is_hpc_path("healpix:2") is False
 
 
 class TestDecideVenue:
@@ -29,7 +57,11 @@ class TestDecideVenue:
     def test_local_just_under_threshold(self):
         assert _decide_venue("mesh.nc", 999_999) == "local"
 
-    def test_hpc_exactly_at_threshold(self):
+    def test_at_threshold_is_local(self):
+        # Threshold is > 1_000_000, so exactly 1M is local
+        assert _decide_venue("mesh.nc", 1_000_000) == "local"
+
+    def test_hpc_just_over_threshold(self):
         assert _decide_venue("mesh.nc", 1_000_001) == "hpc"
 
 
@@ -93,16 +125,8 @@ class TestRunScientificAgent:
         assert result["variable_results"] is None
         assert result["zonal_mean_results"] is None
 
-    def test_hpc_path_sets_venue(self):
-        # We can't actually run HPC in tests, but we can verify the venue decision
-        # by checking the reasoning trace for a small HPC-path mesh
-        # This tests _decide_venue integration — actual execution would need endpoint
-        result = run_scientific_agent("healpix:1")
-        # healpix:1 is small and local path → local
-        assert result["execution_venue"] == "local"
-
     def test_larger_healpix_still_local(self):
-        # healpix:5 has 12*4^5 = 12288 faces — still under 1M threshold
+        # healpix:5 has 12*4^5 = 12288 faces -- still under 1M threshold
         result = run_scientific_agent("healpix:5")
         assert result["execution_venue"] == "local"
         assert result["verification"]["passed"] is True
@@ -122,3 +146,89 @@ class TestRunScientificAgent:
         ]
         ops = next((s["operations"] for s in plan_steps if "operations" in s), [])
         assert "calculate_zonal_mean" not in ops
+
+
+class TestHpcPathRouting:
+    """Tests for HPC path detection and remote routing in Stage 1."""
+
+    @patch("uxarray_mcp.tools.remote_tools.inspect_mesh_hpc")
+    def test_hpc_path_calls_remote_inspect(self, mock_inspect):
+        """HPC paths should route to remote inspection, not local."""
+        mock_inspect.return_value = {
+            "n_face": 100,
+            "n_node": 200,
+            "n_edge": 300,
+            "source": "/home/user/mesh.nc",
+        }
+        with patch("uxarray_mcp.tools.remote_tools.calculate_area_hpc") as mock_area:
+            mock_area.return_value = {
+                "total_area": 5.1e14,
+                "mean_area": 1.0e7,
+                "min_area": 1.0e6,
+                "max_area": 2.0e7,
+                "n_face": 100,
+            }
+            result = run_scientific_agent("/home/user/mesh.nc")
+
+        assert result["execution_venue"] == "hpc"
+        # Verify reasoning trace mentions HPC path detection
+        trace_actions = [step.get("action", "") for step in result["reasoning_trace"]]
+        assert any("HPC path" in a for a in trace_actions)
+
+    def test_hpc_path_failure_returns_error(self):
+        """If HPC inspection fails, return structured error, don't crash."""
+        with patch(
+            "uxarray_mcp.tools.remote_tools.inspect_mesh_hpc",
+            side_effect=RuntimeError("Endpoint unreachable"),
+        ):
+            result = run_scientific_agent("/home/user/mesh.nc")
+
+        assert result["verification"]["passed"] is False
+        assert any(
+            "unreachable" in w.lower() for w in result["verification"]["warnings"]
+        )
+
+    def test_local_path_does_not_use_hpc(self):
+        """Local HEALPix paths should never touch HPC tools."""
+        result = run_scientific_agent("healpix:2")
+        trace_actions = [step.get("action", "") for step in result["reasoning_trace"]]
+        assert not any("HPC" in a for a in trace_actions)
+
+
+class TestHpcErrorHandling:
+    """Tests for graceful HPC fallback during execution."""
+
+    def test_hpc_area_failure_falls_back_to_local(self):
+        """If HPC area calculation fails, fall back to local."""
+        with (
+            patch(
+                "uxarray_mcp.tools.remote_tools.inspect_mesh_hpc",
+                return_value={
+                    "n_face": 100,
+                    "n_node": 200,
+                    "n_edge": 300,
+                    "source": "/home/user/mesh.nc",
+                },
+            ),
+            patch(
+                "uxarray_mcp.tools.remote_tools.calculate_area_hpc",
+                side_effect=RuntimeError("Globus timeout"),
+            ),
+            patch(
+                "uxarray_mcp.tools.inspection.calculate_area",
+                return_value={
+                    "total_area": 5.1e14,
+                    "mean_area": 1.0e7,
+                    "min_area": 1.0e6,
+                    "max_area": 2.0e7,
+                    "n_face": 100,
+                },
+            ),
+        ):
+            result = run_scientific_agent("/home/user/mesh.nc")
+
+        assert "fallback" in result["execution_venue"].lower()
+        warnings_in_trace = [
+            step for step in result["reasoning_trace"] if "warning" in step
+        ]
+        assert len(warnings_in_trace) > 0

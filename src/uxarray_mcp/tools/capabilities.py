@@ -5,6 +5,8 @@ from typing import Dict, Any, Optional, List
 
 import uxarray as ux
 
+from uxarray_mcp.provenance import attach_provenance
+
 
 def get_capabilities(
     grid_path: str,
@@ -377,8 +379,10 @@ def get_capabilities(
             "validate_dataset → calculate_area → calculate_zonal_mean → remap to a new grid."
         )
 
-    if data_path and not has_face_centered_vars and (
-        has_node_centered_vars or has_edge_centered_vars
+    if (
+        data_path
+        and not has_face_centered_vars
+        and (has_node_centered_vars or has_edge_centered_vars)
     ):
         recommendations.append(
             "Your data is on nodes or edges, not faces. Use topological aggregation "
@@ -388,8 +392,8 @@ def get_capabilities(
 
     if has_face_centered_vars and len(face_centered_var_names) >= 2:
         recommendations.append(
-            f"Multiple face-centered variables detected — you can compute vector operations "
-            f"like curl and divergence between pairs (e.g. wind u/v components)."
+            "Multiple face-centered variables detected — you can compute vector operations "
+            "like curl and divergence between pairs (e.g. wind u/v components)."
         )
 
     result: Dict[str, Any] = {
@@ -402,4 +406,8 @@ def get_capabilities(
     if variables_info:
         result["variables"] = variables_info
 
-    return result
+    return attach_provenance(
+        result,
+        tool="get_capabilities",
+        inputs={"grid_path": grid_path, "data_path": data_path},
+    )
