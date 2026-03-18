@@ -6,22 +6,22 @@ and after any refactor so the HPC path stays intact.
 """
 
 import importlib.util
-
-import pytest
 from unittest.mock import MagicMock, patch
 
-from uxarray_mcp.remote.config import HPCConfig
+import pytest
 
-globus_available = importlib.util.find_spec("globus_compute_sdk") is not None
-requires_globus = pytest.mark.skipif(
-    not globus_available, reason="globus_compute_sdk not installed (HPC extra required)"
-)
+from uxarray_mcp.remote.config import HPCConfig
 from uxarray_mcp.remote.health import check_endpoint_health
 from uxarray_mcp.tools.inspection import validate_dataset
 from uxarray_mcp.tools.remote_tools import (
     _endpoint_is_ready,
-    inspect_mesh_hpc,
     calculate_area_hpc,
+    inspect_mesh_hpc,
+)
+
+globus_available = importlib.util.find_spec("globus_compute_sdk") is not None
+requires_globus = pytest.mark.skipif(
+    not globus_available, reason="globus_compute_sdk not installed (HPC extra required)"
 )
 
 
