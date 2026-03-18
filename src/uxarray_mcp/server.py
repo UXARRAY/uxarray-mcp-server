@@ -1,7 +1,6 @@
 """UXarray MCP Server - Provides mesh analysis tools for AI agents."""
 
 from fastmcp import FastMCP
-from uxarray_mcp.remote.config import load_config
 from uxarray_mcp.tools import (
     get_capabilities,
     run_scientific_agent,
@@ -38,13 +37,11 @@ mcp.tool()(validate_dataset)
 mcp.tool()(get_execution_mode)
 mcp.tool()(set_execution_mode)
 
-# HPC tools — only registered when an endpoint is configured
-_config = load_config()
-if _config.has_endpoint:
-    mcp.tool()(inspect_mesh_hpc)
-    mcp.tool()(calculate_area_hpc)
-    mcp.tool()(inspect_variable_hpc)
-    mcp.tool()(calculate_zonal_mean_hpc)
+# HPC tools — always registered; fall back to local when no endpoint is configured
+mcp.tool()(inspect_mesh_hpc)
+mcp.tool()(calculate_area_hpc)
+mcp.tool()(inspect_variable_hpc)
+mcp.tool()(calculate_zonal_mean_hpc)
 
 if __name__ == "__main__":
     mcp.run()

@@ -333,8 +333,10 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
     _FILL_VALUE_CANDIDATES = [1e20, 9.96920996838687e36, -999.0, -9999.0]
+    _SUSPICIOUS_FILL_VALUES = [9999, -9999, 999999, -999999, 9.96921e36]
 
     overall_passed = True
+    issues: list[str] = []
     validation_results = []
     all_warnings: list[str] = []
 
@@ -344,11 +346,26 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
 
         try:
             values = var.values
+            is_numeric = np.issubdtype(values.dtype, np.number)
             is_float = np.issubdtype(values.dtype, np.floating)
+
+            # Skip non-numeric variables (consistent with main's schema)
+            if not is_numeric:
+                continue
 
             n_nan = int(np.sum(np.isnan(values))) if is_float else 0
             n_inf = int(np.sum(np.isinf(values))) if is_float else 0
+            total_values = int(values.size)
+            nan_percentage = (n_nan / total_values * 100) if total_values > 0 else 0.0
 
+            # NetCDF _FillValue detection
+            fill_value_attr = var.attrs.get("_FillValue", None)
+            fill_value_count = 0
+            if fill_value_attr is not None and is_float:
+                fill_value_mask = np.isclose(values, fill_value_attr, rtol=0, atol=0)
+                fill_value_count = int(np.sum(fill_value_mask))
+
+            # Candidate fill value detection (our schema: n_fill_values / detected_fill_value)
             n_fill = 0
             detected_fill = None
             if is_float:
@@ -359,26 +376,78 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
                         detected_fill = fv
                         break
 
-            var_passed = n_nan == 0 and n_inf == 0 and n_fill == 0
+            # Suspicious fill value count (main's schema)
+            suspicious_fill_count = 0
+            if is_float:
+                for fill_val in _SUSPICIOUS_FILL_VALUES:
+                    suspicious_mask = np.isclose(values, fill_val, rtol=1e-5)
+                    suspicious_fill_count += int(np.sum(suspicious_mask))
+
+            # Valid value range
+            nan_mask = (
+                np.isnan(values) if is_float else np.zeros(values.shape, dtype=bool)
+            )
+            inf_mask = (
+                np.isinf(values) if is_float else np.zeros(values.shape, dtype=bool)
+            )
+            valid_values = values[~nan_mask & ~inf_mask]
+            value_range = None
+            if valid_values.size > 0:
+                value_range = [float(np.min(valid_values)), float(np.max(valid_values))]
+
+            # Coordinate range checks (main's schema)
+            coord_issues: list[str] = []
+            if "lat" in var_name.lower() or "latitude" in var_name.lower():
+                if value_range and (value_range[0] < -90 or value_range[1] > 90):
+                    coord_issues.append("latitude out of valid range [-90, 90]")
+            if "lon" in var_name.lower() or "longitude" in var_name.lower():
+                if value_range and (value_range[0] < -180 or value_range[1] > 360):
+                    coord_issues.append("longitude out of valid range [-180, 360]")
+
+            var_passed = (
+                n_nan == 0
+                and n_inf == 0
+                and n_fill == 0
+                and fill_value_count == 0
+                and not coord_issues
+            )
             if not var_passed:
                 overall_passed = False
 
             if n_nan > 0:
-                msg = f"{var_name}: {n_nan} NaN value(s)"
+                msg = f"{var_name}: contains {n_nan} NaN values ({nan_percentage:.2f}%)"
                 var_warnings.append(msg)
                 all_warnings.append(msg)
+                issues.append(msg)
             if n_inf > 0:
-                msg = f"{var_name}: {n_inf} Inf value(s)"
+                msg = f"{var_name}: contains {n_inf} Inf values"
                 var_warnings.append(msg)
                 all_warnings.append(msg)
-            if n_fill > 0:
+                issues.append(msg)
+            if fill_value_count > 0:
+                msg = f"{var_name}: contains {fill_value_count} fill values ({fill_value_attr})"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+                issues.append(msg)
+            if suspicious_fill_count > 0:
+                msg = f"{var_name}: contains {suspicious_fill_count} suspicious fill-like values"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+                issues.append(msg)
+            elif n_fill > 0 and fill_value_count == 0:
                 msg = f"{var_name}: {n_fill} fill value(s) matching {detected_fill}"
                 var_warnings.append(msg)
                 all_warnings.append(msg)
+            for ci in coord_issues:
+                full_msg = f"{var_name}: {ci}"
+                var_warnings.append(full_msg)
+                all_warnings.append(full_msg)
+                issues.append(full_msg)
 
             validation_results.append(
                 {
                     "name": var_name,
+                    # Our schema fields
                     "passed": var_passed,
                     "n_nan": n_nan,
                     "n_inf": n_inf,
@@ -387,12 +456,24 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
                     "shape": list(values.shape),
                     "dtype": str(values.dtype),
                     "warnings": var_warnings,
+                    # Main's schema fields
+                    "has_nan": n_nan > 0,
+                    "has_inf": n_inf > 0,
+                    "nan_count": n_nan,
+                    "inf_count": n_inf,
+                    "fill_value_count": fill_value_count,
+                    "suspicious_fill_count": suspicious_fill_count,
+                    "total_values": total_values,
+                    "nan_percentage": round(nan_percentage, 2),
+                    "value_range": value_range,
+                    "coordinate_issues": coord_issues if coord_issues else None,
                 }
             )
 
         except Exception as e:
             msg = f"Could not validate {var_name}: {e}"
             all_warnings.append(msg)
+            issues.append(msg)
             overall_passed = False
             validation_results.append(
                 {
@@ -404,12 +485,16 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
             )
 
     result = {
+        # Our schema
         "passed": overall_passed,
         "n_variables_checked": len(validation_results),
         "n_variables_failed": sum(
             1 for v in validation_results if not v.get("passed", False)
         ),
         "variables": validation_results,
+        # Main's schema additions
+        "is_valid": overall_passed,
+        "issues": issues,
     }
 
     return attach_provenance(

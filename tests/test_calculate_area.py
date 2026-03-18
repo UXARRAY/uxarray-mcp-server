@@ -23,8 +23,9 @@ class TestCalculateAreaBasic:
         mock_areas.attrs = {"units": "m^2"}
         mock_grid.face_areas = mock_areas
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_grid", return_value=mock_grid
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_grid", return_value=mock_grid),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -68,8 +69,9 @@ class TestCalculateAreaBasic:
         mock_areas.attrs = {}
         mock_grid.face_areas = mock_areas
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_grid", return_value=mock_grid
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_grid", return_value=mock_grid),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -96,8 +98,9 @@ class TestCalculateAreaErrorHandling:
 
     def test_grid_loading_error(self):
         """Test handling of grid loading errors."""
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_grid", side_effect=Exception("Load error")
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_grid", side_effect=Exception("Load error")),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -112,8 +115,9 @@ class TestCalculateAreaErrorHandling:
             lambda self: (_ for _ in ()).throw(Exception("Calculation error"))
         )
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_grid", return_value=mock_grid
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_grid", return_value=mock_grid),
         ):
             MockPath.return_value.exists.return_value = True
 

@@ -49,7 +49,9 @@ class TestCheckEndpointHealth:
         """Returns unreachable with error message when Globus SDK raises."""
         config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="remote")
 
-        with patch("globus_compute_sdk.Client", side_effect=Exception("Connection refused")):
+        with patch(
+            "globus_compute_sdk.Client", side_effect=Exception("Connection refused")
+        ):
             result = check_endpoint_health(config)
 
         assert result["status"] == "unreachable"
@@ -134,9 +136,12 @@ class TestInspectMeshHpcUnit:
 
     def test_unhealthy_endpoint_falls_back_and_warns(self, synthetic_mesh_file):
         """Falls back to local and adds a warning when the health check fails."""
-        with patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent, patch(
-            "uxarray_mcp.tools.remote_tools._endpoint_is_ready",
-            return_value=(False, "endpoint status='stopped': "),
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent,
+            patch(
+                "uxarray_mcp.tools.remote_tools._endpoint_is_ready",
+                return_value=(False, "endpoint status='stopped': "),
+            ),
         ):
             mock_agent = MagicMock()
             mock_agent.config.has_endpoint = True
@@ -188,9 +193,12 @@ class TestHpcFallbackProvenance:
 
     def test_fallback_venue_is_local(self, synthetic_mesh_file):
         """execution_venue is 'local' in provenance after an HPC fallback."""
-        with patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent, patch(
-            "uxarray_mcp.tools.remote_tools._endpoint_is_ready",
-            return_value=(False, "endpoint status='stopped': "),
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent,
+            patch(
+                "uxarray_mcp.tools.remote_tools._endpoint_is_ready",
+                return_value=(False, "endpoint status='stopped': "),
+            ),
         ):
             mock_agent = MagicMock()
             mock_agent.config.has_endpoint = True
@@ -202,9 +210,12 @@ class TestHpcFallbackProvenance:
 
     def test_fallback_warning_present(self, synthetic_mesh_file):
         """A warning about the fallback is recorded in provenance."""
-        with patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent, patch(
-            "uxarray_mcp.tools.remote_tools._endpoint_is_ready",
-            return_value=(False, "endpoint status='stopped': "),
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent,
+            patch(
+                "uxarray_mcp.tools.remote_tools._endpoint_is_ready",
+                return_value=(False, "endpoint status='stopped': "),
+            ),
         ):
             mock_agent = MagicMock()
             mock_agent.config.has_endpoint = True

@@ -191,6 +191,10 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# User-specific HPC configuration (contains personal endpoint UUIDs)
+# Copy config.yaml.example to config.yaml and fill in your own values
+config.yaml
+
 # PyPI configuration file
 .pypirc
 

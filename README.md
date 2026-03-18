@@ -2,6 +2,15 @@
 
 An MCP (Model Context Protocol) server that gives AI agents a mesh-aware assistant — not just a flat tool shelf. Built on [UXarray](https://uxarray.readthedocs.io/) with support for local execution and remote HPC via Globus Compute.
 
+**Requirements:** Python 3.11+, macOS or Linux (Windows untested)
+
+**Stable tools:** `inspect_mesh`, `inspect_variable`, `calculate_area`, `calculate_zonal_mean`, `validate_dataset` — work out of the box, no extra setup needed.
+
+**Experimental HPC tools:** `calculate_area_hpc`, `inspect_variable_hpc`, `calculate_zonal_mean_hpc` — require a personal Globus Compute endpoint on an HPC cluster. See [GETTING_STARTED.md](GETTING_STARTED.md) for setup instructions. Install with:
+```bash
+uv sync --extra hpc
+```
+
 ## Features
 
 - **Autonomous scientific agent** — Analyze → Plan → Execute → Verify loop with full reasoning trace

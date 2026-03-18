@@ -81,8 +81,9 @@ class TestCalculateZonalMeanUnit:
         mock_data_vars.__contains__ = lambda self, key: key == "temperature"
         mock_uxds.data_vars = mock_data_vars
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -119,8 +120,9 @@ class TestCalculateZonalMeanUnit:
         mock_data_vars.__contains__ = lambda self, key: key == "temperature"
         mock_uxds.data_vars = mock_data_vars
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -160,8 +162,9 @@ class TestCalculateZonalMeanUnit:
         mock_data_vars.__contains__ = lambda self, key: key == "temperature"
         mock_uxds.data_vars = mock_data_vars
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -198,8 +201,9 @@ class TestCalculateZonalMeanUnit:
         mock_data_vars.__contains__ = lambda self, key: key == "temperature"
         mock_uxds.data_vars = mock_data_vars
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -236,8 +240,9 @@ class TestCalculateZonalMeanUnit:
         mock_data_vars.__contains__ = lambda self, key: key == "temperature"
         mock_uxds.data_vars = mock_data_vars
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -273,14 +278,18 @@ class TestCalculateZonalMeanUnit:
         """Test error handling when variable doesn't exist."""
         mock_uxds = MagicMock()
         mock_uxds.data_vars = MagicMock()
-        mock_uxds.data_vars.__contains__ = lambda self, key: key in [
-            "pressure",
-            "salinity",
-        ]
+        mock_uxds.data_vars.__contains__ = lambda self, key: (
+            key
+            in [
+                "pressure",
+                "salinity",
+            ]
+        )
         mock_uxds.data_vars.keys.return_value = ["pressure", "salinity"]
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -299,8 +308,9 @@ class TestCalculateZonalMeanUnit:
         mock_data_vars.__contains__ = lambda self, key: key == "temperature"
         mock_uxds.data_vars = mock_data_vars
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -309,8 +319,9 @@ class TestCalculateZonalMeanUnit:
 
     def test_zonal_mean_dataset_load_error(self):
         """Test error handling when dataset fails to load."""
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", side_effect=Exception("Load error")
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", side_effect=Exception("Load error")),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -331,8 +342,9 @@ class TestCalculateZonalMeanUnit:
         mock_data_vars.__contains__ = lambda self, key: key == "temperature"
         mock_uxds.data_vars = mock_data_vars
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 

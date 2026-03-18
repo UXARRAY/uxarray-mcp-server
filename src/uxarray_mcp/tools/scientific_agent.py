@@ -201,7 +201,9 @@ def run_scientific_agent(
     )
 
     planned_ops = ["calculate_area"]
-    validation_passed = validation_summary is None or validation_summary.get("passed") is not False
+    validation_passed = (
+        validation_summary is None or validation_summary.get("passed") is not False
+    )
     if face_centered_var and validation_passed:
         planned_ops.append("calculate_zonal_mean")
     elif face_centered_var and not validation_passed:
@@ -306,32 +308,40 @@ def run_scientific_agent(
     artifacts: list[dict] = []
 
     if mesh_summary:
-        artifacts.append({
-            "type": "mesh_topology",
-            "n_face": mesh_summary.get("n_face"),
-            "n_node": mesh_summary.get("n_node"),
-            "format": mesh_summary.get("format"),
-        })
+        artifacts.append(
+            {
+                "type": "mesh_topology",
+                "n_face": mesh_summary.get("n_face"),
+                "n_node": mesh_summary.get("n_node"),
+                "format": mesh_summary.get("format"),
+            }
+        )
     if area_results:
-        artifacts.append({
-            "type": "face_areas",
-            "total_area": area_results.get("total_area"),
-            "n_face": area_results.get("n_face"),
-            "area_units": area_results.get("area_units"),
-        })
+        artifacts.append(
+            {
+                "type": "face_areas",
+                "total_area": area_results.get("total_area"),
+                "n_face": area_results.get("n_face"),
+                "area_units": area_results.get("area_units"),
+            }
+        )
     if validation_summary:
-        artifacts.append({
-            "type": "validation",
-            "passed": validation_summary.get("passed"),
-            "n_variables_checked": validation_summary.get("n_variables_checked"),
-            "n_variables_failed": validation_summary.get("n_variables_failed"),
-        })
+        artifacts.append(
+            {
+                "type": "validation",
+                "passed": validation_summary.get("passed"),
+                "n_variables_checked": validation_summary.get("n_variables_checked"),
+                "n_variables_failed": validation_summary.get("n_variables_failed"),
+            }
+        )
     if zonal_mean_results:
-        artifacts.append({
-            "type": "zonal_mean",
-            "variable": face_centered_var,
-            "n_latitudes": len(zonal_mean_results.get("latitudes", [])),
-        })
+        artifacts.append(
+            {
+                "type": "zonal_mean",
+                "variable": face_centered_var,
+                "n_latitudes": len(zonal_mean_results.get("latitudes", [])),
+            }
+        )
 
     result = {
         "file_path": file_path,
