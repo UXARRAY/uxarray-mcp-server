@@ -5,6 +5,17 @@ from unittest.mock import MagicMock, patch
 from uxarray_mcp.remote.config import HPCConfig, load_config
 from uxarray_mcp.remote.agent import UXarrayComputeAgent
 
+try:
+    import academy  # noqa: F401
+
+    HAS_ACADEMY = True
+except ImportError:
+    HAS_ACADEMY = False
+
+skip_no_academy = pytest.mark.skipif(
+    not HAS_ACADEMY, reason="academy-py not installed (HPC optional dep)"
+)
+
 
 class TestHPCConfig:
     """Tests for HPC configuration."""
@@ -40,6 +51,7 @@ class TestHPCConfig:
         assert config.timeout_seconds == 300
 
 
+@skip_no_academy
 class TestUXarrayComputeAgent:
     """Tests for UXarray Compute Agent."""
 

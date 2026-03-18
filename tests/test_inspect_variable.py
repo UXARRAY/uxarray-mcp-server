@@ -29,8 +29,9 @@ class TestInspectVariableBasic:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -67,15 +68,16 @@ class TestInspectVariableBasic:
         mock_sal.values = np.array([32.0, 34.0, 36.0])
 
         mock_uxds.data_vars = {"temperature": mock_temp, "salinity": mock_sal}
-        mock_uxds.__getitem__ = (
-            lambda self, key: mock_temp if key == "temperature" else mock_sal
+        mock_uxds.__getitem__ = lambda self, key: (
+            mock_temp if key == "temperature" else mock_sal
         )
         mock_uxds.uxgrid.n_face = 100
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -101,8 +103,9 @@ class TestInspectVariableBasic:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -126,8 +129,9 @@ class TestInspectVariableBasic:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -151,8 +155,9 @@ class TestInspectVariableBasic:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -176,8 +181,9 @@ class TestInspectVariableBasic:
         mock_uxds.uxgrid.n_node = 10
         mock_uxds.uxgrid.n_edge = 15
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -205,8 +211,9 @@ class TestInspectVariableBasic:
         mock_uxds.uxgrid.n_node = 10
         mock_uxds.uxgrid.n_edge = 15
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -239,16 +246,20 @@ class TestInspectVariableErrorHandling:
         """Test handling of invalid variable name."""
         mock_uxds = MagicMock()
         mock_data_vars = MagicMock()
-        mock_data_vars.__contains__ = lambda self, key: key in [
-            "temperature",
-            "salinity",
-        ]
+        mock_data_vars.__contains__ = lambda self, key: (
+            key
+            in [
+                "temperature",
+                "salinity",
+            ]
+        )
         mock_data_vars.keys.return_value = ["temperature", "salinity"]
 
         mock_uxds.data_vars = mock_data_vars
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -257,8 +268,9 @@ class TestInspectVariableErrorHandling:
 
     def test_dataset_loading_error(self):
         """Test handling of dataset loading errors."""
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", side_effect=Exception("Load error")
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", side_effect=Exception("Load error")),
         ):
             MockPath.return_value.exists.return_value = True
 

@@ -1,8 +1,8 @@
 """MCP tools with remote execution support."""
 
 import asyncio
-from threading import Thread
-from typing import Dict, Any, Optional, Callable
+import concurrent.futures
+from typing import Any, Callable, Dict, Optional
 
 
 def _endpoint_is_ready(agent) -> tuple[bool, str]:
@@ -16,7 +16,10 @@ def _endpoint_is_ready(agent) -> tuple[bool, str]:
     status = health.get("status", "unknown")
     if status in ("online", "healthy"):
         return True, "ok"
-    return False, f"endpoint status={status!r}: {health.get('error', health.get('message', ''))}"
+    return (
+        False,
+        f"endpoint status={status!r}: {health.get('error', health.get('message', ''))}",
+    )
 
 
 def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
@@ -28,28 +31,12 @@ def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
     """
     try:
         asyncio.get_running_loop()
+        # Inside async context (e.g. FastMCP) — run in a new thread
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(asyncio.run, async_call()).result()
     except RuntimeError:
+        # No event loop running (tests, CLI) — run directly
         return asyncio.run(async_call())
-
-    result: Dict[str, Any] = {}
-    error: Dict[str, BaseException] = {}
-
-    def _runner() -> None:
-        try:
-            result["value"] = asyncio.run(async_call())
-        except (
-            BaseException
-        ) as exc:  # pragma: no cover - exercised via caller assertions
-            error["value"] = exc
-
-    thread = Thread(target=_runner, daemon=True)
-    thread.start()
-    thread.join()
-
-    if "value" in error:
-        raise error["value"]
-
-    return result["value"]
 
 
 def inspect_mesh_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]:
@@ -98,7 +85,9 @@ def inspect_mesh_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]
         from .inspection import inspect_mesh
 
         result = inspect_mesh(file_path)
-        result["_provenance"]["warnings"].append(f"HPC endpoint not ready ({reason}); ran locally.")
+        result["_provenance"]["warnings"].append(
+            f"HPC endpoint not ready ({reason}); ran locally."
+        )
         return result
 
     return _run_sync(lambda: agent.inspect_mesh_remote(file_path, use_remote))
@@ -159,7 +148,9 @@ def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, An
         from .inspection import calculate_area
 
         result = calculate_area(file_path)
-        result["_provenance"]["warnings"].append(f"HPC endpoint not ready ({reason}); ran locally.")
+        result["_provenance"]["warnings"].append(
+            f"HPC endpoint not ready ({reason}); ran locally."
+        )
         return result
 
     return _run_sync(lambda: agent.calculate_area_remote(file_path, use_remote))
@@ -221,7 +212,9 @@ def inspect_variable_hpc(
         from .inspection import inspect_variable
 
         result = inspect_variable(grid_path, data_path, variable_name)
-        result["_provenance"]["warnings"].append(f"HPC endpoint not ready ({reason}); ran locally.")
+        result["_provenance"]["warnings"].append(
+            f"HPC endpoint not ready ({reason}); ran locally."
+        )
         return result
 
     return _run_sync(
@@ -297,8 +290,12 @@ def calculate_zonal_mean_hpc(
     if not ready:
         from .inspection import calculate_zonal_mean
 
-        result = calculate_zonal_mean(grid_path, data_path, variable_name, lat_spec, conservative)
-        result["_provenance"]["warnings"].append(f"HPC endpoint not ready ({reason}); ran locally.")
+        result = calculate_zonal_mean(
+            grid_path, data_path, variable_name, lat_spec, conservative
+        )
+        result["_provenance"]["warnings"].append(
+            f"HPC endpoint not ready ({reason}); ran locally."
+        )
         return result
 
     return _run_sync(
