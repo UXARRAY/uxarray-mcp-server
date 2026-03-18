@@ -18,6 +18,7 @@ jobs:
 
   test-core:
     runs-on: ubuntu-latest
+    # Supported core runtime: Python 3.13
     strategy:
       matrix:
         python-version: ["3.13"]
@@ -43,6 +44,7 @@ jobs:
 
   test-hpc:
     runs-on: ubuntu-latest
+    # HPC lane is non-blocking — requires Globus Compute which may not install cleanly
     continue-on-error: true
     strategy:
       matrix:
@@ -65,4 +67,4 @@ jobs:
 
     - name: Run HPC tests
       run: |
-        uv run pytest tests/test_remote_agent.py -v
+        uv run pytest tests/test_remote_agent.py tests/test_hpc_safety.py -v

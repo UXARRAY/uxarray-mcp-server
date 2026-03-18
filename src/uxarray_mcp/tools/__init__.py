@@ -13,6 +13,7 @@ from .remote_tools import (
     inspect_variable_hpc,
     calculate_zonal_mean_hpc,
 )
+from .execution_control import get_execution_mode, set_execution_mode
 
 __all__ = [
     "get_capabilities",
@@ -26,4 +27,6 @@ __all__ = [
     "calculate_area_hpc",
     "inspect_variable_hpc",
     "calculate_zonal_mean_hpc",
+    "get_execution_mode",
+    "set_execution_mode",
 ]
