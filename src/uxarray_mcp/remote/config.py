@@ -46,6 +46,8 @@ class HPCConfig:
             return False
         elif self.execution_mode == "remote":
             return self.has_endpoint
+        elif self.execution_mode == "auto":
+            return self.has_endpoint
         else:
             return False
 

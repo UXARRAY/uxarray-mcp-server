@@ -1,10 +1,45 @@
 """Globus Compute functions for remote execution.
 
-These functions are serialized and sent to HPC endpoints.
-All imports must be inside the function body for Globus Compute compatibility.
+These functions are serialized and sent to HPC endpoints via AllCodeStrategies.
+They must be FULLY SELF-CONTAINED — only import packages available on the HPC
+environment (uxarray, numpy, etc.). Never import from uxarray_mcp here.
 """
 
 from typing import Dict, Any, Optional
+
+
+def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
+    """Inspect mesh topology on remote HPC node.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to mesh file on HPC filesystem
+
+    Returns
+    -------
+    dict
+        Mesh topology including n_face, n_node, n_edge, source
+
+    Notes
+    -----
+    This function executes on the HPC endpoint, not locally.
+    All imports must be within function scope for serialization.
+    """
+    import uxarray as ux
+
+    if file_path.startswith("healpix:"):
+        zoom = int(file_path.split(":")[1])
+        grid = ux.Grid.from_healpix(zoom)
+    else:
+        grid = ux.open_grid(file_path)
+
+    return {
+        "n_face": int(grid.n_face),
+        "n_node": int(grid.n_node),
+        "n_edge": int(grid.n_edge),
+        "source": file_path,
+    }
 
 
 def remote_calculate_area(file_path: str) -> Dict[str, Any]:
@@ -25,23 +60,25 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
     This function executes on the HPC endpoint, not locally.
     All imports must be within function scope for serialization.
     """
+    import numpy as np
     import uxarray as ux
 
-    if file_path.lower().startswith("healpix"):
-        parts = file_path.split(":")
-        zoom = int(parts[1]) if len(parts) > 1 else 1
-        grid = ux.Grid.from_healpix(zoom=zoom)
+    if file_path.startswith("healpix:"):
+        zoom = int(file_path.split(":")[1])
+        grid = ux.Grid.from_healpix(zoom)
     else:
         grid = ux.open_grid(file_path)
 
-    face_areas = grid.face_areas
+    areas = grid.face_areas
+    units = getattr(areas, "units", "m^2") if hasattr(areas, "units") else "m^2"
+    values = areas.values if hasattr(areas, "values") else np.asarray(areas)
 
     return {
-        "total_area": float(face_areas.sum()),
-        "mean_area": float(face_areas.mean()),
-        "min_area": float(face_areas.min()),
-        "max_area": float(face_areas.max()),
-        "area_units": "m^2",
+        "total_area": float(np.sum(values)),
+        "mean_area": float(np.mean(values)),
+        "min_area": float(np.min(values)),
+        "max_area": float(np.max(values)),
+        "area_units": str(units),
         "n_face": int(grid.n_face),
     }
 
@@ -69,61 +106,69 @@ def remote_inspect_variable(
     -----
     This function executes on the HPC endpoint, not locally.
     """
-    import uxarray as ux
     import numpy as np
+    import uxarray as ux
 
     uxds = ux.open_dataset(grid_path, data_path)
 
-    if variable_name:
-        if variable_name not in uxds.data_vars:
-            available = list(uxds.data_vars.keys())
-            raise ValueError(
-                f"Variable '{variable_name}' not found. Available variables: {available}"
-            )
-        variables_to_inspect = [variable_name]
-    else:
-        variables_to_inspect = list(uxds.data_vars.keys())
+    face_dims = {"n_face", "nCells"}
+    node_dims = {"n_node", "nVertices"}
+    edge_dims = {"n_edge", "nEdges"}
 
-    variables_info = []
-    for var_name in variables_to_inspect:
-        var = uxds[var_name]
+    var_names = [variable_name] if variable_name else list(uxds.keys())
+
+    if variable_name and variable_name not in uxds:
+        raise ValueError(f"Variable '{variable_name}' not found in dataset")
+
+    variables = []
+
+    for name in var_names:
+        if name not in uxds:
+            continue
+        var = uxds[name]
+        dims = var.dims
 
         location = "other"
-        if "n_face" in var.dims or "nCells" in var.dims:
+        if any(d in face_dims for d in dims):
             location = "faces"
-        elif "n_node" in var.dims or "nVertices" in var.dims:
+        elif any(d in node_dims for d in dims):
             location = "nodes"
-        elif "n_edge" in var.dims or "nEdges" in var.dims:
+        elif any(d in edge_dims for d in dims):
             location = "edges"
 
-        var_info = {
-            "name": var_name,
-            "dims": var.dims,
-            "shape": var.shape,
-            "dtype": str(var.dtype),
-            "location": location,
-            "attrs": dict(var.attrs),
-        }
-
-        if np.issubdtype(var.dtype, np.number):
+        stats = None
+        try:
             values = var.values
-            var_info["statistics"] = {
-                "min": float(np.nanmin(values)),
-                "max": float(np.nanmax(values)),
-                "mean": float(np.nanmean(values)),
+            finite = values[np.isfinite(values)]
+            if len(finite) > 0:
+                stats = {
+                    "min": float(np.min(finite)),
+                    "max": float(np.max(finite)),
+                    "mean": float(np.mean(finite)),
+                }
+        except Exception:
+            pass
+
+        variables.append(
+            {
+                "name": name,
+                "dims": list(dims),
+                "shape": list(var.shape),
+                "dtype": str(var.dtype),
+                "location": location,
+                "attrs": dict(var.attrs),
+                "statistics": stats,
             }
-        else:
-            var_info["statistics"] = None
+        )
 
-        variables_info.append(var_info)
-
-    grid_info = {
-        "n_face": int(uxds.uxgrid.n_face),
-        "n_node": int(uxds.uxgrid.n_node),
-        "n_edge": int(uxds.uxgrid.n_edge),
+    return {
+        "variables": variables,
+        "grid_info": {
+            "n_face": int(uxds.uxgrid.n_face),
+            "n_node": int(uxds.uxgrid.n_node),
+            "n_edge": int(uxds.uxgrid.n_edge),
+        },
     }
-
-    return {"variables": variables_info, "grid_info": grid_info}
 
 
 def remote_calculate_zonal_mean(
@@ -161,37 +206,30 @@ def remote_calculate_zonal_mean(
 
     uxds = ux.open_dataset(grid_path, data_path)
 
-    if variable_name not in uxds.data_vars:
-        available = list(uxds.data_vars.keys())
-        raise ValueError(
-            f"Variable '{variable_name}' not found. Available variables: {available}"
-        )
+    if variable_name not in uxds:
+        raise ValueError(f"Variable '{variable_name}' not found")
 
     var = uxds[variable_name]
+    face_dims = {"n_face", "nCells"}
+    if not any(d in face_dims for d in var.dims):
+        raise ValueError(f"Variable '{variable_name}' is not face-centered")
 
-    if "n_face" not in var.dims and "nCells" not in var.dims:
-        raise ValueError(
-            f"Variable '{variable_name}' is not face-centered. Zonal mean only supports face-centered data."
-        )
+    if lat_spec is None:
+        lat_spec = (-90, 90, 10)
 
-    if lat_spec is not None:
-        zonal_result = var.zonal_mean(lat=lat_spec, conservative=conservative)
+    if conservative:
+        result = var.zonal_mean(lat=lat_spec, conservative=True)
     else:
-        zonal_result = var.zonal_mean(conservative=conservative)
-
-    latitudes = zonal_result.coords["latitudes"].values.tolist()
-    zonal_mean_values = zonal_result.values.tolist()
-
-    grid_info = {
-        "n_face": int(uxds.uxgrid.n_face),
-        "n_node": int(uxds.uxgrid.n_node),
-        "n_edge": int(uxds.uxgrid.n_edge),
-    }
+        result = var.zonal_mean(lat=lat_spec)
 
     return {
         "variable_name": variable_name,
-        "latitudes": latitudes,
-        "zonal_mean_values": zonal_mean_values,
+        "latitudes": result.coords[result.dims[0]].values.tolist(),
+        "zonal_mean_values": result.values.tolist(),
         "conservative": conservative,
-        "grid_info": grid_info,
+        "grid_info": {
+            "n_face": int(uxds.uxgrid.n_face),
+            "n_node": int(uxds.uxgrid.n_node),
+            "n_edge": int(uxds.uxgrid.n_edge),
+        },
     }

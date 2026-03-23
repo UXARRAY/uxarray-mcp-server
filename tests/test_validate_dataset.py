@@ -17,16 +17,17 @@ class TestValidateDataset:
         mock_sal.attrs = {}
 
         mock_uxds.data_vars = {"temperature": mock_temp, "salinity": mock_sal}
-        mock_uxds.__getitem__ = (
-            lambda self, key: mock_temp if key == "temperature" else mock_sal
+        mock_uxds.__getitem__ = lambda self, key: (
+            mock_temp if key == "temperature" else mock_sal
         )
 
         mock_uxds.uxgrid.n_face = 100
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
             result = validate_dataset("grid.nc", "data.nc")
@@ -59,8 +60,9 @@ class TestValidateDataset:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
             result = validate_dataset("grid.nc", "data.nc")
@@ -89,8 +91,9 @@ class TestValidateDataset:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
             result = validate_dataset("grid.nc", "data.nc")
@@ -114,16 +117,17 @@ class TestValidateDataset:
         mock_temp.attrs = {}
 
         mock_uxds.data_vars = {"labels": mock_str_var, "temperature": mock_temp}
-        mock_uxds.__getitem__ = (
-            lambda self, key: mock_str_var if key == "labels" else mock_temp
+        mock_uxds.__getitem__ = lambda self, key: (
+            mock_str_var if key == "labels" else mock_temp
         )
 
         mock_uxds.uxgrid.n_face = 100
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
             result = validate_dataset("grid.nc", "data.nc")
@@ -169,8 +173,9 @@ class TestValidateDataset:
 
     def test_validate_dataset_load_error(self):
         """Test error handling when dataset fails to load."""
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", side_effect=Exception("Load failed")
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", side_effect=Exception("Load failed")),
         ):
             MockPath.return_value.exists.return_value = True
 
@@ -192,8 +197,9 @@ class TestValidateDataset:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
             result = validate_dataset("grid.nc", "data.nc")
@@ -219,8 +225,9 @@ class TestValidateDataset:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
             result = validate_dataset("grid.nc", "data.nc")
@@ -244,8 +251,9 @@ class TestValidateDataset:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
             result = validate_dataset("grid.nc", "data.nc")
@@ -274,8 +282,9 @@ class TestValidateDataset:
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
 
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_dataset", return_value=mock_uxds
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_dataset", return_value=mock_uxds),
         ):
             MockPath.return_value.exists.return_value = True
             result = validate_dataset("grid.nc", "data.nc")

@@ -1,6 +1,6 @@
 # UXarray MCP Server
 
-An MCP (Model Context Protocol) server that provides AI agents with tools for analyzing unstructured meshes using UXarray.
+An MCP (Model Context Protocol) server that gives AI agents a mesh-aware assistant — not just a flat tool shelf. Built on [UXarray](https://uxarray.readthedocs.io/) with support for local execution and remote HPC via Globus Compute.
 
 **Requirements:** Python 3.11+, macOS or Linux (Windows untested)
 
@@ -13,42 +13,170 @@ uv sync --extra hpc
 
 ## Features
 
-- **inspect_mesh**: Analyze mesh topology (faces, nodes, edges, format)
-- Support for multiple formats: MPAS, UGRID, SCRIP, ESMF, Exodus, and more
-- Integration with Claude Desktop and other AI clients
+- **Autonomous scientific agent** — Analyze → Plan → Execute → Verify loop with full reasoning trace
+- **Provenance on every output** — every tool result carries `_provenance` with timestamp, versions, venue, and artifacts
+- **Validation-gated workflows** — dataset validation runs before zonal mean; failures skip unreliable downstream steps
+- **Dynamic tool registration** — HPC tools only appear in the tool list when an endpoint is configured
+- **Execution mode control** — switch between `local`, `hpc`, and `auto` from the Claude UI without touching config files
+- **Local + HPC execution** — files on HPC filesystems or meshes >1M faces are automatically routed to Globus Compute
 
 ## Installation
 
 ```bash
-# Install dependencies
+# Core (local execution only)
 uv sync
+
+# With HPC support (Globus Compute + Academy)
+uv sync --extra hpc
 ```
 
 ## Testing
 
-Run the automated test suite:
-
 ```bash
-uv run pytest
+# Core tests (no HPC required)
+uv run pytest tests/ --ignore=tests/test_remote_agent.py
+
+# Full suite including HPC safety tests
+uv run pytest tests/
 ```
 
-Tests are self-contained and do not require external mesh files.
+## Tools Available
+
+### Core Tools
+
+#### `inspect_mesh(file_path)`
+Analyze mesh topology — faces, nodes, edges, format detection.
+
+- `file_path`: Path to mesh file, or `healpix:<zoom>` to generate a HEALPix mesh
+
+Returns: `format`, `n_face`, `n_node`, `n_edge`, `n_max_face_nodes`, `file_size_mb`, `_provenance`
+
+Supported formats: MPAS, UGRID, SCRIP, ESMF, Exodus, FESOM, ICON, HEALPix
+
+---
+
+#### `inspect_variable(grid_path, data_path, variable_name=None)`
+Inspect data variables on a mesh — location, shape, statistics, attributes.
+
+Returns: `variables` list with `name`, `dims`, `shape`, `dtype`, `location` (faces/nodes/edges), `statistics`, `attrs`; plus `_provenance`
+
+---
+
+#### `calculate_area(file_path)`
+Calculate face areas for a mesh.
+
+Returns: `total_area`, `mean_area`, `min_area`, `max_area`, `area_units`, `n_face`, `_provenance`
+
+---
+
+#### `calculate_zonal_mean(grid_path, data_path, variable_name, lat_spec=None, conservative=False)`
+Latitude-band average of a face-centered variable.
+
+- `lat_spec`: `None` → (-90, 90, 10°); `(start, end, step)` tuple; `float` for single latitude; `list` of explicit bands
+- `conservative`: area-weighted averaging over bands (vs intersection-weighted)
+
+Returns: `latitudes`, `zonal_mean_values`, `conservative`, `grid_info`, `_provenance`
+
+---
+
+#### `validate_dataset(grid_path, data_path)`
+Check dataset integrity — NaN coverage, fill value consistency, dimension alignment.
+
+Returns: `passed`, `n_variables_checked`, `n_variables_failed`, per-variable details, `_provenance`
+
+---
+
+#### `run_scientific_agent(file_path, data_path=None, variable_name=None)`
+Autonomous four-stage pipeline. Inspects the mesh, plans which operations to run, executes them (locally or on HPC), and verifies the results.
+
+- Auto-routes to HPC for files on known HPC filesystems (`/home/`, `/lus/`, `/scratch/`, etc.) or meshes >1M faces
+- Skips zonal mean if validation fails
+- Returns full `reasoning_trace`, `mesh_summary`, `area_results`, `variable_results`, `zonal_mean_results`, `validation_summary`, `verification`, and `_provenance`
+
+```
+Ask Claude: "Run a full scientific analysis on healpix:4"
+Ask Claude: "Analyze /lus/grand/projects/climate/mesh.nc with data.nc"
+```
+
+---
+
+#### `get_execution_mode()`
+Returns the current execution mode (`local`, `hpc`, or `auto`) and whether an HPC endpoint is configured.
+
+---
+
+#### `set_execution_mode(mode)`
+Switch execution mode without editing config files. Accepts `"local"`, `"hpc"`, or `"auto"`.
+
+```
+Ask Claude: "Switch to HPC execution mode"
+Ask Claude: "Set execution back to local"
+```
+
+---
+
+### HPC Tools *(only registered when an endpoint is configured)*
+
+#### `inspect_mesh_hpc(file_path, use_remote=False)`
+#### `calculate_area_hpc(file_path, use_remote=False)`
+#### `inspect_variable_hpc(grid_path, data_path, variable_name=None, use_remote=False)`
+#### `calculate_zonal_mean_hpc(grid_path, data_path, variable_name, lat_spec=None, conservative=False, use_remote=False)`
+
+Same interface as core tools. Set `use_remote=True` to execute on HPC via Globus Compute. Falls back to local if the endpoint is unreachable.
+
+Each HPC call runs a pre-flight health check before submitting to avoid hanging on a down endpoint.
+
+---
+
+## HPC Configuration
+
+Edit `config.yaml`:
+
+```yaml
+hpc:
+  globus_compute:
+    endpoint_id: "your-endpoint-uuid"  # null for local-only
+  execution_mode: "auto"               # local | hpc | auto
+  timeout_seconds: 300
+```
+
+**`auto` mode** (default): local for small meshes on local paths; HPC for large meshes or HPC filesystem paths.
+
+**Setup:**
+1. Deploy a Globus Compute endpoint on your HPC system
+2. Add the endpoint UUID to `config.yaml`
+3. Install UXarray on the remote environment (the server uses `AllCodeStrategies` serialization so `uxarray_mcp` itself does not need to be installed remotely)
+4. Restart the MCP server — HPC tools will appear automatically
+
+## Provenance
+
+Every tool result includes a `_provenance` block:
+
+```json
+{
+  "_provenance": {
+    "tool": "run_scientific_agent",
+    "inputs": { "file_path": "healpix:4" },
+    "execution_venue": "local",
+    "timestamp_utc": "2026-03-18T...",
+    "uxarray_version": "2025.12.0",
+    "python_version": "3.13.0",
+    "warnings": [],
+    "artifacts": [
+      { "type": "mesh_topology", "n_face": 3072, "format": "HEALPix" },
+      { "type": "face_areas", "total_area": 5.1e14 }
+    ],
+    "selected_variable": "temperature",
+    "validation_summary": { "passed": true, "n_variables_checked": 3 }
+  }
+}
+```
 
 ## MCP Client Integration
 
-This server works with any MCP-compatible client. The examples below use Claude Desktop, but you can integrate with other MCP clients by following similar configuration steps. Refer to your client's documentation for MCP server setup.
+Works with any MCP-compatible client. Example for Claude Desktop:
 
-## Connecting to Claude Desktop
-
-### Step 1: Find your Claude Desktop config file
-
-The config file location depends on your OS:
-
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-### Step 2: Add the MCP server configuration
-
-Add this to your `claude_desktop_config.json`:
+**`~/Library/Application Support/Claude/claude_desktop_config.json`:**
 
 ```json
 {
@@ -68,273 +196,76 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
-Replace `/path/to/uv` with output from `which uv` and `/path/to/uxarray-mcp-server` with your project directory.
-
-### Step 3: Restart Claude Desktop
-
-Close and reopen Claude Desktop completely.
-
-### Step 4: Test in Claude Desktop
-
-Try asking Claude:
-
-> "Use the inspect_mesh tool to analyze a mesh file at: /path/to/your/mesh.nc"
->
-> Or generate a HEALPix mesh: "Use inspect_mesh with healpix:2"
-
-## Example Output
-
-```
-This is an MPAS format mesh with:
-- 1,791 faces (ocean cells)
-- 3,947 nodes (corner points)
-- 5,754 edges
-- Hexagonal cells (max 6 nodes per face)
-- File size: 4.61 MB
-```
-
-## Tools Available
-
-### `inspect_mesh(file_path: str)`
-
-Analyzes an unstructured mesh file and returns topology information.
-
-**Parameters:**
-- `file_path`: Path to mesh file, or `healpix:<zoom>` to generate HEALPix mesh
-
-**Returns:**
-- `format`: Mesh format (MPAS, UGRID, SCRIP, HEALPix, etc.)
-- `n_face`: Number of faces (cells)
-- `n_node`: Number of nodes (vertices)
-- `n_edge`: Number of edges
-- `n_max_face_nodes`: Maximum nodes per face
-- `file_size_mb`: File size in MB
-
-**Supported Formats:**
-MPAS, UGRID, SCRIP, ESMF, Exodus, FESOM, ICON, HEALPix, and more
-
-### `inspect_variable(grid_path: str, data_path: str, variable_name: str = None)`
-
-Inspects data variables in mesh datasets and returns their metadata.
-
-**Parameters:**
-- `grid_path`: Path to mesh grid file
-- `data_path`: Path to data file with variables
-- `variable_name`: Optional - inspect specific variable, or all if None
-
-**Returns:**
-- `variables`: List of variable info including:
-  - `name`: Variable name
-  - `dims`: Dimension names
-  - `shape`: Array shape
-  - `dtype`: Data type
-  - `location`: Where data lives ("faces", "nodes", "edges", or "other")
-  - `attrs`: Variable attributes (units, long_name, etc.)
-  - `statistics`: Min, max, mean (if numeric)
-- `grid_info`: Grid summary (n_face, n_node, n_edge)
-
-**Example:**
-Ask Claude: "Use inspect_variable to analyze variables in grid.nc and data.nc"
-
-### `calculate_area(file_path: str)`
-
-Calculates face areas for an unstructured mesh.
-
-**Parameters:**
-- `file_path`: Path to mesh file, or `healpix:<zoom>` to generate HEALPix mesh
-
-**Returns:**
-- `total_area`: Total surface area of the mesh
-- `mean_area`: Mean face area
-- `min_area`: Minimum face area
-- `max_area`: Maximum face area
-- `area_units`: Units of the area (m^2, km^2, etc.)
-- `n_face`: Number of faces
-
-**Example:**
-Ask Claude: "Use calculate_area to compute face areas for mesh.nc"
-
-### `calculate_zonal_mean(grid_path: str, data_path: str, variable_name: str, lat_spec: tuple | float | list = None, conservative: bool = False)`
-
-Calculates zonal mean (latitude-band average) of a face-centered variable.
-
-**Parameters:**
-- `grid_path`: Path to mesh grid file
-- `data_path`: Path to data file with variables
-- `variable_name`: Name of the variable to compute zonal mean for (must be face-centered)
-- `lat_spec`: Optional latitude specification:
-  - `None`: Uses default (-90, 90, 10)
-  - `tuple (start, end, step)`: Latitude range and interval
-  - `float`: Single latitude for non-conservative
-  - `list`: Explicit latitudes or band edges
-- `conservative`: If True, performs area-weighted averaging over latitude bands. If False (default), performs intersection-weighted averaging at latitude lines.
-
-**Returns:**
-- `variable_name`: Name of the original variable
-- `latitudes`: List of latitude values/bands
-- `zonal_mean_values`: List of computed zonal mean values
-- `conservative`: Whether conservative method was used
-- `grid_info`: Grid summary (n_face, n_node, n_edge)
-
-**Example:**
-Ask Claude: "Use calculate_zonal_mean to compute the zonal mean of temperature from -60 to 60 degrees with 20 degree intervals"
-
-### `validate_dataset(grid_path: str, data_path: str)`
-
-Validates dataset quality and detects common data issues.
-
-**Parameters:**
-- `grid_path`: Path to mesh grid file
-- `data_path`: Path to data file with variables
-
-**Returns:**
-- `is_valid`: Overall validation status (True if no issues found)
-- `issues`: List of detected issues with descriptions
-- `variables`: Per-variable validation results including:
-  - `name`: Variable name
-  - `has_nan`: Boolean indicating NaN presence
-  - `has_inf`: Boolean indicating Inf presence
-  - `nan_count`: Number of NaN values
-  - `inf_count`: Number of Inf values
-  - `fill_value_count`: Count of NetCDF _FillValue occurrences
-  - `suspicious_fill_count`: Count of common fill value patterns (9999, -9999, etc.)
-  - `total_values`: Total number of values
-  - `nan_percentage`: Percentage of NaN values
-  - `value_range`: [min, max] for numeric variables
-  - `coordinate_issues`: List of coordinate validation issues (e.g., latitude/longitude out of range)
-- `grid_info`: Grid summary (n_face, n_node, n_edge)
-
-**Checks performed:**
-- NaN and Inf value detection
-- NetCDF fill value detection
-- Common fill value patterns (9999, -9999, 999999, -999999, 9.96921e36)
-- Coordinate range validation (latitude: -90 to 90, longitude: -180 to 360)
-
-**Example:**
-Ask Claude: "Use validate_dataset to check data quality in grid.nc and data.nc"
-
-## HPC Remote Execution
-
-The server supports remote execution on HPC systems via Globus Compute and Academy. This enables offloading computationally intensive operations to remote resources while maintaining local fallback.
-
-### HPC-Enabled Tools
-
-#### `calculate_area_hpc(file_path: str, use_remote: bool = False)`
-
-Calculate face areas locally or on HPC.
-
-**Parameters:**
-- `file_path`: Path to mesh file, or `healpix:<zoom>`
-- `use_remote`: Set to `True` for HPC execution
-
-**Returns:** Same as `calculate_area`
-
-**Example:**
-Ask Claude: "Use calculate_area_hpc with remote execution for mesh.nc"
-
-#### `inspect_variable_hpc(grid_path: str, data_path: str, variable_name: str = None, use_remote: bool = False)`
-
-Inspect variables locally or on HPC.
-
-**Parameters:**
-- `grid_path`: Path to mesh grid file
-- `data_path`: Path to data file
-- `variable_name`: Optional variable to inspect
-- `use_remote`: Set to `True` for HPC execution
-
-**Returns:** Same as `inspect_variable`
-
-**Example:**
-Ask Claude: "Use inspect_variable_hpc with remote execution to analyze grid.nc and data.nc"
-
-#### `calculate_zonal_mean_hpc(grid_path: str, data_path: str, variable_name: str, lat_spec: tuple | float | list = None, conservative: bool = False, use_remote: bool = False)`
-
-Calculate zonal means locally or on HPC.
-
-**Parameters:**
-- `grid_path`: Path to mesh grid file
-- `data_path`: Path to data file
-- `variable_name`: Name of variable
-- `lat_spec`: Optional latitude specification
-- `conservative`: Area-weighted averaging
-- `use_remote`: Set to `True` for HPC execution
-
-**Returns:** Same as `calculate_zonal_mean`
-
-**Example:**
-Ask Claude: "Use calculate_zonal_mean_hpc with remote execution for temperature"
-
-### HPC Configuration
-
-Edit `config.yaml` to enable remote execution:
-
-```yaml
-hpc:
-  globus_compute:
-    endpoint_id: "your-endpoint-uuid"  # null for local-only
-  execution_mode: "local"
-  timeout_seconds: 300
-```
-
-**Setup steps:**
-
-1. Configure a Globus Compute endpoint on your HPC system
-2. Add the endpoint ID to `config.yaml`
-3. Ensure UXarray is installed on the remote environment
-4. Ask Claude to use HPC tools with `use_remote=True`
-
-**Local fallback:** When `endpoint_id` is `null` or `use_remote=False`, operations execute locally. The server works immediately without HPC configuration.
+Replace paths using `which uv` and `pwd`. Restart Claude Desktop fully after editing.
 
 ## Project Structure
 
 ```
 uxarray-mcp-server/
 ├── .github/workflows/
-│   └── ci.yml                      # CI/CD pipeline
+│   └── ci.yml                        # Split core + HPC CI lanes
+├── docs/
+│   └── architecture.html             # Interactive architecture diagram
 ├── src/uxarray_mcp/
-│   ├── server.py                   # MCP server entry point
-│   ├── __init__.py                 # Package exports
-│   ├── __main__.py                 # CLI entry point
+│   ├── server.py                     # MCP server — dynamic tool registration
+│   ├── provenance.py                 # Provenance tracking for all tool outputs
+│   ├── domain/                       # Pure computation layer (no MCP/IO)
+│   │   ├── mesh.py
+│   │   ├── area.py
+│   │   ├── variable.py
+│   │   └── zonal.py
 │   ├── remote/
-│   │   ├── __init__.py             # Remote execution exports
-│   │   ├── config.py               # HPC configuration
-│   │   ├── agent.py                # Academy agent
-│   │   └── compute_functions.py   # Globus Compute functions
+│   │   ├── config.py                 # HPC configuration loader
+│   │   ├── agent.py                  # Academy agent (Globus Compute orchestration)
+│   │   ├── compute_functions.py      # Remote-serializable functions
+│   │   └── health.py                 # Endpoint health checks
 │   └── tools/
-│       ├── __init__.py             # Tool exports
-│       ├── inspection.py           # Local tools
-│       └── remote_tools.py         # HPC-enabled tools
+│       ├── inspection.py             # Core local tools
+│       ├── remote_tools.py           # HPC-enabled wrappers (with pre-flight checks)
+│       ├── scientific_agent.py       # Autonomous 4-stage agent
+│       ├── execution_control.py      # get/set execution mode
+│       └── capabilities.py           # Tool self-description
 ├── tests/
-│   ├── conftest.py                 # Test fixtures
-│   ├── test_inspect_mesh.py        # Unit & integration tests
-│   ├── test_server.py              # Server tests
-│   └── test_remote_agent.py        # HPC agent tests
-├── config.yaml                     # HPC configuration
-├── pyproject.toml                  # Dependencies & config
-├── pytest.ini                      # Pytest configuration
-└── README.md                       # This file
+│   ├── conftest.py
+│   ├── test_inspect_mesh.py
+│   ├── test_inspect_variable.py
+│   ├── test_calculate_area.py
+│   ├── test_calculate_zonal_mean.py
+│   ├── test_scientific_agent.py
+│   ├── test_capabilities.py
+│   ├── test_hpc_safety.py            # HPC pre-flight + fallback tests
+│   ├── test_remote_agent.py          # Academy agent tests (requires hpc extra)
+│   └── test_server.py
+├── config.yaml                       # HPC endpoint + execution mode config
+├── pyproject.toml
+├── pytest.ini
+└── README.md
 ```
 
 ## Running the Server
 
-Claude Desktop will automatically start the server when configured. To test manually:
+Claude Desktop starts the server automatically. To test manually:
 
 ```bash
 uv run python -m uxarray_mcp.server
 ```
 
-(Press Ctrl+C to stop)
-
 ## Development
 
-**Add new tools:** Create new functions in `src/uxarray_mcp/tools/` and register them in `server.py`.
+```bash
+# Run all core tests
+uv run pytest tests/ --ignore=tests/test_remote_agent.py -v
 
-**Test changes:** Run `uv run pytest` after modifications.
+# Run HPC tests (requires uv sync --extra hpc)
+uv run pytest tests/test_remote_agent.py tests/test_hpc_safety.py -v
 
-**Update dependencies:** Run `uv add <package-name>` to add new packages.
+# Add a new tool: create function in src/uxarray_mcp/tools/, register in server.py
+```
 
 ## Resources
 
 - [UXarray Documentation](https://uxarray.readthedocs.io/)
 - [FastMCP Documentation](https://github.com/jlowin/fastmcp)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Globus Compute](https://globus-compute.readthedocs.io/)
+- [Academy](https://github.com/proxystore/academy)

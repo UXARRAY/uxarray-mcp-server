@@ -12,8 +12,9 @@ class TestInspectMeshFormat:
 
     def test_inspect_mpas_mesh(self, mpas_grid):
         """Test inspection of an MPAS mesh."""
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_grid", return_value=mpas_grid
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_grid", return_value=mpas_grid),
         ):
             MockPath.return_value.exists.return_value = True
             MockPath.return_value.stat.return_value.st_size = 1024 * 1024
@@ -24,8 +25,9 @@ class TestInspectMeshFormat:
 
     def test_inspect_ugrid_mesh(self, ugrid_grid):
         """Test inspection of a UGRID mesh."""
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_grid", return_value=ugrid_grid
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_grid", return_value=ugrid_grid),
         ):
             MockPath.return_value.exists.return_value = True
             MockPath.return_value.stat.return_value.st_size = 1024 * 1024
@@ -35,8 +37,9 @@ class TestInspectMeshFormat:
 
     def test_inspect_scrip_mesh(self, scrip_grid):
         """Test inspection of a SCRIP mesh."""
-        with patch("uxarray_mcp.tools.inspection.Path") as MockPath, patch(
-            "uxarray.open_grid", return_value=scrip_grid
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.open_grid", return_value=scrip_grid),
         ):
             MockPath.return_value.exists.return_value = True
             MockPath.return_value.stat.return_value.st_size = 1024 * 1024
