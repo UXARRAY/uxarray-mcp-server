@@ -4,6 +4,24 @@ from pathlib import Path
 from typing import Optional
 import yaml
 
+_VALID_EXECUTION_MODES = {"local", "hpc", "auto"}
+_EXECUTION_MODE_ALIASES = {"remote": "hpc"}
+
+
+def normalize_execution_mode(execution_mode: str) -> str:
+    """Return the canonical execution mode name.
+
+    The repository previously used ``remote`` for the HPC-only mode. Accept it
+    as a backwards-compatible alias so older configs and tests keep working.
+    """
+    canonical_mode = _EXECUTION_MODE_ALIASES.get(execution_mode, execution_mode)
+    if canonical_mode not in _VALID_EXECUTION_MODES:
+        raise ValueError(
+            f"Invalid execution mode {execution_mode!r}. "
+            f"Must be one of: {', '.join(sorted(_VALID_EXECUTION_MODES))}"
+        )
+    return canonical_mode
+
 
 class HPCConfig:
     """HPC execution configuration.
@@ -13,13 +31,13 @@ class HPCConfig:
     endpoint_id : str | None
         Globus Compute endpoint UUID
     execution_mode : str
-        Execution mode: "local", "remote", or "auto"
+        Execution mode: "local", "hpc", or "auto"
     timeout_seconds : int
         Timeout for remote execution in seconds
 
     Examples
     --------
-    >>> config = HPCConfig(endpoint_id="abc-123", execution_mode="remote")
+    >>> config = HPCConfig(endpoint_id="abc-123", execution_mode="hpc")
     >>> config.has_endpoint
     True
     """
@@ -31,7 +49,7 @@ class HPCConfig:
         timeout_seconds: int = 300,
     ):
         self.endpoint_id = endpoint_id
-        self.execution_mode = execution_mode
+        self.execution_mode = normalize_execution_mode(execution_mode)
         self.timeout_seconds = timeout_seconds
 
     @property
@@ -44,7 +62,7 @@ class HPCConfig:
         """Determine if remote execution should be used."""
         if self.execution_mode == "local":
             return False
-        elif self.execution_mode == "remote":
+        elif self.execution_mode == "hpc":
             return self.has_endpoint
         elif self.execution_mode == "auto":
             return self.has_endpoint

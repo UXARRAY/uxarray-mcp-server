@@ -30,8 +30,14 @@ class TestHPCConfig:
 
     def test_config_with_endpoint(self):
         """Test configuration with endpoint."""
-        config = HPCConfig(endpoint_id="test-uuid-123", execution_mode="remote")
+        config = HPCConfig(endpoint_id="test-uuid-123", execution_mode="hpc")
         assert config.has_endpoint is True
+        assert config.should_use_remote is True
+
+    def test_remote_alias_normalized_to_hpc(self):
+        """Legacy 'remote' mode is normalized to the canonical 'hpc' mode."""
+        config = HPCConfig(endpoint_id="test-uuid-123", execution_mode="remote")
+        assert config.execution_mode == "hpc"
         assert config.should_use_remote is True
 
     def test_config_load_missing_file(self, tmp_path):
@@ -116,7 +122,7 @@ class TestUXarrayComputeAgent:
     @pytest.mark.asyncio
     async def test_agent_remote_execution_with_mock_executor(self):
         """Test agent submits to Globus Compute when endpoint configured."""
-        config = HPCConfig(endpoint_id="test-uuid", execution_mode="remote")
+        config = HPCConfig(endpoint_id="test-uuid", execution_mode="hpc")
         agent = UXarrayComputeAgent(config)
 
         mock_future = MagicMock()

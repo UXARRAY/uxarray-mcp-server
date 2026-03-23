@@ -2,7 +2,7 @@
 
 An MCP (Model Context Protocol) server that gives AI agents a mesh-aware assistant — not just a flat tool shelf. Built on [UXarray](https://uxarray.readthedocs.io/) with support for local execution and remote HPC via Globus Compute.
 
-**Requirements:** Python 3.11+, macOS or Linux (Windows untested)
+**Requirements:** Python 3.13+, macOS or Linux (Windows untested)
 
 **Stable tools:** `inspect_mesh`, `inspect_variable`, `calculate_area`, `calculate_zonal_mean`, `validate_dataset` — work out of the box, no extra setup needed.
 
@@ -130,7 +130,7 @@ Each HPC call runs a pre-flight health check before submitting to avoid hanging 
 
 ## HPC Configuration
 
-Edit `config.yaml`:
+Copy `config.yaml.example` to `config.yaml`, then edit it:
 
 ```yaml
 hpc:
@@ -207,7 +207,7 @@ uxarray-mcp-server/
 ├── docs/
 │   └── architecture.html             # Interactive architecture diagram
 ├── src/uxarray_mcp/
-│   ├── server.py                     # MCP server — dynamic tool registration
+│   ├── server.py                     # MCP server — conditional HPC tool registration
 │   ├── provenance.py                 # Provenance tracking for all tool outputs
 │   ├── domain/                       # Pure computation layer (no MCP/IO)
 │   │   ├── mesh.py
@@ -236,7 +236,7 @@ uxarray-mcp-server/
 │   ├── test_hpc_safety.py            # HPC pre-flight + fallback tests
 │   ├── test_remote_agent.py          # Academy agent tests (requires hpc extra)
 │   └── test_server.py
-├── config.yaml                       # HPC endpoint + execution mode config
+├── config.yaml.example               # Local config template (copy to config.yaml)
 ├── pyproject.toml
 ├── pytest.ini
 └── README.md
@@ -248,6 +248,9 @@ Claude Desktop starts the server automatically. To test manually:
 
 ```bash
 uv run python -m uxarray_mcp.server
+
+# Or after installation
+uxarray-mcp
 ```
 
 ## Development
