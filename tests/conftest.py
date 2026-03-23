@@ -1,6 +1,7 @@
 import sys
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 # Mock uxarray if it's not installed, so we can run logic tests without heavy dependencies
 try:

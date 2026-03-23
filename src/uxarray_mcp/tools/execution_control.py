@@ -5,7 +5,7 @@ editing config files manually.
 """
 
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 import yaml
 
@@ -102,8 +102,8 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
             f"Invalid mode {mode!r}. Must be one of: {', '.join(_VALID_MODES)}"
         ) from exc
 
-    from uxarray_mcp.remote.config import load_config
     from uxarray_mcp.remote import agent as _agent_module
+    from uxarray_mcp.remote.config import load_config
 
     config = load_config(_CONFIG_PATH)
     previous_mode = config.execution_mode

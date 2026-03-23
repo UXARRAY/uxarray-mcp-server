@@ -1,9 +1,11 @@
 """Tests for remote execution via Academy agent and Globus Compute."""
 
-import pytest
 from unittest.mock import MagicMock, patch
-from uxarray_mcp.remote.config import HPCConfig, load_config
+
+import pytest
+
 from uxarray_mcp.remote.agent import UXarrayComputeAgent
+from uxarray_mcp.remote.config import HPCConfig, load_config
 
 try:
     import academy  # noqa: F401

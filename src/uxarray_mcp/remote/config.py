@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Optional
+
 import yaml
 
 _VALID_EXECUTION_MODES = {"local", "hpc", "auto"}

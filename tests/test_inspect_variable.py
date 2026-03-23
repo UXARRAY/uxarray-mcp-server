@@ -1,8 +1,9 @@
-import pytest
-from unittest.mock import patch, MagicMock
-import numpy as np
-from uxarray_mcp.tools.inspection import inspect_variable
+from unittest.mock import MagicMock, patch
 
+import numpy as np
+import pytest
+
+from uxarray_mcp.tools.inspection import inspect_variable
 
 # -----------------------------------------------------------------------------
 # Unit Tests (Mocked)

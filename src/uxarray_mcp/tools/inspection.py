@@ -1,13 +1,14 @@
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 import numpy as np
 import uxarray as ux
-from pathlib import Path
-from typing import Dict, Any, Optional
 
 from uxarray_mcp.domain import (
-    load_grid,
     compute_area_stats,
     compute_variable_info,
     compute_zonal_mean_stats,
+    load_grid,
 )
 from uxarray_mcp.provenance import attach_provenance
 
