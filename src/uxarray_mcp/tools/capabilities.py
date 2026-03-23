@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 import uxarray as ux
 
 from uxarray_mcp.provenance import attach_provenance
+from uxarray_mcp.remote.config import load_config
 
 
 def get_capabilities(
@@ -225,37 +226,53 @@ def get_capabilities(
             ),
             "call_example": f"validate_dataset({gp}{dp})",
         },
-        {
-            "name": "calculate_area_hpc",
-            "applicable": has_faces,
-            "reason": (
-                "Available (HPC optional) — same as calculate_area but can offload to a Globus Compute endpoint. Install with: uv sync --extra hpc"
-                if has_faces
-                else "Not applicable — no faces found."
-            ),
-            "call_example": f"calculate_area_hpc({gp}, use_remote=False)",
-        },
-        {
-            "name": "inspect_variable_hpc",
-            "applicable": data_path is not None,
-            "reason": (
-                "Available (HPC optional) — same as inspect_variable with optional remote execution."
-                if data_path
-                else "Requires a data file."
-            ),
-            "call_example": f"inspect_variable_hpc({gp}{dp})",
-        },
-        {
-            "name": "calculate_zonal_mean_hpc",
-            "applicable": has_face_centered_vars,
-            "reason": (
-                f"Available (HPC optional) — face-centered variables: {face_centered_var_names}."
-                if has_face_centered_vars
-                else "Not applicable — no face-centered variables found."
-            ),
-            "call_example": f'calculate_zonal_mean_hpc({gp}{dp}, variable_name="...")',
-        },
     ]
+
+    if load_config().has_endpoint:
+        mcp_tools += [
+            {
+                "name": "inspect_mesh_hpc",
+                "applicable": True,
+                "reason": (
+                    "Available — same as inspect_mesh with optional remote execution "
+                    "on a configured Globus Compute endpoint."
+                ),
+                "call_example": f"inspect_mesh_hpc({gp}, use_remote=True)",
+            },
+            {
+                "name": "calculate_area_hpc",
+                "applicable": has_faces,
+                "reason": (
+                    "Available — same as calculate_area but can offload to a configured Globus Compute endpoint."
+                    if has_faces
+                    else "Not applicable — no faces found."
+                ),
+                "call_example": f"calculate_area_hpc({gp}, use_remote=True)",
+            },
+            {
+                "name": "inspect_variable_hpc",
+                "applicable": data_path is not None,
+                "reason": (
+                    "Available — same as inspect_variable with optional remote execution."
+                    if data_path
+                    else "Requires a data file."
+                ),
+                "call_example": f"inspect_variable_hpc({gp}{dp}, use_remote=True)",
+            },
+            {
+                "name": "calculate_zonal_mean_hpc",
+                "applicable": has_face_centered_vars,
+                "reason": (
+                    f"Available — face-centered variables: {face_centered_var_names}."
+                    if has_face_centered_vars
+                    else "Not applicable — no face-centered variables found."
+                ),
+                "call_example": (
+                    f'calculate_zonal_mean_hpc({gp}{dp}, variable_name="...", '
+                    "use_remote=True)"
+                ),
+            },
+        ]
 
     # --- Native UXarray capabilities ---
     uxarray_capabilities: Dict[str, List[str]] = {

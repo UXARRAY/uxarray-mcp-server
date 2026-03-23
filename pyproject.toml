@@ -19,6 +19,9 @@ hpc = [
     "globus-compute-sdk>=4.5.0",
 ]
 
+[project.scripts]
+uxarray-mcp = "uxarray_mcp.__main__:main"
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",

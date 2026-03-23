@@ -43,7 +43,7 @@ class TestCheckEndpointHealth:
     @requires_globus
     def test_healthy_endpoint(self):
         """Returns online status when Globus SDK reports the endpoint is up."""
-        config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="remote")
+        config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="hpc")
         mock_client = MagicMock()
         mock_client.get_endpoint_status.return_value = {"status": "online"}
 
@@ -56,7 +56,7 @@ class TestCheckEndpointHealth:
     @requires_globus
     def test_unreachable_endpoint(self):
         """Returns unreachable with error message when Globus SDK raises."""
-        config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="remote")
+        config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="hpc")
 
         with patch(
             "globus_compute_sdk.Client", side_effect=Exception("Connection refused")
@@ -70,7 +70,7 @@ class TestCheckEndpointHealth:
     @requires_globus
     def test_unknown_status_passed_through(self):
         """Passes through whatever status string the Globus SDK returns."""
-        config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="remote")
+        config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="hpc")
         mock_client = MagicMock()
         mock_client.get_endpoint_status.return_value = {"status": "stopped"}
 
@@ -91,7 +91,7 @@ class TestEndpointIsReady:
     def _make_agent(self, endpoint_id=None):
         from uxarray_mcp.remote.agent import UXarrayComputeAgent
 
-        config = HPCConfig(endpoint_id=endpoint_id, execution_mode="remote")
+        config = HPCConfig(endpoint_id=endpoint_id, execution_mode="hpc")
         return UXarrayComputeAgent(config)
 
     def test_no_endpoint_returns_not_ready(self):

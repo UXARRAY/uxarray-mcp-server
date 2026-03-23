@@ -2,5 +2,11 @@
 
 from uxarray_mcp.server import mcp
 
-if __name__ == "__main__":
+
+def main() -> None:
+    """Run the MCP server."""
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()

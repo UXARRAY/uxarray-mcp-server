@@ -10,8 +10,9 @@ from typing import Dict, Any
 import yaml
 
 from uxarray_mcp.provenance import attach_provenance
+from uxarray_mcp.remote.config import normalize_execution_mode
 
-_VALID_MODES = ("local", "remote", "auto")
+_VALID_MODES = ("local", "hpc", "auto")
 _CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "config.yaml"
 
 
@@ -22,7 +23,7 @@ def get_execution_mode() -> Dict[str, Any]:
     -------
     dict
         Dictionary containing:
-        - mode: Current execution mode ("local", "remote", or "auto")
+        - mode: Current execution mode ("local", "hpc", or "auto")
         - endpoint_id: Configured Globus Compute endpoint UUID, or None
         - endpoint_status: "healthy", "no_endpoint", "unreachable", or "unknown"
         - description: Plain-English explanation of what the current mode means
@@ -44,7 +45,7 @@ def get_execution_mode() -> Dict[str, Any]:
 
     descriptions = {
         "local": "Local mode: all computations run on this machine regardless of HPC availability.",
-        "remote": "Remote mode: all computations are sent to the HPC endpoint. Fails if endpoint is down.",
+        "hpc": "HPC mode: all computations are sent to the HPC endpoint. Fails if endpoint is down.",
         "auto": "Auto mode: uses HPC when endpoint is available, local otherwise.",
     }
 
@@ -70,7 +71,7 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
     mode : str
         Execution mode to set. One of:
         - "local"  — always run on this machine
-        - "remote" — always send to HPC endpoint (fails if endpoint is down)
+        - "hpc"    — always send to HPC endpoint (fails if endpoint is down)
         - "auto"   — use HPC when available, fall back to local otherwise
 
     Returns
@@ -85,7 +86,7 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
     Raises
     ------
     ValueError
-        If mode is not one of "local", "remote", or "auto".
+        If mode is not one of "local", "hpc", or "auto".
 
     Example:
         >>> set_execution_mode("local")
@@ -94,10 +95,12 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
         >>> set_execution_mode("auto")
         {"mode": "auto", "previous_mode": "local", "message": "Switched to auto mode."}
     """
-    if mode not in _VALID_MODES:
+    try:
+        normalized_mode = normalize_execution_mode(mode)
+    except ValueError as exc:
         raise ValueError(
             f"Invalid mode {mode!r}. Must be one of: {', '.join(_VALID_MODES)}"
-        )
+        ) from exc
 
     from uxarray_mcp.remote.config import load_config
     from uxarray_mcp.remote import agent as _agent_module
@@ -114,7 +117,7 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
 
     if "hpc" not in data or not isinstance(data.get("hpc"), dict):
         data["hpc"] = {}
-    data["hpc"]["execution_mode"] = mode
+    data["hpc"]["execution_mode"] = normalized_mode
 
     with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
@@ -123,10 +126,13 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
     _agent_module._agent_instance = None
 
     result = {
-        "mode": mode,
+        "mode": normalized_mode,
         "previous_mode": previous_mode,
         "endpoint_id": config.endpoint_id,
-        "message": f"Switched to {mode!r} mode. Config saved to {_CONFIG_PATH.name}.",
+        "message": (
+            f"Switched to {normalized_mode!r} mode. "
+            f"Config saved to {_CONFIG_PATH.name}."
+        ),
     }
 
     return attach_provenance(
