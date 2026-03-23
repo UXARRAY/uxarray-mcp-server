@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UXarray MCP Server — Architecture Diagram</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+  /* ── ABOVE FOLD ── */
+  .above-fold {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 12px 4px;
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  /* ── COMPACT HEADER ── */
+  .hdr {
+    display: flex; align-items: center; gap: 12px;
+    flex-shrink: 0; padding-bottom: 5px; border-bottom: 1px solid #21262d;
+  }
+  .logo-box {
+    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+    background: linear-gradient(135deg, #1f6feb 0%, #6e40c9 100%);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .hdr-text h1 { font-size: 16px; font-weight: 800; color: #e6edf3; letter-spacing: -0.3px; }
+  .hdr-text p  { font-size: 10.5px; color: #6e7681; }
+  .branch {
+    margin-left: auto; background: #161b22; border: 1px solid #30363d;
+    border-radius: 16px; padding: 4px 11px; font-size: 10.5px; color: #8b949e;
+    display: flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0;
+  }
+  .branch b { color: #58a6ff; }
+
+  /* ── LEGEND ── */
+  .legend-row {
+    display: flex; align-items: center; gap: 14px;
+    flex-shrink: 0; flex-wrap: nowrap; overflow: hidden;
+  }
+  .li  { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #6e7681; white-space: nowrap; }
+  .ls  { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
+
+  /* ── DIAGRAM WRAPPER ── */
+  .dwrap { flex: 1; min-height: 0; border: 1px solid #21262d; border-radius: 8px; overflow: hidden; }
+  .dwrap svg { width: 100%; height: 100%; display: block; }
+
+  /* ── BELOW FOLD ── */
+  .below-fold { padding: 28px 24px 80px; max-width: 1820px; margin: 0 auto; }
+  .scroll-hint {
+    text-align: center; font-size: 11px; color: #484f58;
+    padding: 8px 0 0; border-top: 1px solid #21262d;
+    animation: bounce 2s infinite;
+  }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(3px)} }
+
+  /* ── STATS ── */
+  .stats-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; margin-top: 28px; }
+  .stat { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 11px 18px; }
+  .stat .v { font-size: 22px; font-weight: 800; line-height: 1.1; }
+  .stat .l { font-size: 10px; color: #6e7681; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+  /* ── EXPLAINER ── */
+  .explainer {
+    background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+    padding: 14px 20px; margin-bottom: 18px; font-size: 13px; color: #c9d1d9; line-height: 1.8;
+  }
+  .explainer strong { color: #e6edf3; }
+
+  /* ── CARDS / TABLES ── */
+  .card { background: #161b22; border: 1px solid #21262d; border-radius: 12px; overflow: hidden; margin-top: 18px; }
+  .card-h { background: #1c2128; padding: 13px 20px; border-bottom: 1px solid #21262d; font-size: 13.5px; font-weight: 700; color: #c9d1d9; }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 9px 15px; text-align: left; font-size: 10px; font-weight: 700; color: #6e7681; text-transform: uppercase; letter-spacing: 1px; background: #1c2128; border-bottom: 1px solid #21262d; }
+  td { padding: 9px 15px; font-size: 13px; color: #c9d1d9; border-bottom: 1px solid #161b22; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1c2128; }
+  code { background: #21262d; padding: 2px 7px; border-radius: 4px; font-size: 11.5px; color: #79c0ff; font-family: 'Fira Code', monospace; }
+  .tag { display: inline-block; font-size: 10px; padding: 2px 9px; border-radius: 20px; font-weight: 600; white-space: nowrap; }
+  .tl { background: #0d2318; color: #56d364; border: 1px solid #2ea043; }
+  .th { background: #2d1a00; color: #e3b341; border: 1px solid #d29922; }
+  .ta { background: #1a1035; color: #bc8cff; border: 1px solid #6e40c9; }
+  .tc { background: #161b22; color: #6e7681; border: 1px solid #30363d; font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     ABOVE FOLD — entire diagram fits in 100vh
+     ═══════════════════════════════════════════ -->
+<div class="above-fold">
+
+  <!-- Compact Header -->
+  <div class="hdr">
+    <div class="logo-box">⬡</div>
+    <div class="hdr-text">
+      <h1>UXarray MCP Server — Architecture Diagram</h1>
+      <p>Mesh-aware assistant · provenance on every output · local or Argonne Improv HPC via Globus Compute · dynamic tool registration</p>
+    </div>
+    <div class="branch">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="#58a6ff"><path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25z"/></svg>
+      <b>feature/tool-discovery</b> &nbsp;·&nbsp; Python 3.13 &nbsp;·&nbsp; FastMCP
+    </div>
+  </div>
+
+  <!-- Inline Legend -->
+  <div class="legend-row">
+    <div class="li"><svg width="15" height="15"><circle cx="7.5" cy="7.5" r="6.5" fill="#1f6feb" stroke="#79c0ff" stroke-width="1.5"/></svg>Start / End</div>
+    <div class="li"><div class="ls" style="background:#091c35;border:2px solid #1f6feb;"></div>MCP / Server</div>
+    <div class="li"><div class="ls" style="background:#0d0a20;border:2px solid #6e40c9;"></div>Scientific Agent</div>
+    <div class="li"><div class="ls" style="background:#091c09;border:2px solid #2ea043;"></div>Local UXarray</div>
+    <div class="li"><div class="ls" style="background:#180e00;border:2px solid #d29922;"></div>HPC / Globus Compute</div>
+    <div class="li"><svg width="20" height="20"><polygon points="10,2 18,10 10,18 2,10" fill="#0d0a20" stroke="#e3b341" stroke-width="1.5"/></svg>Decision (auto)</div>
+    <div class="li"><svg width="38" height="12"><rect x="2" y="4" width="30" height="5" rx="2.5" fill="#30363d"/></svg>Join (merge)</div>
+    <div class="li"><svg width="44" height="12"><line x1="2" y1="6" x2="30" y2="6" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4,3"/><polygon points="28,3 38,6 28,9" fill="#f85149"/></svg>HPC fallback</div>
+    <div class="li"><div class="ls" style="background:#0d1a1a;border:2px solid #39d0d0;border-style:dashed;"></div>Conditional (endpoint)</div>
+  </div>
+
+  <!-- Swim-Lane Diagram -->
+  <div class="dwrap">
+  <!--
+    viewBox 1800 × 965
+    5 lanes × 360px  ·  centers: 180 540 900 1260 1620
+    Box x-starts: 27 387 747 1107 1467  (box width 306)
+  -->
+  <svg viewBox="0 0 1800 965" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="a"  viewBox="0 0 12 12" refX="10" refY="6" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L12,6 L0,12z" fill="#484f58"/></marker>
+    <marker id="ag" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L12,6 L0,12z" fill="#2ea043"/></marker>
+    <marker id="ao" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L12,6 L0,12z" fill="#d29922"/></marker>
+    <marker id="ab" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L12,6 L0,12z" fill="#1f6feb"/></marker>
+    <marker id="at" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L12,6 L0,12z" fill="#39d0d0"/></marker>
+    <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <!-- ── LANE BACKGROUNDS ── -->
+  <rect x="0"    y="0" width="360"  height="965" fill="#0a1824"/>
+  <rect x="360"  y="0" width="360"  height="965" fill="#0a1722"/>
+  <rect x="720"  y="0" width="360"  height="965" fill="#0d0b1e"/>
+  <rect x="1080" y="0" width="360"  height="965" fill="#0a1a0a"/>
+  <rect x="1440" y="0" width="360"  height="965" fill="#160e00"/>
+  <line x1="360"  y1="0" x2="360"  y2="965" stroke="#1c2230" stroke-width="1"/>
+  <line x1="720"  y1="0" x2="720"  y2="965" stroke="#1c2230" stroke-width="1"/>
+  <line x1="1080" y1="0" x2="1080" y2="965" stroke="#1c2230" stroke-width="1"/>
+  <line x1="1440" y1="0" x2="1440" y2="965" stroke="#1c2230" stroke-width="1"/>
+
+  <!-- ── LANE HEADERS (h=46) ── -->
+  <rect x="0"    y="0" width="360"  height="46" fill="#0c2044"/>
+  <rect x="360"  y="0" width="360"  height="46" fill="#0a1c3c"/>
+  <rect x="720"  y="0" width="360"  height="46" fill="#130c38"/>
+  <rect x="1080" y="0" width="360"  height="46" fill="#0a1c0a"/>
+  <rect x="1440" y="0" width="360"  height="46" fill="#1c1000"/>
+  <rect x="0"    y="45" width="1800" height="2"  fill="#21262d"/>
+
+  <!-- Number badges (cy=14) -->
+  <circle cx="24"   cy="14" r="12" fill="#1f6feb" opacity="0.35"/>
+  <text x="24"   y="19" text-anchor="middle" font-size="12" font-weight="800" fill="#58a6ff"  font-family="Inter,sans-serif">①</text>
+  <circle cx="384"  cy="14" r="12" fill="#1f6feb" opacity="0.25"/>
+  <text x="384"  y="19" text-anchor="middle" font-size="12" font-weight="800" fill="#58a6ff"  font-family="Inter,sans-serif">②</text>
+  <circle cx="744"  cy="14" r="12" fill="#6e40c9" opacity="0.35"/>
+  <text x="744"  y="19" text-anchor="middle" font-size="12" font-weight="800" fill="#bc8cff" font-family="Inter,sans-serif">③</text>
+  <circle cx="1104" cy="14" r="12" fill="#2ea043" opacity="0.3"/>
+  <text x="1104" y="19" text-anchor="middle" font-size="12" font-weight="800" fill="#56d364" font-family="Inter,sans-serif">④</text>
+  <circle cx="1464" cy="14" r="12" fill="#d29922" opacity="0.3"/>
+  <text x="1464" y="19" text-anchor="middle" font-size="12" font-weight="800" fill="#e3b341" font-family="Inter,sans-serif">⑤</text>
+
+  <!-- Lane titles -->
+  <text x="180"  y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#58a6ff"  font-family="Inter,sans-serif">CLAUDE DESKTOP</text>
+  <text x="180"  y="43" text-anchor="middle" font-size="10" fill="#484f58" font-family="Inter,sans-serif">MCP Client</text>
+  <text x="540"  y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#58a6ff"  font-family="Inter,sans-serif">MCP SERVER</text>
+  <text x="540"  y="43" text-anchor="middle" font-size="10" fill="#484f58" font-family="Inter,sans-serif">FastMCP · Provenance · Dynamic Registration</text>
+  <text x="900"  y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#bc8cff" font-family="Inter,sans-serif">SCIENTIFIC AGENT</text>
+  <text x="900"  y="43" text-anchor="middle" font-size="10" fill="#484f58" font-family="Inter,sans-serif">Analyze → Plan → Execute → Verify</text>
+  <text x="1260" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#56d364" font-family="Inter,sans-serif">LOCAL UXARRAY</text>
+  <text x="1260" y="43" text-anchor="middle" font-size="10" fill="#484f58" font-family="Inter,sans-serif">Runs on your machine · domain layer</text>
+  <text x="1620" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">HPC / IMPROV</text>
+  <text x="1620" y="43" text-anchor="middle" font-size="10" fill="#484f58" font-family="Inter,sans-serif">Globus Compute · pre-flight health check</text>
+
+
+  <!-- ════════════════════════════
+       START + INITIAL HANDOFF
+       ════════════════════════════ -->
+
+  <!-- Start node (cy=56) -->
+  <circle cx="180" cy="56" r="10" fill="#1f6feb" filter="url(#glow)"/>
+  <circle cx="180" cy="56" r="10" fill="none" stroke="#79c0ff" stroke-width="2"/>
+  <line x1="180" y1="66" x2="180" y2="76" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- INITIAL ROW: 3 boxes  y=76–150 (74px tall) -->
+
+  <!-- Claude: User sends prompt -->
+  <rect x="27"  y="76" width="306" height="74" rx="8" fill="#091c35" stroke="#1f6feb" stroke-width="2"/>
+  <text x="180" y="96"  text-anchor="middle" font-size="15" font-weight="700" fill="#58a6ff" font-family="Inter,sans-serif">User sends prompt</text>
+  <line x1="40"  y1="103" x2="322" y2="103" stroke="#112238" stroke-width="1"/>
+  <text x="180" y="121" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">"Analyze /home/…/mesh.nc"</text>
+  <text x="180" y="139" text-anchor="middle" font-size="11.5" fill="#484f58" font-family="Inter,sans-serif">Claude Desktop · MCP 1.0 · stdio</text>
+
+  <!-- MCP: Receive tool call -->
+  <rect x="387" y="76" width="306" height="74" rx="8" fill="#091c35" stroke="#1f6feb" stroke-width="2"/>
+  <text x="540" y="96"  text-anchor="middle" font-size="15" font-weight="700" fill="#58a6ff" font-family="Inter,sans-serif">Receive tool call</text>
+  <line x1="400" y1="103" x2="682" y2="103" stroke="#112238" stroke-width="1"/>
+  <text x="540" y="121" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">run_scientific_agent(path)</text>
+  <text x="540" y="139" text-anchor="middle" font-size="11.5" fill="#484f58" font-family="Inter,sans-serif">HPC tools only if endpoint configured</text>
+
+  <!-- Agent: Begin analysis -->
+  <rect x="747" y="76" width="306" height="74" rx="8" fill="#0d0a20" stroke="#6e40c9" stroke-width="2"/>
+  <text x="900" y="96"  text-anchor="middle" font-size="15" font-weight="700" fill="#bc8cff" font-family="Inter,sans-serif">Begin analysis</text>
+  <line x1="760" y1="103" x2="1042" y2="103" stroke="#1a1330" stroke-width="1"/>
+  <text x="900" y="121" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">Load HPCConfig · config.yaml</text>
+  <text x="900" y="139" text-anchor="middle" font-size="11.5" fill="#484f58" font-family="Inter,sans-serif">Init reasoning_trace [ ]</text>
+
+  <!-- Horizontal handoff arrows at y=113 -->
+  <line x1="333" y1="113" x2="385" y2="113" stroke="#1f6feb" stroke-width="2" marker-end="url(#ab)"/>
+  <text x="360" y="107" text-anchor="middle" font-size="9.5" fill="#484f58" font-family="Inter,sans-serif">tool call</text>
+  <line x1="693" y1="113" x2="745" y2="113" stroke="#1f6feb" stroke-width="2" marker-end="url(#ab)"/>
+  <text x="720" y="107" text-anchor="middle" font-size="9.5" fill="#484f58" font-family="Inter,sans-serif">route</text>
+
+  <!-- Arrow down from Agent -->
+  <line x1="900" y1="150" x2="900" y2="160" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+
+  <!-- ══════════════════
+       STAGE 1 — ANALYZE
+       y=160–174
+       ══════════════════ -->
+  <rect x="0" y="160" width="1800" height="14" fill="#141e30"/>
+  <line x1="0" y1="160" x2="1800" y2="160" stroke="#21262d" stroke-width="1"/>
+  <line x1="0" y1="174" x2="1800" y2="174" stroke="#21262d" stroke-width="1"/>
+  <text x="900" y="171" text-anchor="middle" font-size="10" font-weight="700" fill="#5d7aa8" font-family="Inter,sans-serif" letter-spacing="3.5">STAGE 1 — ANALYZE</text>
+
+  <line x1="900" y1="174" x2="900" y2="184" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- DIAMOND 1: "HPC path?"
+       center=(900,248)  half-w=138  half-h=64 -->
+  <polygon points="900,184 1038,248 900,312 762,248" fill="#0d0a20" stroke="#e3b341" stroke-width="2"/>
+  <text x="900" y="243" text-anchor="middle" font-size="16" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">HPC path?</text>
+  <text x="900" y="262" text-anchor="middle" font-size="11"  fill="#8b949e" font-family="Inter,sans-serif">/home/ · /lus/ · /scratch/ · /grand/</text>
+
+  <!-- YES → right → HPC inspect -->
+  <polyline points="1038,248 1620,248 1620,318" fill="none" stroke="#d29922" stroke-width="2" marker-end="url(#ao)"/>
+  <rect x="1054" y="235" width="50" height="22" rx="5" fill="#1a1000"/>
+  <text x="1079" y="250" text-anchor="middle" font-size="12" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">Yes</text>
+
+  <!-- NO → bottom → Local inspect -->
+  <polyline points="900,312 900,318 1107,318 1107,320" fill="none" stroke="#2ea043" stroke-width="2" marker-end="url(#ag)"/>
+  <rect x="906" y="315" width="40" height="20" rx="5" fill="#0a180a"/>
+  <text x="926" y="329" text-anchor="middle" font-size="12" font-weight="700" fill="#56d364" font-family="Inter,sans-serif">No</text>
+
+  <!-- INSPECT BOXES  y=320–406 (86px) -->
+
+  <!-- Local: inspect_mesh() -->
+  <rect x="1107" y="320" width="306" height="86" rx="8" fill="#091c09" stroke="#2ea043" stroke-width="2"/>
+  <text x="1260" y="342" text-anchor="middle" font-size="15" font-weight="700" fill="#56d364" font-family="Inter,sans-serif">inspect_mesh( )</text>
+  <line x1="1120" y1="350" x2="1402" y2="350" stroke="#0f2010" stroke-width="1"/>
+  <text x="1260" y="367" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">domain/mesh.py → ux.open_grid()</text>
+  <text x="1260" y="383" text-anchor="middle" font-size="11.5" fill="#8b949e" font-family="Inter,sans-serif">MPAS · UGRID · SCRIP · HEALPix</text>
+  <text x="1260" y="398" text-anchor="middle" font-size="11"   fill="#2ea043" font-family="Inter,sans-serif" font-style="italic">→ n_face · n_node · n_edge · format</text>
+
+  <!-- HPC: inspect_mesh_hpc() -->
+  <rect x="1467" y="320" width="306" height="86" rx="8" fill="#180e00" stroke="#d29922" stroke-width="2"/>
+  <text x="1620" y="342" text-anchor="middle" font-size="15" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">inspect_mesh_hpc( )</text>
+  <line x1="1480" y1="350" x2="1762" y2="350" stroke="#201400" stroke-width="1"/>
+  <text x="1620" y="362" text-anchor="middle" font-size="11.5" fill="#39d0d0" font-family="Inter,sans-serif" font-style="italic">✓ _endpoint_is_ready( ) pre-flight</text>
+  <text x="1620" y="377" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">remote/compute_functions.py</text>
+  <text x="1620" y="392" text-anchor="middle" font-size="11.5" fill="#8b949e" font-family="Inter,sans-serif">Globus Executor → Improv cluster</text>
+  <text x="1620" y="406" text-anchor="middle" font-size="11"   fill="#d29922" font-family="Inter,sans-serif" font-style="italic">File stays on HPC · timeout 300 s</text>
+
+  <!-- validate_dataset box -->
+  <rect x="387" y="328" width="306" height="72" rx="8" fill="#0d1a1a" stroke="#39d0d0" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="540" y="348" text-anchor="middle" font-size="14" font-weight="700" fill="#39d0d0" font-family="Inter,sans-serif">validate_dataset( )</text>
+  <line x1="400" y1="356" x2="682" y2="356" stroke="#0f2828" stroke-width="1"/>
+  <text x="540" y="371" text-anchor="middle" font-size="12"   fill="#8b949e" font-family="Inter,sans-serif">NaN coverage · fill values · dims</text>
+  <text x="540" y="385" text-anchor="middle" font-size="11.5" fill="#8b949e" font-family="Inter,sans-serif">Gates zonal_mean in PLAN stage</text>
+  <text x="540" y="397" text-anchor="middle" font-size="11"   fill="#39d0d0" font-family="Inter,sans-serif" font-style="italic">only runs when data_path provided</text>
+
+  <!-- Arrow: Agent (analyze) → validate_dataset  (if data_path) -->
+  <polyline points="762,310 720,310 720,364 695,364" fill="none" stroke="#39d0d0" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#at)"/>
+  <rect x="700" y="295" width="70" height="18" rx="4" fill="#0d1117"/>
+  <text x="735" y="307" text-anchor="middle" font-size="10" fill="#39d0d0" font-family="Inter,sans-serif">if data_path</text>
+
+  <!-- JOIN BAR 1 -->
+  <line x1="1260" y1="406" x2="1260" y2="424" stroke="#484f58" stroke-width="1.5"/>
+  <line x1="1620" y1="406" x2="1620" y2="424" stroke="#484f58" stroke-width="1.5"/>
+  <line x1="1090" y1="424" x2="1790" y2="424" stroke="#30363d" stroke-width="9" stroke-linecap="round"/>
+  <!-- Route left to Agent -->
+  <line x1="1090" y1="424" x2="900" y2="424" stroke="#484f58" stroke-width="2"/>
+  <line x1="900"  y1="424" x2="900" y2="438" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+
+  <!-- ══════════════════
+       STAGE 2 — PLAN
+       y=438–452
+       ══════════════════ -->
+  <rect x="0" y="438" width="1800" height="14" fill="#141e30"/>
+  <line x1="0" y1="438" x2="1800" y2="438" stroke="#21262d" stroke-width="1"/>
+  <line x1="0" y1="452" x2="1800" y2="452" stroke="#21262d" stroke-width="1"/>
+  <text x="900" y="449" text-anchor="middle" font-size="10" font-weight="700" fill="#5d7aa8" font-family="Inter,sans-serif" letter-spacing="3.5">STAGE 2 — PLAN</text>
+
+  <line x1="900" y1="452" x2="900" y2="462" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- Arrow: validate_dataset → Select operations (renders after stage bar so it stays on top) -->
+  <polyline points="540,400 540,487 745,487" fill="none" stroke="#39d0d0" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#at)"/>
+  <rect x="556" y="430" width="74" height="18" rx="4" fill="#0d1117"/>
+  <text x="593" y="442" text-anchor="middle" font-size="10" fill="#39d0d0" font-family="Inter,sans-serif">validation result</text>
+
+  <!-- SELECT OPS BOX  y=462–520 -->
+  <rect x="747" y="462" width="306" height="58" rx="8" fill="#0d0a20" stroke="#6e40c9" stroke-width="2"/>
+  <text x="900" y="479" text-anchor="middle" font-size="15" font-weight="700" fill="#bc8cff" font-family="Inter,sans-serif">Select operations</text>
+  <line x1="760" y1="487" x2="1042" y2="487" stroke="#1a1330" stroke-width="1"/>
+  <text x="900" y="501" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">calculate_area + zonal_mean (if valid)</text>
+  <text x="900" y="514" text-anchor="middle" font-size="11.5" fill="#f85149" font-family="Inter,sans-serif" font-style="italic">skip zonal_mean if validation failed</text>
+
+  <line x1="900" y1="520" x2="900" y2="530" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- DIAMOND 2: "HPC path? or n_face > 1M?"
+       center=(900,592) -->
+  <polygon points="900,530 1038,592 900,654 762,592" fill="#0d0a20" stroke="#e3b341" stroke-width="2"/>
+  <text x="900" y="587" text-anchor="middle" font-size="16" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">HPC path?</text>
+  <text x="900" y="606" text-anchor="middle" font-size="11"  fill="#8b949e" font-family="Inter,sans-serif">or  n_face &gt; 1,000,000 ?</text>
+
+  <!-- YES → right → HPC execute -->
+  <polyline points="1038,592 1620,592 1620,688" fill="none" stroke="#d29922" stroke-width="2" marker-end="url(#ao)"/>
+  <rect x="1054" y="579" width="50" height="22" rx="5" fill="#1a1000"/>
+  <text x="1079" y="594" text-anchor="middle" font-size="12" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">Yes</text>
+
+  <!-- NO → bottom → Local execute -->
+  <polyline points="900,654 900,669 1107,669 1107,688" fill="none" stroke="#2ea043" stroke-width="2" marker-end="url(#ag)"/>
+  <rect x="906" y="657" width="40" height="20" rx="5" fill="#0a180a"/>
+  <text x="926" y="671" text-anchor="middle" font-size="12" font-weight="700" fill="#56d364" font-family="Inter,sans-serif">No</text>
+
+  <!-- STAGE 3 BAR — lanes 4-5 only  y=672–684 -->
+  <rect x="1080" y="672" width="720" height="12" fill="#141e30"/>
+  <text x="1440" y="682" text-anchor="middle" font-size="10" font-weight="700" fill="#5d7aa8" font-family="Inter,sans-serif" letter-spacing="3.5">STAGE 3 — EXECUTE</text>
+
+  <!-- EXECUTE BOXES  y=688–796 -->
+
+  <!-- Local: calc_area + zonal_mean -->
+  <rect x="1107" y="688" width="306" height="108" rx="8" fill="#091c09" stroke="#2ea043" stroke-width="2"/>
+  <text x="1260" y="710" text-anchor="middle" font-size="15" font-weight="700" fill="#56d364" font-family="Inter,sans-serif">Local Execution</text>
+  <line x1="1120" y1="718" x2="1402" y2="718" stroke="#0f2010" stroke-width="1"/>
+  <text x="1260" y="736" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">calculate_area( )</text>
+  <text x="1260" y="753" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">calculate_zonal_mean( )</text>
+  <text x="1260" y="772" text-anchor="middle" font-size="11.5" fill="#2ea043" font-family="Inter,sans-serif" font-style="italic">Runs entirely on local machine</text>
+  <text x="1260" y="787" text-anchor="middle" font-size="11"   fill="#484f58" font-family="Inter,sans-serif">_provenance: venue=local</text>
+
+  <!-- HPC: calc_area_hpc + zonal_mean_hpc -->
+  <rect x="1467" y="688" width="306" height="108" rx="8" fill="#180e00" stroke="#d29922" stroke-width="2"/>
+  <text x="1620" y="710" text-anchor="middle" font-size="15" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">HPC Execution</text>
+  <line x1="1480" y1="718" x2="1762" y2="718" stroke="#201400" stroke-width="1"/>
+  <text x="1620" y="733" text-anchor="middle" font-size="11.5" fill="#39d0d0" font-family="Inter,sans-serif" font-style="italic">✓ _endpoint_is_ready( ) pre-flight</text>
+  <text x="1620" y="749" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">calculate_area_hpc( )</text>
+  <text x="1620" y="765" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">calculate_zonal_mean_hpc( )</text>
+  <line x1="1480" y1="776" x2="1762" y2="776" stroke="#3d1400" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="1620" y="790" text-anchor="middle" font-size="12" fill="#f85149" font-family="Inter,sans-serif" font-style="italic">⚠ auto-fallback if endpoint unreachable</text>
+
+  <!-- JOIN BAR 2  y≈796–812 -->
+  <line x1="1260" y1="796" x2="1260" y2="812" stroke="#484f58" stroke-width="1.5"/>
+  <line x1="1620" y1="796" x2="1620" y2="812" stroke="#484f58" stroke-width="1.5"/>
+  <line x1="1090" y1="812" x2="1790" y2="812" stroke="#30363d" stroke-width="9" stroke-linecap="round"/>
+  <!-- Route left to Agent -->
+  <line x1="1090" y1="812" x2="900" y2="812" stroke="#484f58" stroke-width="2"/>
+  <line x1="900"  y1="812" x2="900" y2="825" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+
+  <!-- ══════════════════════
+       STAGE 4 — VERIFY  y=825–839
+       ══════════════════════ -->
+  <rect x="0" y="825" width="1800" height="14" fill="#141e30"/>
+  <line x1="0" y1="825" x2="1800" y2="825" stroke="#21262d" stroke-width="1"/>
+  <line x1="0" y1="839" x2="1800" y2="839" stroke="#21262d" stroke-width="1"/>
+  <text x="900" y="836" text-anchor="middle" font-size="10" font-weight="700" fill="#5d7aa8" font-family="Inter,sans-serif" letter-spacing="3.5">STAGE 4 — VERIFY</text>
+
+  <line x1="900" y1="839" x2="900" y2="849" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- VERIFY BOX  y=849–899 -->
+  <rect x="747" y="849" width="306" height="50" rx="8" fill="#0d0a20" stroke="#6e40c9" stroke-width="2"/>
+  <text x="900" y="863" text-anchor="middle" font-size="15" font-weight="700" fill="#bc8cff" font-family="Inter,sans-serif">Verify results</text>
+  <line x1="760" y1="871" x2="1042" y2="871" stroke="#1a1330" stroke-width="1"/>
+  <text x="900" y="884" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">total_area &gt; 0 · isfinite( all stats )</text>
+  <text x="900" y="896" text-anchor="middle" font-size="11.5" fill="#484f58" font-family="Inter,sans-serif">verification: &#123; passed, warnings[ ] &#125;</text>
+
+
+  <!-- ══════════════════════
+       RETURN FLOW
+       ══════════════════════ -->
+  <line x1="900" y1="899" x2="900" y2="909" stroke="#484f58" stroke-width="2"/>
+  <line x1="900" y1="909" x2="540" y2="909" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- PROVENANCE  y=909–959 [MCP lane] -->
+  <rect x="387" y="909" width="306" height="50" rx="8" fill="#1a0920" stroke="#bf4b8a" stroke-width="1.5"/>
+  <text x="540" y="924" text-anchor="middle" font-size="14" font-weight="700" fill="#e08ebe" font-family="Inter,sans-serif">Attach _provenance</text>
+  <text x="540" y="940" text-anchor="middle" font-size="11"  fill="#8b949e" font-family="Inter,sans-serif">venue · timestamp · version · artifacts[ ]</text>
+  <text x="540" y="954" text-anchor="middle" font-size="10.5" fill="#8b949e" font-family="Inter,sans-serif">selected_variable · validation_summary</text>
+
+  <!-- Arrow Provenance → Results -->
+  <line x1="387" y1="934" x2="335" y2="934" stroke="#484f58" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- RESULTS  y=909–959 [Claude lane] -->
+  <rect x="27" y="909" width="306" height="50" rx="8" fill="#091c35" stroke="#1f6feb" stroke-width="1.5"/>
+  <text x="180" y="924" text-anchor="middle" font-size="14" font-weight="700" fill="#58a6ff" font-family="Inter,sans-serif">Results displayed</text>
+  <text x="180" y="942" text-anchor="middle" font-size="11.5" fill="#8b949e" font-family="Inter,sans-serif">mesh · area · zonal means · trace</text>
+  <text x="180" y="956" text-anchor="middle" font-size="11"   fill="#8b949e" font-family="Inter,sans-serif">validation_summary · artifacts ✓</text>
+
+  <!-- Arrow → END node -->
+  <line x1="180" y1="959" x2="180" y2="958" stroke="#484f58" stroke-width="1"/>
+  <circle cx="180" cy="959" r="1" fill="#484f58"/>
+
+  <!-- END NODE -->
+  <circle cx="180" cy="960" r="4"  fill="#0a1824" stroke="#3fb950" stroke-width="2.5"/>
+  <circle cx="180" cy="960" r="2" fill="#3fb950"/>
+
+  </svg>
+  </div><!-- .dwrap -->
+
+  <!-- Scroll hint -->
+  <div class="scroll-hint">
+    ↓ &nbsp; Scroll for tool reference and architecture notes &nbsp; ↓
+  </div>
+
+</div><!-- .above-fold -->
+
+
+<!-- ═══════════════════════════════════════
+     BELOW FOLD — reference content
+     ═══════════════════════════════════════ -->
+<div class="below-fold">
+
+  <!-- Stats strip -->
+  <div class="stats-strip">
+    <div class="stat"><div class="v" style="color:#58a6ff">13</div><div class="l">MCP Tools (max)</div></div>
+    <div class="stat"><div class="v" style="color:#bc8cff">5</div><div class="l">Architecture Layers</div></div>
+    <div class="stat"><div class="v" style="color:#56d364">142</div><div class="l">Tests Passing</div></div>
+    <div class="stat"><div class="v" style="color:#e3b341">4</div><div class="l">Domain Modules</div></div>
+    <div class="stat"><div class="v" style="color:#3fb950">3.13</div><div class="l">Python</div></div>
+    <div class="stat"><div class="v" style="color:#f85149">Globus</div><div class="l">HPC Transport</div></div>
+  </div>
+
+  <!-- Explainer -->
+  <div class="explainer">
+    <strong>Reading the swim lanes:</strong>
+    Flow runs <strong>top → bottom</strong>, arrows crossing lanes are handoffs.
+    <strong style="color:#e3b341">Orange diamonds</strong> = routing decisions made automatically by the agent.
+    <strong style="color:#56d364">Green boxes</strong> = compute runs on your local machine.
+    <strong style="color:#e3b341">Orange boxes</strong> = dispatched to Argonne Improv via Globus Compute — the file never leaves the cluster.
+    <strong style="color:#39d0d0">Teal dashed boxes</strong> = steps that only activate under certain conditions (data_path provided, endpoint configured).
+    <strong style="color:#f85149">Red dashed</strong> inside HPC boxes = automatic local fallback when the endpoint is unreachable.
+    <strong>Dynamic registration:</strong> HPC tools (rows 10–13) only appear in Claude's tool list when <code>endpoint_id</code> is set in <code>config.yaml</code>.
+  </div>
+
+  <!-- Tool table -->
+  <div class="card">
+    <div class="card-h">All MCP Tools &nbsp;<span style="font-weight:400;color:#6e7681;font-size:12px">— 9 always registered · 4 conditional on endpoint_id</span></div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Tool Name</th><th>Source File</th><th>Runs On</th><th>Domain Module</th><th>What It Does</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td><code>inspect_mesh</code></td><td><code>inspection.py</code></td><td><span class="tag tl">LOCAL</span></td><td><code>mesh.py</code></td><td>Load grid → n_face, n_node, n_edge, format, file_size_mb. Supports MPAS · UGRID · SCRIP · HEALPix and more.</td></tr>
+        <tr><td>2</td><td><code>inspect_variable</code></td><td><code>inspection.py</code></td><td><span class="tag tl">LOCAL</span></td><td><code>variable.py</code></td><td>Variable metadata: location (faces/nodes/edges), shape, dtype, min/max/mean, units, attrs.</td></tr>
+        <tr><td>3</td><td><code>calculate_area</code></td><td><code>inspection.py</code></td><td><span class="tag tl">LOCAL</span></td><td><code>area.py</code></td><td>Face area stats: total, mean, min, max, units, n_face via grid.face_areas.</td></tr>
+        <tr><td>4</td><td><code>calculate_zonal_mean</code></td><td><code>inspection.py</code></td><td><span class="tag tl">LOCAL</span></td><td><code>zonal.py</code></td><td>Latitude-band averaging of any face-centered variable. Optional conservative area-weighting.</td></tr>
+        <tr><td>5</td><td><code>validate_dataset</code></td><td><code>inspection.py</code></td><td><span class="tag tl">LOCAL</span></td><td><code>variable.py</code></td><td>Check NaN coverage, fill value consistency, dimension alignment. Result gates zonal_mean in the agent.</td></tr>
+        <tr><td>6</td><td><code>get_capabilities</code></td><td><code>capabilities.py</code></td><td><span class="tag tl">LOCAL</span></td><td><code>mesh.py · variable.py</code></td><td>Inspect topology + variables; return applicable tools and UXarray API methods with recommendations.</td></tr>
+        <tr><td>7</td><td><code>get_execution_mode</code></td><td><code>execution_control.py</code></td><td><span class="tag tl">LOCAL</span></td><td>—</td><td>Returns current execution mode (local / hpc / auto) and whether an HPC endpoint is configured.</td></tr>
+        <tr><td>8</td><td><code>set_execution_mode</code></td><td><code>execution_control.py</code></td><td><span class="tag tl">LOCAL</span></td><td>—</td><td>Switch execution mode from the Claude UI without editing config.yaml directly.</td></tr>
+        <tr><td>9</td><td><code>run_scientific_agent</code></td><td><code>scientific_agent.py</code></td><td><span class="tag ta">AUTO</span></td><td>All 4 modules</td><td>Autonomous 4-stage pipeline: Analyze → Plan → Execute → Verify. Validation-gated. Returns full reasoning trace + provenance + artifacts.</td></tr>
+        <tr><td>10</td><td><code>inspect_mesh_hpc</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>mesh.py</code> on HPC</td><td>Mesh inspection via Globus Compute on Improv. Pre-flight health check. Auto-fallback to local.</td></tr>
+        <tr><td>11</td><td><code>calculate_area_hpc</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>area.py</code> on HPC</td><td>Face area calculation via Globus Compute. Pre-flight health check. Auto-fallback to local.</td></tr>
+        <tr><td>12</td><td><code>inspect_variable_hpc</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>variable.py</code> on HPC</td><td>Variable inspection via Globus Compute. Pre-flight health check. Auto-fallback to local.</td></tr>
+        <tr><td>13</td><td><code>calculate_zonal_mean_hpc</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>zonal.py</code> on HPC</td><td>Zonal mean via Globus Compute. Pre-flight health check. Auto-fallback to local.</td></tr>
+      </tbody>
+    </table>
+    <div style="padding:10px 15px;font-size:11.5px;color:#6e7681;border-top:1px solid #21262d;">
+      * HPC tools are only registered when <code>endpoint_id</code> is set in <code>config.yaml</code>. Without an endpoint, Claude's tool list shows 9 tools.
+    </div>
+  </div>
+
+</div><!-- .below-fold -->
+</body>
+</html>

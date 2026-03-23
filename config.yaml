@@ -2,8 +2,24 @@
 
 hpc:
   globus_compute:
-    endpoint_id: null
+    endpoint_id: null  # set your Globus Compute endpoint UUID here
 
-  execution_mode: "local"
+  execution_mode: "auto"             # uses HPC when endpoint is available, local otherwise
 
   timeout_seconds: 300
+
+# ── First time setup ────────────────────────────────────────────────────────
+# 1. Install dependencies:
+#    uv sync --extra hpc
+#
+# 2. Create a Globus Compute endpoint on your HPC cluster (run once on HPC):
+#    module load miniforge3
+#    conda activate globus-env
+#    globus-compute-endpoint configure uxarray-endpoint
+#    globus-compute-endpoint start uxarray-endpoint
+#    Copy the printed endpoint ID and paste it above under endpoint_id.
+#
+# ── Every time you SSH into HPC ─────────────────────────────────────────────
+# module load miniforge3
+# conda activate globus-env
+# globus-compute-endpoint start uxarray-endpoint

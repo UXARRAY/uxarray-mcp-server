@@ -3241,13 +3241,15 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
 hpc = [
     { name = "academy-py" },
     { name = "globus-compute-sdk" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
 ]
 
 [package.metadata]
@@ -3255,12 +3257,16 @@ requires-dist = [
     { name = "academy-py", marker = "extra == 'hpc'", specifier = ">=0.3.1" },
     { name = "fastmcp", specifier = ">=2.14.4" },
     { name = "globus-compute-sdk", marker = "extra == 'hpc'", specifier = ">=4.5.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "uxarray", specifier = ">=2025.12.0" },
 ]
-provides-extras = ["hpc", "dev"]
+provides-extras = ["hpc"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-asyncio", specifier = ">=1.0.0" },
+]
 
 [[package]]
 name = "webencodings"

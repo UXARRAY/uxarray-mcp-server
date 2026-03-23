@@ -1,7 +1,15 @@
+import numpy as np
 import uxarray as ux
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-import numpy as np
+from typing import Dict, Any, Optional
+
+from uxarray_mcp.domain import (
+    load_grid,
+    compute_area_stats,
+    compute_variable_info,
+    compute_zonal_mean_stats,
+)
+from uxarray_mcp.provenance import attach_provenance
 
 
 def inspect_mesh(file_path: str) -> Dict[str, Any]:
@@ -35,28 +43,21 @@ def inspect_mesh(file_path: str) -> Dict[str, Any]:
             "file_size_mb": 4.6
         }
     """
-    # Handle HEALPix generation
     if file_path.lower().startswith("healpix"):
         try:
-            # Expected format: "healpix:<zoom_level>" or just "healpix" (default zoom?)
-            parts = file_path.split(":")
-            zoom = (
-                int(parts[1]) if len(parts) > 1 else 1
-            )  # Default to zoom 1 if not specified
-
-            grid = ux.Grid.from_healpix(zoom=zoom)
-            file_size_mb = 0.0  # Virtual mesh, no file size
-
-            # Extract topology information
-            result = {
-                "format": "HEALPix",
-                "n_face": int(grid.n_face),
-                "n_node": int(grid.n_node),
-                "n_edge": int(grid.n_edge),
-                "n_max_face_nodes": int(grid.n_max_face_nodes),
-                "file_size_mb": 0.0,
-            }
-            return result
+            grid = load_grid(file_path)
+            return attach_provenance(
+                {
+                    "format": "HEALPix",
+                    "n_face": int(grid.n_face),
+                    "n_node": int(grid.n_node),
+                    "n_edge": int(grid.n_edge),
+                    "n_max_face_nodes": int(grid.n_max_face_nodes),
+                    "file_size_mb": 0.0,
+                },
+                tool="inspect_mesh",
+                inputs={"file_path": file_path},
+            )
         except ValueError:
             raise ValueError(
                 "Invalid HEALPix format. Use 'healpix:<zoom_level>' (e.g., 'healpix:2')."
@@ -64,30 +65,29 @@ def inspect_mesh(file_path: str) -> Dict[str, Any]:
         except Exception as e:
             raise RuntimeError(f"Failed to generate HEALPix mesh: {str(e)}")
 
-    # Validate file exists
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"Mesh file not found: {file_path}")
 
     file_size_mb = path.stat().st_size / (1024 * 1024)
 
-    # Load the mesh using UXarray
     try:
         grid = ux.open_grid(file_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load mesh file: {str(e)}")
 
-    # Extract topology information
-    result = {
-        "format": grid.source_grid_spec,
-        "n_face": int(grid.n_face),
-        "n_node": int(grid.n_node),
-        "n_edge": int(grid.n_edge),
-        "n_max_face_nodes": int(grid.n_max_face_nodes),
-        "file_size_mb": round(file_size_mb, 2),
-    }
-
-    return result
+    return attach_provenance(
+        {
+            "format": grid.source_grid_spec,
+            "n_face": int(grid.n_face),
+            "n_node": int(grid.n_node),
+            "n_edge": int(grid.n_edge),
+            "n_max_face_nodes": int(grid.n_max_face_nodes),
+            "file_size_mb": round(file_size_mb, 2),
+        },
+        tool="inspect_mesh",
+        inputs={"file_path": file_path},
+    )
 
 
 def inspect_variable(
@@ -134,81 +134,25 @@ def inspect_variable(
             "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
         }
     """
-    # Validate file paths exist
-    grid_path_obj = Path(grid_path)
-    data_path_obj = Path(data_path)
-
-    if not grid_path_obj.exists():
+    if not Path(grid_path).exists():
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if not data_path_obj.exists():
+    if not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
-    # Load the dataset using UXarray
     try:
         uxds = ux.open_dataset(grid_path, data_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
-    # Determine which variables to inspect
-    if variable_name:
-        if variable_name not in uxds.data_vars:
-            available = list(uxds.data_vars.keys())
-            raise ValueError(
-                f"Variable '{variable_name}' not found. Available variables: {available}"
-            )
-        variables_to_inspect = [variable_name]
-    else:
-        variables_to_inspect = list(uxds.data_vars.keys())
-
-    # Inspect each variable
-    variables_info: List[Dict[str, Any]] = []
-    for var_name in variables_to_inspect:
-        var = uxds[var_name]
-
-        # Extract basic metadata
-        var_info = {
-            "name": var_name,
-            "dims": var.dims,
-            "shape": var.shape,
-            "dtype": str(var.dtype),
-            "attrs": dict(var.attrs),
-        }
-
-        # Determine variable location (faces, nodes, or edges)
-        location = "other"
-        if "n_face" in var.dims or "nCells" in var.dims:
-            location = "faces"
-        elif "n_node" in var.dims or "nVertices" in var.dims:
-            location = "nodes"
-        elif "n_edge" in var.dims or "nEdges" in var.dims:
-            location = "edges"
-        var_info["location"] = location
-
-        # Compute statistics if numeric
-        try:
-            if np.issubdtype(var.dtype, np.number):
-                values = var.values
-                var_info["statistics"] = {
-                    "min": float(np.nanmin(values)),
-                    "max": float(np.nanmax(values)),
-                    "mean": float(np.nanmean(values)),
-                }
-            else:
-                var_info["statistics"] = None
-        except Exception:
-            # If statistics computation fails, set to None
-            var_info["statistics"] = None
-
-        variables_info.append(var_info)
-
-    # Get grid context
-    grid_info = {
-        "n_face": int(uxds.uxgrid.n_face),
-        "n_node": int(uxds.uxgrid.n_node),
-        "n_edge": int(uxds.uxgrid.n_edge),
-    }
-
-    return {"variables": variables_info, "grid_info": grid_info}
+    return attach_provenance(
+        compute_variable_info(uxds, variable_name),
+        tool="inspect_variable",
+        inputs={
+            "grid_path": grid_path,
+            "data_path": data_path,
+            "variable_name": variable_name,
+        },
+    )
 
 
 def calculate_area(file_path: str) -> Dict[str, Any]:
@@ -241,58 +185,28 @@ def calculate_area(file_path: str) -> Dict[str, Any]:
             "n_face": 40962
         }
     """
-    # Handle HEALPix generation
-    if file_path.lower().startswith("healpix"):
-        try:
-            parts = file_path.split(":")
-            zoom = int(parts[1]) if len(parts) > 1 else 1
-
-            grid = ux.Grid.from_healpix(zoom=zoom)
-        except ValueError:
-            raise ValueError(
-                "Invalid HEALPix format. Use 'healpix:<zoom_level>' (e.g., 'healpix:2')."
-            )
-        except Exception as e:
-            raise RuntimeError(f"Failed to generate HEALPix mesh: {str(e)}")
-    else:
-        # Validate file exists
+    if not file_path.lower().startswith("healpix"):
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Mesh file not found: {file_path}")
 
-        # Load the mesh using UXarray
-        try:
-            grid = ux.open_grid(file_path)
-        except Exception as e:
-            raise RuntimeError(f"Failed to load mesh file: {str(e)}")
-
-    # Calculate face areas
     try:
-        face_areas = grid.face_areas
+        grid = load_grid(file_path)
+    except ValueError:
+        raise ValueError(
+            "Invalid HEALPix format. Use 'healpix:<zoom_level>' (e.g., 'healpix:2')."
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to load mesh file: {str(e)}")
+
+    try:
+        result = compute_area_stats(grid)
     except Exception as e:
         raise RuntimeError(f"Failed to calculate face areas: {str(e)}")
 
-    # Compute statistics
-    total_area = float(face_areas.sum())
-    mean_area = float(face_areas.mean())
-    min_area = float(face_areas.min())
-    max_area = float(face_areas.max())
-
-    # Determine units (UXarray typically uses square meters)
-    area_units = "m^2"
-    if hasattr(face_areas, "attrs") and "units" in face_areas.attrs:
-        area_units = face_areas.attrs["units"]
-
-    result = {
-        "total_area": total_area,
-        "mean_area": mean_area,
-        "min_area": min_area,
-        "max_area": max_area,
-        "area_units": area_units,
-        "n_face": int(grid.n_face),
-    }
-
-    return result
+    return attach_provenance(
+        result, tool="calculate_area", inputs={"file_path": file_path}
+    )
 
 
 def calculate_zonal_mean(
@@ -338,118 +252,79 @@ def calculate_zonal_mean(
             "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
         }
     """
-    # Validate file paths exist
-    grid_path_obj = Path(grid_path)
-    data_path_obj = Path(data_path)
-
-    if not grid_path_obj.exists():
+    if not Path(grid_path).exists():
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if not data_path_obj.exists():
+    if not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
-    # Load the dataset using UXarray
     try:
         uxds = ux.open_dataset(grid_path, data_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
-    # Validate variable exists
-    if variable_name not in uxds.data_vars:
-        available = list(uxds.data_vars.keys())
-        raise ValueError(
-            f"Variable '{variable_name}' not found. Available variables: {available}"
-        )
-
-    # Get the data array
-    var = uxds[variable_name]
-
-    # Validate variable is face-centered
-    if "n_face" not in var.dims and "nCells" not in var.dims:
-        raise ValueError(
-            f"Variable '{variable_name}' is not face-centered. Zonal mean only supports face-centered data."
-        )
-
-    # Compute zonal mean using UXarray's built-in method
     try:
-        if lat_spec is not None:
-            zonal_result = var.zonal_mean(lat=lat_spec, conservative=conservative)
-        else:
-            zonal_result = var.zonal_mean(conservative=conservative)
+        result = compute_zonal_mean_stats(uxds, variable_name, lat_spec, conservative)
+    except ValueError:
+        raise
     except Exception as e:
         raise RuntimeError(f"Failed to compute zonal mean: {str(e)}")
 
-    # Extract results
-    latitudes = zonal_result.coords["latitudes"].values.tolist()
-    zonal_mean_values = zonal_result.values.tolist()
-
-    # Get grid context
-    grid_info = {
-        "n_face": int(uxds.uxgrid.n_face),
-        "n_node": int(uxds.uxgrid.n_node),
-        "n_edge": int(uxds.uxgrid.n_edge),
-    }
-
-    return {
-        "variable_name": variable_name,
-        "latitudes": latitudes,
-        "zonal_mean_values": zonal_mean_values,
-        "conservative": conservative,
-        "grid_info": grid_info,
-    }
+    return attach_provenance(
+        result,
+        tool="calculate_zonal_mean",
+        inputs={
+            "grid_path": grid_path,
+            "data_path": data_path,
+            "variable_name": variable_name,
+            "lat_spec": lat_spec,
+            "conservative": conservative,
+        },
+    )
 
 
 def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
     """
-    Validate dataset quality and detect common data issues.
+    Validate a mesh dataset for common data quality issues.
 
-    Checks for NaN/Inf values, coordinate validity, and provides data quality
-    summary for all variables in the dataset.
+    Checks every variable in the dataset for NaN values, Inf values, and
+    common fill values (1e20, 9.97e36, -999, -9999). Returns a per-variable
+    summary and an overall passed flag so downstream tools can gate on results.
 
     Args:
-        grid_path: Path to the mesh grid file
-        data_path: Path to the data file with variables
+        grid_path: Path to the mesh grid file.
+        data_path: Path to the data file with variables.
 
     Returns:
         Dictionary containing:
-        - is_valid: Overall validation status (bool)
-        - issues: List of detected issues
-        - variables: Per-variable validation results with:
-          - name: Variable name
-          - has_nan: Boolean, True if NaN values present
-          - has_inf: Boolean, True if Inf values present
-          - nan_count: Number of NaN values
-          - inf_count: Number of Inf values
-          - total_values: Total number of values
-          - nan_percentage: Percentage of NaN values
-          - value_range: [min, max] for numeric variables
-        - grid_info: Grid summary {n_face, n_node, n_edge}
+        - passed: True if all variables pass all checks.
+        - n_variables_checked: Number of variables inspected.
+        - n_variables_failed: Number of variables with issues.
+        - variables: List of per-variable result dicts, each with:
+          - name: Variable name.
+          - passed: True if no issues found.
+          - n_nan: Count of NaN values.
+          - n_inf: Count of Inf values.
+          - n_fill_values: Count of detected fill values.
+          - detected_fill_value: The fill value found, or None.
+          - shape: Variable shape.
+          - dtype: Variable dtype string.
+          - warnings: List of issue descriptions for this variable.
 
     Example:
         >>> validate_dataset("grid.nc", "data.nc")
         {
-            "is_valid": True,
-            "issues": [],
+            "passed": False,
+            "n_variables_checked": 3,
+            "n_variables_failed": 1,
             "variables": [
-                {
-                    "name": "temperature",
-                    "has_nan": False,
-                    "has_inf": False,
-                    "nan_count": 0,
-                    "inf_count": 0,
-                    "total_values": 40962,
-                    "nan_percentage": 0.0,
-                    "value_range": [271.5, 303.2]
-                }
-            ],
-            "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
+                {"name": "temperature", "passed": True, "n_nan": 0, ...},
+                {"name": "pressure", "passed": False, "n_nan": 142, ...},
+            ]
         }
     """
-    grid_path_obj = Path(grid_path)
-    data_path_obj = Path(data_path)
-
-    if not grid_path_obj.exists():
+    if not Path(grid_path).exists():
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if not data_path_obj.exists():
+    if not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     try:
@@ -457,63 +332,71 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
-    issues = []
-    variable_results = []
+    _FILL_VALUE_CANDIDATES = [1e20, 9.96920996838687e36, -999.0, -9999.0]
+    _SUSPICIOUS_FILL_VALUES = [9999, -9999, 999999, -999999, 9.96921e36]
+
+    overall_passed = True
+    issues: list[str] = []
+    validation_results = []
+    all_warnings: list[str] = []
 
     for var_name in uxds.data_vars:
-        try:
-            var = uxds[var_name]
-            values = var.values
+        var = uxds[var_name]
+        var_warnings: list[str] = []
 
-            if not np.issubdtype(values.dtype, np.number):
+        try:
+            values = var.values
+            is_numeric = np.issubdtype(values.dtype, np.number)
+            is_float = np.issubdtype(values.dtype, np.floating)
+
+            # Skip non-numeric variables (consistent with main's schema)
+            if not is_numeric:
                 continue
 
-            nan_mask = np.isnan(values)
-            inf_mask = np.isinf(values)
-            nan_count = int(np.sum(nan_mask))
-            inf_count = int(np.sum(inf_mask))
+            n_nan = int(np.sum(np.isnan(values))) if is_float else 0
+            n_inf = int(np.sum(np.isinf(values))) if is_float else 0
             total_values = int(values.size)
-            nan_percentage = (
-                (nan_count / total_values * 100) if total_values > 0 else 0.0
-            )
+            nan_percentage = (n_nan / total_values * 100) if total_values > 0 else 0.0
 
-            fill_value = var.attrs.get("_FillValue", None)
-            has_fill_value = fill_value is not None
+            # NetCDF _FillValue detection
+            fill_value_attr = var.attrs.get("_FillValue", None)
             fill_value_count = 0
-            if has_fill_value:
-                fill_value_mask = np.isclose(values, fill_value, rtol=0, atol=0)
+            if fill_value_attr is not None and is_float:
+                fill_value_mask = np.isclose(values, fill_value_attr, rtol=0, atol=0)
                 fill_value_count = int(np.sum(fill_value_mask))
 
-            common_fill_values = [9999, -9999, 999999, -999999, 9.96921e36]
-            suspicious_fill_count = 0
-            for fill_val in common_fill_values:
-                suspicious_mask = np.isclose(values, fill_val, rtol=1e-5)
-                suspicious_fill_count += int(np.sum(suspicious_mask))
+            # Candidate fill value detection (our schema: n_fill_values / detected_fill_value)
+            n_fill = 0
+            detected_fill = None
+            if is_float:
+                for fv in _FILL_VALUE_CANDIDATES:
+                    count = int(np.sum(np.isclose(values, fv, rtol=1e-3)))
+                    if count > 0:
+                        n_fill = count
+                        detected_fill = fv
+                        break
 
+            # Suspicious fill value count (main's schema)
+            suspicious_fill_count = 0
+            if is_float:
+                for fill_val in _SUSPICIOUS_FILL_VALUES:
+                    suspicious_mask = np.isclose(values, fill_val, rtol=1e-5)
+                    suspicious_fill_count += int(np.sum(suspicious_mask))
+
+            # Valid value range
+            nan_mask = (
+                np.isnan(values) if is_float else np.zeros(values.shape, dtype=bool)
+            )
+            inf_mask = (
+                np.isinf(values) if is_float else np.zeros(values.shape, dtype=bool)
+            )
             valid_values = values[~nan_mask & ~inf_mask]
             value_range = None
             if valid_values.size > 0:
                 value_range = [float(np.min(valid_values)), float(np.max(valid_values))]
 
-            has_nan = nan_count > 0
-            has_inf = inf_count > 0
-
-            if has_nan:
-                issues.append(
-                    f"{var_name}: contains {nan_count} NaN values ({nan_percentage:.2f}%)"
-                )
-            if has_inf:
-                issues.append(f"{var_name}: contains {inf_count} Inf values")
-            if fill_value_count > 0:
-                issues.append(
-                    f"{var_name}: contains {fill_value_count} fill values ({fill_value})"
-                )
-            if suspicious_fill_count > 0:
-                issues.append(
-                    f"{var_name}: contains {suspicious_fill_count} suspicious fill-like values"
-                )
-
-            coord_issues = []
+            # Coordinate range checks (main's schema)
+            coord_issues: list[str] = []
             if "lat" in var_name.lower() or "latitude" in var_name.lower():
                 if value_range and (value_range[0] < -90 or value_range[1] > 90):
                     coord_issues.append("latitude out of valid range [-90, 90]")
@@ -521,16 +404,63 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
                 if value_range and (value_range[0] < -180 or value_range[1] > 360):
                     coord_issues.append("longitude out of valid range [-180, 360]")
 
-            if coord_issues:
-                issues.extend([f"{var_name}: {issue}" for issue in coord_issues])
+            var_passed = (
+                n_nan == 0
+                and n_inf == 0
+                and n_fill == 0
+                and fill_value_count == 0
+                and not coord_issues
+            )
+            if not var_passed:
+                overall_passed = False
 
-            variable_results.append(
+            if n_nan > 0:
+                msg = f"{var_name}: contains {n_nan} NaN values ({nan_percentage:.2f}%)"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+                issues.append(msg)
+            if n_inf > 0:
+                msg = f"{var_name}: contains {n_inf} Inf values"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+                issues.append(msg)
+            if fill_value_count > 0:
+                msg = f"{var_name}: contains {fill_value_count} fill values ({fill_value_attr})"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+                issues.append(msg)
+            if suspicious_fill_count > 0:
+                msg = f"{var_name}: contains {suspicious_fill_count} suspicious fill-like values"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+                issues.append(msg)
+            elif n_fill > 0 and fill_value_count == 0:
+                msg = f"{var_name}: {n_fill} fill value(s) matching {detected_fill}"
+                var_warnings.append(msg)
+                all_warnings.append(msg)
+            for ci in coord_issues:
+                full_msg = f"{var_name}: {ci}"
+                var_warnings.append(full_msg)
+                all_warnings.append(full_msg)
+                issues.append(full_msg)
+
+            validation_results.append(
                 {
                     "name": var_name,
-                    "has_nan": has_nan,
-                    "has_inf": has_inf,
-                    "nan_count": nan_count,
-                    "inf_count": inf_count,
+                    # Our schema fields
+                    "passed": var_passed,
+                    "n_nan": n_nan,
+                    "n_inf": n_inf,
+                    "n_fill_values": n_fill,
+                    "detected_fill_value": detected_fill,
+                    "shape": list(values.shape),
+                    "dtype": str(values.dtype),
+                    "warnings": var_warnings,
+                    # Main's schema fields
+                    "has_nan": n_nan > 0,
+                    "has_inf": n_inf > 0,
+                    "nan_count": n_nan,
+                    "inf_count": n_inf,
                     "fill_value_count": fill_value_count,
                     "suspicious_fill_count": suspicious_fill_count,
                     "total_values": total_values,
@@ -541,19 +471,35 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
             )
 
         except Exception as e:
-            issues.append(f"{var_name}: validation failed - {str(e)}")
+            msg = f"Could not validate {var_name}: {e}"
+            all_warnings.append(msg)
+            issues.append(msg)
+            overall_passed = False
+            validation_results.append(
+                {
+                    "name": var_name,
+                    "passed": False,
+                    "error": str(e),
+                    "warnings": [msg],
+                }
+            )
 
-    grid_info = {
-        "n_face": int(uxds.uxgrid.n_face),
-        "n_node": int(uxds.uxgrid.n_node),
-        "n_edge": int(uxds.uxgrid.n_edge),
-    }
-
-    is_valid = len(issues) == 0
-
-    return {
-        "is_valid": is_valid,
+    result = {
+        # Our schema
+        "passed": overall_passed,
+        "n_variables_checked": len(validation_results),
+        "n_variables_failed": sum(
+            1 for v in validation_results if not v.get("passed", False)
+        ),
+        "variables": validation_results,
+        # Main's schema additions
+        "is_valid": overall_passed,
         "issues": issues,
-        "variables": variable_results,
-        "grid_info": grid_info,
     }
+
+    return attach_provenance(
+        result,
+        tool="validate_dataset",
+        inputs={"grid_path": grid_path, "data_path": data_path},
+        warnings=all_warnings,
+    )

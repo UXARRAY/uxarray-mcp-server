@@ -1,7 +1,7 @@
 [project]
 name = "uxarray-mcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "MCP server for analyzing unstructured meshes with UXarray"
 readme = "README.md"
 authors = [
     { name = "Dayan Abdulla", email = "dayanabdulla000@gmail.com" }
@@ -9,8 +9,8 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "fastmcp>=2.14.4",
-    "pyyaml>=6.0",
     "uxarray>=2025.12.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -18,9 +18,11 @@ hpc = [
     "academy-py>=0.3.1",
     "globus-compute-sdk>=4.5.0",
 ]
+
+[dependency-groups]
 dev = [
     "pytest>=9.0.2",
-    "pytest-asyncio>=0.23.0",
+    "pytest-asyncio>=1.0.0",
 ]
 
 [build-system]
