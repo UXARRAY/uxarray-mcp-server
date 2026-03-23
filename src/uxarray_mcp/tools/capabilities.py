@@ -1,7 +1,7 @@
 """Tool discovery and capability filtering for UXarray MCP server."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 import uxarray as ux
 

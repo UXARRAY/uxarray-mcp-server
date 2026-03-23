@@ -1,21 +1,22 @@
 """UXarray MCP Server - Provides mesh analysis tools for AI agents."""
 
 from fastmcp import FastMCP
+
 from uxarray_mcp.remote.config import load_config
 from uxarray_mcp.tools import (
-    get_capabilities,
-    run_scientific_agent,
-    inspect_mesh,
-    inspect_variable,
     calculate_area,
-    calculate_zonal_mean,
-    validate_dataset,
-    get_execution_mode,
-    set_execution_mode,
-    inspect_mesh_hpc,
     calculate_area_hpc,
-    inspect_variable_hpc,
+    calculate_zonal_mean,
     calculate_zonal_mean_hpc,
+    get_capabilities,
+    get_execution_mode,
+    inspect_mesh,
+    inspect_mesh_hpc,
+    inspect_variable,
+    inspect_variable_hpc,
+    run_scientific_agent,
+    set_execution_mode,
+    validate_dataset,
 )
 
 # Initialize the MCP server

@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
+
 from uxarray_mcp.tools.inspection import inspect_mesh
 
 # -----------------------------------------------------------------------------

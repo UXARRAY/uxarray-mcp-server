@@ -1,6 +1,7 @@
 import pytest
-from uxarray_mcp.server import mcp
+
 from uxarray_mcp.remote.config import load_config
+from uxarray_mcp.server import mcp
 
 
 @pytest.mark.asyncio

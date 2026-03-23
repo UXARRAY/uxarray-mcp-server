@@ -1,8 +1,10 @@
 """Tests for get_capabilities tool — tool discovery and filtering."""
 
+from unittest.mock import patch
+
 import pytest
 import xarray as xr
-from unittest.mock import patch
+
 from uxarray_mcp.tools import get_capabilities
 
 
