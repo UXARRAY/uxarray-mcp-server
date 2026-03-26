@@ -1,7 +1,10 @@
 """Tests for get_capabilities tool — tool discovery and filtering."""
 
+from unittest.mock import patch
+
 import pytest
 import xarray as xr
+
 from uxarray_mcp.tools import get_capabilities
 
 
@@ -140,6 +143,30 @@ class TestGetCapabilitiesGridOnly:
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
         assert tools["inspect_mesh"]["applicable"] is True
         assert tools["calculate_area"]["applicable"] is True
+
+    def test_hpc_tools_hidden_without_endpoint(self):
+        """HPC tools are omitted when no endpoint is configured."""
+        with patch("uxarray_mcp.tools.capabilities.load_config") as mock_load_config:
+            mock_load_config.return_value.has_endpoint = False
+            result = get_capabilities("healpix:2")
+
+        tool_names = {t["name"] for t in result["mcp_server_tools"]}
+        assert "inspect_mesh_hpc" not in tool_names
+        assert "calculate_area_hpc" not in tool_names
+        assert "inspect_variable_hpc" not in tool_names
+        assert "calculate_zonal_mean_hpc" not in tool_names
+
+    def test_hpc_tools_shown_with_endpoint(self):
+        """HPC tools are surfaced when an endpoint is configured."""
+        with patch("uxarray_mcp.tools.capabilities.load_config") as mock_load_config:
+            mock_load_config.return_value.has_endpoint = True
+            result = get_capabilities("healpix:2")
+
+        tool_names = {t["name"] for t in result["mcp_server_tools"]}
+        assert "inspect_mesh_hpc" in tool_names
+        assert "calculate_area_hpc" in tool_names
+        assert "inspect_variable_hpc" in tool_names
+        assert "calculate_zonal_mean_hpc" in tool_names
 
 
 class TestGetCapabilitiesWithData:

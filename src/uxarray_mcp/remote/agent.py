@@ -1,10 +1,11 @@
 """Academy agent for orchestrating local and remote UXarray computations."""
 
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 try:
-    from academy.agent import Agent as _AcademyAgent, action
+    from academy.agent import Agent as _AcademyAgent
+    from academy.agent import action
 except ImportError:
     _AcademyAgent = object
 
@@ -13,13 +14,13 @@ except ImportError:
         return fn
 
 
-from .config import HPCConfig
 from .compute_functions import (
-    remote_inspect_mesh,
     remote_calculate_area,
-    remote_inspect_variable,
     remote_calculate_zonal_mean,
+    remote_inspect_mesh,
+    remote_inspect_variable,
 )
+from .config import HPCConfig
 
 
 class UXarrayComputeAgent(_AcademyAgent):

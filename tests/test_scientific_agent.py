@@ -3,9 +3,9 @@
 from unittest.mock import patch
 
 from uxarray_mcp.tools.scientific_agent import (
-    run_scientific_agent,
     _decide_venue,
     _is_hpc_path,
+    run_scientific_agent,
 )
 
 

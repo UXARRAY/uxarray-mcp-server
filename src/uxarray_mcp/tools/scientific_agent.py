@@ -68,17 +68,17 @@ def run_scientific_agent(
         }
     """
     from uxarray_mcp.tools.inspection import (
-        inspect_mesh,
-        inspect_variable,
         calculate_area,
         calculate_zonal_mean,
+        inspect_mesh,
+        inspect_variable,
         validate_dataset,
     )
     from uxarray_mcp.tools.remote_tools import (
-        inspect_mesh_hpc,
         calculate_area_hpc,
-        inspect_variable_hpc,
         calculate_zonal_mean_hpc,
+        inspect_mesh_hpc,
+        inspect_variable_hpc,
     )
 
     reasoning_trace: list[dict[str, Any]] = []

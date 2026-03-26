@@ -1,8 +1,10 @@
 """Tests for the calculate_zonal_mean tool."""
 
-import pytest
-import numpy as np
 from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+
 from uxarray_mcp.tools import calculate_zonal_mean
 
 

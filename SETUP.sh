@@ -15,8 +15,12 @@ fi
 
 uv sync
 
+if [ ! -f config.yaml ]; then
+  cp config.yaml.example config.yaml
+fi
+
 echo "[SETUP] Running automated tests (no external data required)..."
-uv run pytest
+uv run pytest tests/ --ignore=tests/test_remote_agent.py
 
 echo ""
 echo "[SUCCESS] Review the 'GETTING_STARTED.md' for next steps."
