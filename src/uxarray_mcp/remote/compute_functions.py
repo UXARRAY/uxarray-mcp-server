@@ -5,7 +5,7 @@ They must be FULLY SELF-CONTAINED — only import packages available on the HPC
 environment (uxarray, numpy, etc.). Never import from uxarray_mcp here.
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 
 def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:

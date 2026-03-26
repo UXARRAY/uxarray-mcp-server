@@ -3,6 +3,15 @@ name = "uxarray-mcp"
 version = "0.1.0"
 description = "MCP server for analyzing unstructured meshes with UXarray"
 readme = "README.md"
+keywords = ["uxarray", "mcp", "unstructured grids", "scientific computing", "globus compute"]
+classifiers = [
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+]
 authors = [
     { name = "Dayan Abdulla", email = "dayanabdulla000@gmail.com" }
 ]
@@ -19,12 +28,34 @@ hpc = [
     "globus-compute-sdk>=4.5.0",
 ]
 
+[project.scripts]
+uxarray-mcp = "uxarray_mcp.__main__:main"
+
+[project.urls]
+Documentation = "https://github.com/UXARRAY/uxarray-mcp-server"
+Source = "https://github.com/UXARRAY/uxarray-mcp-server"
+Tracker = "https://github.com/UXARRAY/uxarray-mcp-server/issues"
+
 [dependency-groups]
 dev = [
+    "pre-commit>=4.3.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.0.0",
+    "ruff>=0.15.2",
 ]
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.ruff]
+extend-exclude = ["docs/architecture.html"]
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["uxarray_mcp"]
+
+[tool.ruff.format]
+docstring-code-format = true

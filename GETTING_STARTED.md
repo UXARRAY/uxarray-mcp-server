@@ -56,7 +56,13 @@ If you see green passes, the server is ready.
 
 ### Step 3: (Optional) Configure HPC
 
-If you want to run computations on an HPC system via Globus Compute, edit `config.yaml`:
+If you want to run computations on an HPC system via Globus Compute, first create a local config file:
+
+```bash
+cp config.yaml.example config.yaml
+```
+
+Then edit `config.yaml`:
 
 ```yaml
 hpc:
@@ -251,7 +257,13 @@ A browser auth URL will appear. Visit it, log in, paste the code back. This only
 
 ### Step 4: Add your endpoint UUID to config.yaml
 
-Open `config.yaml` in the project root and add your UUID:
+If you do not already have one, create a local config file first:
+
+```bash
+cp config.yaml.example config.yaml
+```
+
+Then open `config.yaml` in the project root and add your UUID:
 
 ```yaml
 hpc:
