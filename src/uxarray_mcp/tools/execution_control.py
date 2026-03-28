@@ -22,20 +22,13 @@ def get_execution_mode() -> Dict[str, Any]:
     Returns
     -------
     dict
-        Dictionary containing:
-        - mode: Current execution mode ("local", "hpc", or "auto")
-        - endpoint_id: Configured Globus Compute endpoint UUID, or None
-        - endpoint_status: "healthy", "no_endpoint", "unreachable", or "unknown"
-        - description: Plain-English explanation of what the current mode means
+        Dictionary with keys ``mode``, ``endpoint_id``,
+        ``endpoint_status``, and ``description``.
 
-    Example:
-        >>> get_execution_mode()
-        {
-            "mode": "auto",
-            "endpoint_id": "14e272c4-...",
-            "endpoint_status": "online",
-            "description": "Auto mode: uses HPC when endpoint is available, local otherwise."
-        }
+    Examples
+    --------
+    >>> get_execution_mode()
+    {"mode": "auto", "endpoint_id": "14e272c4-...", "endpoint_status": "online"}
     """
     from uxarray_mcp.remote.config import load_config
     from uxarray_mcp.remote.health import check_endpoint_health
