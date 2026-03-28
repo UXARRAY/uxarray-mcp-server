@@ -1,0 +1,42 @@
+/* -------------------------------------------------------
+   UXarray MCP Server — minimal overrides
+   Only touch the accent color and announcement banner.
+   Let sphinx_book_theme handle everything else natively
+   so light/dark/auto modes all work correctly.
+   ------------------------------------------------------- */
+
+/* Announcement banner */
+.bd-header-announcement {
+    background-color: #4f46e5;
+    color: #ffffff;
+    padding: 0.5em 1em;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.bd-header-announcement a {
+    color: #ffffff;
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+/* Accent color override — indigo instead of default blue */
+:root {
+    --pst-color-primary: #4f46e5;
+    --pst-color-primary-highlight: #4338ca;
+}
+
+/* Tables — a bit more padding */
+.bd-content table td,
+.bd-content table th {
+    padding: 0.5em 0.75em;
+}
+
+/* Headings — breathing room */
+.bd-content h2 {
+    margin-top: 1.75em;
+}
+
+.bd-content h3 {
+    margin-top: 1.25em;
+}
