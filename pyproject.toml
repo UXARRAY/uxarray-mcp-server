@@ -27,6 +27,11 @@ hpc = [
     "academy-py>=0.3.1",
     "globus-compute-sdk>=4.5.0",
 ]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-book-theme>=1.1.0",
+    "myst-parser>=3.0",
+]
 
 [project.scripts]
 uxarray-mcp = "uxarray_mcp.__main__:main"
