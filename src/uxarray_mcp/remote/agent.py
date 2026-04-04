@@ -1,5 +1,7 @@
 """Academy agent for orchestrating local and remote UXarray computations."""
 
+from __future__ import annotations
+
 import asyncio
 from typing import Any, Dict, Optional
 

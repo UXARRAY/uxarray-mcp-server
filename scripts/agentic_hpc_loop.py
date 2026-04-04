@@ -43,6 +43,7 @@ _COORDINATE_LIKE_NAMES = {
 
 
 def _is_coordinate_like(variable_name: str) -> bool:
+    """Return ``True`` when a variable name looks like a coordinate field."""
     lowered = variable_name.lower()
     parts = lowered.replace("-", "_").split("_")
     return any(part in _COORDINATE_LIKE_NAMES for part in parts)
@@ -64,6 +65,7 @@ def _select_target_variable(variable_summary: dict[str, Any]) -> str | None:
 
 
 def _nan_summary(zonal_mean_results: dict[str, Any]) -> dict[str, Any]:
+    """Summarize NaN coverage in a zonal-mean result."""
     values = zonal_mean_results.get("zonal_mean_values", [])
     nan_count = sum(
         1 for value in values if isinstance(value, float) and math.isnan(value)
@@ -76,6 +78,7 @@ def _nan_summary(zonal_mean_results: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Run the sequential remote workflow and print the collected results."""
     parser = argparse.ArgumentParser(
         description=(
             "Submit a sequence of remote jobs, poll them, and decide the next "
