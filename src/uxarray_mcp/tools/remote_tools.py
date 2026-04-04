@@ -41,6 +41,33 @@ def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
         return asyncio.run(async_call())
 
 
+def _run_with_optional_hpc(
+    *,
+    use_remote: bool,
+    local_call: Callable[[], Dict[str, Any]],
+    remote_call: Callable[[Any], Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Run a tool locally or remotely with a consistent fallback path."""
+    if not use_remote:
+        return local_call()
+
+    from uxarray_mcp.remote.agent import get_agent
+
+    agent = get_agent()
+    if not agent.config.has_endpoint:
+        return local_call()
+
+    ready, reason = _endpoint_is_ready(agent)
+    if not ready:
+        result = local_call()
+        result["_provenance"]["warnings"].append(
+            f"HPC endpoint not ready ({reason}); ran locally."
+        )
+        return result
+
+    return remote_call(agent)
+
+
 def inspect_mesh_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]:
     """Inspect mesh topology with optional HPC execution.
 
@@ -69,30 +96,15 @@ def inspect_mesh_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]
     >>> inspect_mesh_hpc("/hpc/data/mesh.nc", use_remote=True)
     {"n_face": 2562, ...}
     """
-    if not use_remote:
-        from .inspection import inspect_mesh
+    from .inspection import inspect_mesh
 
-        return inspect_mesh(file_path)
-
-    from uxarray_mcp.remote.agent import get_agent
-
-    agent = get_agent()
-    if not agent.config.has_endpoint:
-        from .inspection import inspect_mesh
-
-        return inspect_mesh(file_path)
-
-    ready, reason = _endpoint_is_ready(agent)
-    if not ready:
-        from .inspection import inspect_mesh
-
-        result = inspect_mesh(file_path)
-        result["_provenance"]["warnings"].append(
-            f"HPC endpoint not ready ({reason}); ran locally."
-        )
-        return result
-
-    return _run_sync(lambda: agent.inspect_mesh_remote(file_path, use_remote))
+    return _run_with_optional_hpc(
+        use_remote=use_remote,
+        local_call=lambda: inspect_mesh(file_path),
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.inspect_mesh_remote(file_path, use_remote)
+        ),
+    )
 
 
 def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]:
@@ -132,30 +144,15 @@ def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, An
         ...
     }
     """
-    if not use_remote:
-        from .inspection import calculate_area
+    from .inspection import calculate_area
 
-        return calculate_area(file_path)
-
-    from uxarray_mcp.remote.agent import get_agent
-
-    agent = get_agent()
-    if not agent.config.has_endpoint:
-        from .inspection import calculate_area
-
-        return calculate_area(file_path)
-
-    ready, reason = _endpoint_is_ready(agent)
-    if not ready:
-        from .inspection import calculate_area
-
-        result = calculate_area(file_path)
-        result["_provenance"]["warnings"].append(
-            f"HPC endpoint not ready ({reason}); ran locally."
-        )
-        return result
-
-    return _run_sync(lambda: agent.calculate_area_remote(file_path, use_remote))
+    return _run_with_optional_hpc(
+        use_remote=use_remote,
+        local_call=lambda: calculate_area(file_path),
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.calculate_area_remote(file_path, use_remote)
+        ),
+    )
 
 
 def inspect_variable_hpc(
@@ -196,33 +193,16 @@ def inspect_variable_hpc(
         "grid_info": {...}
     }
     """
-    if not use_remote:
-        from .inspection import inspect_variable
+    from .inspection import inspect_variable
 
-        return inspect_variable(grid_path, data_path, variable_name)
-
-    from uxarray_mcp.remote.agent import get_agent
-
-    agent = get_agent()
-    if not agent.config.has_endpoint:
-        from .inspection import inspect_variable
-
-        return inspect_variable(grid_path, data_path, variable_name)
-
-    ready, reason = _endpoint_is_ready(agent)
-    if not ready:
-        from .inspection import inspect_variable
-
-        result = inspect_variable(grid_path, data_path, variable_name)
-        result["_provenance"]["warnings"].append(
-            f"HPC endpoint not ready ({reason}); ran locally."
-        )
-        return result
-
-    return _run_sync(
-        lambda: agent.inspect_variable_remote(
-            grid_path, data_path, variable_name, use_remote
-        )
+    return _run_with_optional_hpc(
+        use_remote=use_remote,
+        local_call=lambda: inspect_variable(grid_path, data_path, variable_name),
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.inspect_variable_remote(
+                grid_path, data_path, variable_name, use_remote
+            )
+        ),
     )
 
 
@@ -271,37 +251,16 @@ def calculate_zonal_mean_hpc(
         ...
     }
     """
-    if not use_remote:
-        from .inspection import calculate_zonal_mean
+    from .inspection import calculate_zonal_mean
 
-        return calculate_zonal_mean(
+    return _run_with_optional_hpc(
+        use_remote=use_remote,
+        local_call=lambda: calculate_zonal_mean(
             grid_path, data_path, variable_name, lat_spec, conservative
-        )
-
-    from uxarray_mcp.remote.agent import get_agent
-
-    agent = get_agent()
-    if not agent.config.has_endpoint:
-        from .inspection import calculate_zonal_mean
-
-        return calculate_zonal_mean(
-            grid_path, data_path, variable_name, lat_spec, conservative
-        )
-
-    ready, reason = _endpoint_is_ready(agent)
-    if not ready:
-        from .inspection import calculate_zonal_mean
-
-        result = calculate_zonal_mean(
-            grid_path, data_path, variable_name, lat_spec, conservative
-        )
-        result["_provenance"]["warnings"].append(
-            f"HPC endpoint not ready ({reason}); ran locally."
-        )
-        return result
-
-    return _run_sync(
-        lambda: agent.calculate_zonal_mean_remote(
-            grid_path, data_path, variable_name, lat_spec, conservative, use_remote
-        )
+        ),
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.calculate_zonal_mean_remote(
+                grid_path, data_path, variable_name, lat_spec, conservative, use_remote
+            )
+        ),
     )
