@@ -6,7 +6,7 @@ An MCP (Model Context Protocol) server that gives AI agents a mesh-aware assista
 
 **Stable tools:** `inspect_mesh`, `inspect_variable`, `calculate_area`, `calculate_zonal_mean`, `validate_dataset` — work out of the box, no extra setup needed.
 
-**Experimental HPC tools:** `calculate_area_hpc`, `inspect_variable_hpc`, `calculate_zonal_mean_hpc` — require a personal Globus Compute endpoint on an HPC cluster. See [GETTING_STARTED.md](GETTING_STARTED.md), [docs/hpc.md](docs/hpc.md), and [docs/improv.md](docs/improv.md) for setup instructions. Install with:
+**Experimental HPC tools:** `calculate_area_hpc`, `inspect_variable_hpc`, `calculate_zonal_mean_hpc` — require a personal Globus Compute endpoint on an HPC cluster. If you are new to Globus Compute, start with [docs/globus-compute.md](docs/globus-compute.md), then use [GETTING_STARTED.md](GETTING_STARTED.md), [docs/hpc.md](docs/hpc.md), and [docs/improv.md](docs/improv.md). Install with:
 ```bash
 uv sync --extra hpc
 ```
@@ -31,6 +31,23 @@ uv sync
 # With HPC support (Globus Compute + Academy)
 uv sync --extra hpc
 ```
+
+## New to Globus Compute?
+
+Read these in order:
+
+1. [GETTING_STARTED.md](GETTING_STARTED.md)
+2. [docs/globus-compute.md](docs/globus-compute.md)
+3. [docs/hpc.md](docs/hpc.md)
+4. [docs/improv.md](docs/improv.md) if you are on Argonne Improv
+
+The key idea is that there are three different environments:
+
+- the **local machine** running this MCP server
+- the **endpoint** running on the HPC machine
+- the **remote worker environment** that must also have `uxarray` and related scientific packages installed
+
+Most confusing failures come from setting up only one or two of those layers.
 
 ## Testing
 
@@ -179,14 +196,18 @@ hpc:
 **`auto` mode** (default): local for small meshes on local paths; HPC for large meshes or HPC filesystem paths.
 
 **Setup:**
-1. Deploy a Globus Compute endpoint on your HPC system
-2. Add the endpoint UUID to `config.yaml`
-3. Install the remote worker packages:
-   `python -m pip install uxarray xarray netCDF4 h5netcdf`
-4. Authenticate the local machine once with:
+1. Install local HPC support with `uv sync --extra hpc`
+2. Authenticate the local machine once with:
    `uv run python -c "from globus_compute_sdk import Client; Client()"`
-5. Restart the MCP server — HPC tools will appear automatically
-6. Run `validate_hpc_setup()` before your first real remote job
+3. Create a Globus Compute endpoint on your HPC system
+4. Install the remote worker packages in the endpoint environment:
+   `python -m pip install uxarray xarray netCDF4 h5netcdf`
+5. Add the endpoint UUID to `config.yaml`
+6. Restart the MCP server — HPC tools will appear automatically
+7. Run `validate_hpc_setup()` before your first real remote job
+
+If you do not know what an endpoint is or where those packages belong, read
+[docs/globus-compute.md](docs/globus-compute.md) before continuing.
 
 ### HPC Reality Check
 

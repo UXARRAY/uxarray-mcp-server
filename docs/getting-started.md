@@ -39,6 +39,10 @@ uv sync
 uv sync --extra hpc
 ```
 
+If you are new to Globus Compute, read [Globus Compute Primer](globus-compute.md)
+before continuing with HPC setup. That guide explains what an endpoint is and
+what gets installed locally versus remotely.
+
 ### Step 2: Run tests
 
 ```bash
@@ -49,7 +53,15 @@ If you see all green passes, the server is ready.
 
 ### Step 3: (Optional) Configure HPC
 
-If you want to run computations on an HPC system via Globus Compute:
+If you want to run computations on an HPC system via Globus Compute, think
+about the setup in three layers:
+
+1. the **local machine** running this repository
+2. the **endpoint** running on the HPC machine
+3. the **remote worker environment** that must also have `uxarray` and the
+   scientific I/O packages installed
+
+Then configure the local side:
 
 ```bash
 cp config.yaml.example config.yaml
@@ -66,6 +78,18 @@ hpc:
 ```
 
 Leave `endpoint_id` as `null` to run everything locally. HPC tools will only appear when an endpoint is configured.
+
+Before that endpoint UUID will work, you must also:
+
+- on the **local machine**:
+  - run `uv sync --extra hpc`
+  - run `uv run python -c "from globus_compute_sdk import Client; Client()"`
+- on the **remote machine**:
+  - create a Python environment for the endpoint
+  - install `globus-compute-endpoint` and `globus-compute-sdk`
+  - install `uxarray`, `xarray`, `netCDF4`, and `h5netcdf`
+  - run `globus-compute-endpoint configure <endpoint-name>`
+  - start the endpoint and copy its UUID into `config.yaml`
 
 Before you try a real remote file, authenticate the local machine once:
 
@@ -190,6 +214,10 @@ For the full HPC playbook and reusable scripts, see:
   Run `validate_hpc_setup` to catch deeper issues such as missing local Globus
   auth, missing `globus_compute_sdk`, PBS submission failures like
   `qsub: command not found`, or child-endpoint startup problems.
+
+**I do not know what Globus Compute or an endpoint is**
+: Read [Globus Compute Primer](globus-compute.md) first.
+  It explains local machine vs endpoint vs remote worker packages.
 
 **Brand-new cluster bring-up is getting stuck in PBS/SLURM**
 : Start with a single-host endpoint template first. Prove that

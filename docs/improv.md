@@ -3,6 +3,14 @@
 This page captures the exact failure modes we hit while bringing up Argonne
 Improv, plus the reusable fixes that now exist in the repository.
 
+If you are new to Globus Compute, read [Globus Compute Primer](globus-compute.md)
+first. This page assumes you already understand the difference between:
+
+- the local machine
+- the endpoint manager
+- the child endpoint
+- the remote worker environment
+
 ## What Finally Worked
 
 1. Start with a single-host endpoint on one login node only.
@@ -80,7 +88,12 @@ Run the endpoint from one login node only, ideally inside `tmux`.
 On Improv:
 
 ```bash
+python3 -m venv ~/venvs/globus-compute
 source ~/venvs/globus-compute/bin/activate
+python -m pip install -U pip
+python -m pip install globus-compute-endpoint globus-compute-sdk
+python -m pip install uxarray xarray netCDF4 h5netcdf
+globus-compute-endpoint configure improv-uxarray
 scripts/improv_endpoint.sh single-host improv-uxarray
 globus-compute-endpoint start improv-uxarray
 ```
@@ -100,6 +113,8 @@ source ~/venvs/globus-compute/bin/activate
 scripts/improv_endpoint.sh pbs-debug <allocation> improv-uxarray
 globus-compute-endpoint start improv-uxarray
 ```
+
+At that point, rerun `validate_hpc_setup` before trying a real UXarray job.
 
 ## Known Non-Blockers
 

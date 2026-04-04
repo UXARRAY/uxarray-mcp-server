@@ -1,124 +1,125 @@
 # HPC Setup
 
-By default, all tools run locally on your machine. If you have access to an HPC cluster (like Improv, Chrysalis, or any SLURM/PBS system), you can offload heavy computations there instead.
+This page explains how to bring up remote execution on a new HPC machine.
 
-## How It Works
+If you do not already know what Globus Compute, an endpoint, or a worker is,
+read [Globus Compute Primer](globus-compute.md) first.
 
-You set up a small background process (called an "endpoint") on your cluster. When you call a tool with `use_remote=True`, the MCP server sends the job to that endpoint via Globus. It runs on the cluster using the full resources available there, and the result comes back to Claude.
+## The Mental Model
 
-The job travels from your laptop to the Globus cloud to your cluster and back. No open ports or inbound SSH required.
+There are three separate pieces:
 
-## Step 1: Create a Globus Account
+1. **Your local machine**
+   This repository runs here and submits remote work through the Globus Compute SDK.
+2. **The endpoint on the HPC machine**
+   This is the long-lived Globus Compute process that accepts submitted work.
+3. **The worker environment on the HPC machine**
+   This is where `uxarray`, `xarray`, and file access actually happen.
 
-Sign up for free at [globus.org](https://www.globus.org). Use your institutional email if your cluster requires it.
+Many confusing failures come from installing something in only one of those places.
 
-## Step 2: Set Up the Endpoint on Your Cluster
+## What Must Exist Before HPC Tools Will Work
 
-SSH into your cluster and run:
+### On your local machine
 
-```bash
-# Load a conda-compatible Python module (name varies by cluster)
-module load miniforge3   # or anaconda3, miniconda, etc.
+- this repository checked out
+- `uv sync --extra hpc` completed
+- one-time local Globus auth completed
+- `config.yaml` contains the endpoint UUID
 
-# Create a dedicated environment
-conda create -n globus-env python=3.11 -y
-conda activate globus-env
+### On the HPC machine
 
-# Install the endpoint software and remote worker packages
-pip install globus-compute-endpoint uxarray xarray netCDF4 h5netcdf
+- a Python environment for the endpoint
+- `globus-compute-endpoint` installed there
+- the endpoint configured with `globus-compute-endpoint configure <name>`
+- the endpoint running
+- remote scientific packages installed in the same worker environment:
+  - `uxarray`
+  - `xarray`
+  - `netCDF4`
+  - `h5netcdf`
 
-# Create and start your endpoint
-globus-compute-endpoint configure uxarray-endpoint
-globus-compute-endpoint start uxarray-endpoint
-```
+### On scheduler-backed clusters
 
-When the endpoint starts, it may show one or more Globus auth URLs. Open each
-URL in your browser, complete the login, and paste the matching code back at
-the prompt.
+If the endpoint uses PBS or SLURM, the child endpoint must also be able to find
+the scheduler commands it needs. For PBS that usually means `qsub`, `qstat`,
+and `qdel`.
 
-After both codes are accepted, you'll see:
+## Local Setup
 
-```
->>> Endpoint ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx <<<
-```
-
-Copy that UUID — you'll need it in Step 4.
-
-## Step 3: Authenticate the Local Client (One-Time)
-
-Back on your laptop, run this once to authenticate the MCP server's connection to Globus:
+Install repository dependencies:
 
 ```bash
 cd /path/to/uxarray-mcp-server
-uv run python -c "from globus_compute_sdk import Client; Client()"
+uv sync --extra hpc
 ```
 
-A browser auth URL will appear. Visit it, log in, paste the code back. This only needs to be done once — the token is saved locally.
-
-```{warning}
-Run the command above in an interactive terminal. Do not use a heredoc such as
-`python - <<'PY' ... PY`, or Globus will fail to read the pasted authorization
-code from stdin.
-```
-
-## Step 4: Add Your Endpoint UUID
-
-Create a local config file if you don't have one:
+Create a local config file:
 
 ```bash
 cp config.yaml.example config.yaml
 ```
 
-Then edit `config.yaml`:
+Edit `config.yaml`:
 
 ```yaml
 hpc:
   globus_compute:
-    endpoint_id: "your-uuid-here"
+    endpoint_id: "your-endpoint-uuid"
   execution_mode: "auto"
   timeout_seconds: 300
 ```
 
-Restart Claude Desktop after saving.
+Authenticate the local client once:
 
-## Step 5: Validate HPC Readiness
-
-Start with the built-in diagnostic instead of a real remote dataset:
-
-```
-Run validate_hpc_setup
+```bash
+uv run python -c "from globus_compute_sdk import Client; Client()"
 ```
 
-Or validate one exact remote path directly:
-
-```
-Run validate_hpc_setup with probe_timeout_seconds=180 and sample_path="/path/to/file.nc"
-Run probe_path_access on /path/to/file.nc with use_remote=True
+```{warning}
+Run the command above in an interactive terminal. Do not use a heredoc.
+Globus needs to read the pasted authorization code from stdin.
 ```
 
-This goes deeper than `get_execution_mode`. It checks:
+## Remote Setup on the HPC Machine
 
-- local Globus auth and SDK availability
-- endpoint-manager status
-- a tiny real remote-task submission
+Create a dedicated endpoint virtual environment:
 
-That last step is important: an endpoint can be `online` while the spawned user
-endpoint still fails to submit jobs or start workers.
-
-On PBS systems such as Improv, a common failure looks like:
-
-```text
-/bin/sh: qsub: command not found
+```bash
+python3 -m venv ~/venvs/globus-compute
+source ~/venvs/globus-compute/bin/activate
+python -m pip install -U pip
+python -m pip install globus-compute-endpoint globus-compute-sdk
 ```
 
-If that happens, add the PBS tools to the endpoint environment, restart the
-endpoint, then rerun `validate_hpc_setup`.
+Install the remote scientific packages in that same environment:
 
-## New Cluster Bring-Up: Single-Host Validation First
+```bash
+source ~/venvs/globus-compute/bin/activate
+python -m pip install uxarray xarray netCDF4 h5netcdf
+```
 
-Before you debug PBS or SLURM worker lifecycle, prove that the endpoint can run
-one task on the endpoint host and read one real file. Replace the user endpoint
-template with a single-host `LocalProvider` configuration:
+Configure the endpoint profile:
+
+```bash
+globus-compute-endpoint configure uxarray-endpoint
+```
+
+When you start the endpoint for the first time, Globus Compute may prompt for
+browser-based authorization. Complete that flow and keep the endpoint UUID.
+
+## First Bring-Up: Do Not Start With PBS or SLURM
+
+For a brand-new cluster, do not start by debugging scheduler submission and
+UXarray at the same time.
+
+Start with a single-host validation mode first. This proves:
+
+- the endpoint can run real remote code
+- the worker environment can import packages
+- the worker can read a real file
+
+Use a `LocalProvider` template first:
 
 ```yaml
 endpoint_setup: ""
@@ -138,68 +139,138 @@ idle_heartbeats_soft: 10
 idle_heartbeats_hard: 5760
 ```
 
-Use this mode to verify:
+On Argonne Improv, you can write this template with:
 
-- `validate_hpc_setup(probe_timeout_seconds=180, sample_path="/path/to/file.nc")`
-- `probe_path_access("/path/to/file.nc", use_remote=True)`
+```bash
+scripts/improv_endpoint.sh single-host improv-uxarray
+```
 
-Once those pass, switch the template back to PBS or SLURM and debug scheduler
-submission separately.
+Then start the endpoint:
+
+```bash
+source ~/venvs/globus-compute/bin/activate
+globus-compute-endpoint start uxarray-endpoint
+```
+
+## What to Run First
+
+From your local machine, do not start with `inspect_mesh_hpc`.
+
+Run:
+
+```bash
+uv run python scripts/hpc_doctor.py --timeout-seconds 180
+```
+
+Then, if you have a real target file:
+
+```bash
+uv run python scripts/hpc_doctor.py \
+  --timeout-seconds 180 \
+  --sample-path /path/to/file.nc
+```
+
+Or from the MCP client:
+
+```text
+Run validate_hpc_setup
+Run validate_hpc_setup with probe_timeout_seconds=180 and sample_path="/path/to/file.nc"
+Run probe_path_access on /path/to/file.nc with use_remote=True
+```
+
+These checks validate, in order:
+
+1. local config
+2. local Globus auth and dependency availability
+3. endpoint-manager status
+4. a tiny real remote task
+5. optional real-path accessibility
+
+## Only After That, Run UXarray Tools
+
+Once the remote runtime and file path are proven, then use:
+
+```text
+Use inspect_mesh_hpc on /path/to/grid.nc with use_remote=True
+Use inspect_variable_hpc on /path/to/grid.nc and /path/to/data.nc with use_remote=True
+```
+
+## Switching Back to PBS or SLURM
+
+After single-host validation succeeds, switch to your scheduler-backed
+configuration.
+
+On PBS systems you must also ensure the child endpoint can find scheduler
+commands. If not, you will see failures such as:
+
+```text
+/bin/sh: qsub: command not found
+```
+
+That is a remote endpoint-environment problem, not a local MCP problem.
+
+On Improv, the helper script writes a PBS debug template and adds PBS commands
+to the environment:
+
+```bash
+scripts/improv_endpoint.sh pbs-debug <allocation> improv-uxarray
+```
+
+Then restart the endpoint and rerun `validate_hpc_setup`.
 
 ## Common Misses
 
-- `get_execution_mode()` saying `online` is not enough. Always run `validate_hpc_setup()` before the first real remote job.
-- The remote worker may need the canonical filesystem path, not a login-node alias. Prefer `readlink -f` and the real shared filesystem path.
-- PBS systems may need `/opt/pbs/bin` in the child endpoint environment.
-- Remote worker packages matter separately from local packages. The endpoint can be healthy while `uxarray` is still missing remotely.
-- Stale `daemon.pid` files and multiple login nodes can make the child endpoint fail even when the manager is healthy.
-- Local Globus auth must be done from an interactive terminal, not a heredoc.
+### `get_execution_mode()` says `online`, but real jobs fail
 
-## Step 6: Use Remote Execution
+That usually means the endpoint manager is healthy while the child endpoint or
+worker is not. Use `validate_hpc_setup()` instead of trusting manager health.
 
-Now any HPC-capable tool accepts a `use_remote` flag:
+### The file path looks correct on the login node, but the worker says it does not exist
 
+Use the canonical shared filesystem path. The worker may not resolve shell
+aliases like `/home/...` the same way your interactive login shell does.
+
+Prefer:
+
+```bash
+readlink -f /path/to/file
 ```
-Use calculate_area_hpc on healpix:2 with use_remote=True
-```
 
-Claude will send the job to your cluster and return the result.
+### `uxarray` is missing remotely
+
+That means the endpoint is alive but the scientific packages are not installed
+in the worker environment.
+
+### Multiple login nodes cause stale PID problems
+
+If you start and stop the endpoint from different login nodes, you can get:
+
+- stale `daemon.pid`
+- child endpoint conflicts
+- "another instance is running"
+
+Use one login node only and run the endpoint inside `tmux`.
 
 ## Execution Modes
 
 | Mode | Behavior |
 |------|----------|
 | `local` | Always run on your machine |
-| `hpc` | Always send to the HPC endpoint (fails if endpoint is down) |
-| `auto` | Local for small meshes on local paths; HPC for large meshes or HPC filesystem paths |
+| `hpc` | Always send to the endpoint |
+| `auto` | Use HPC for known HPC paths or large meshes |
 
-**Auto mode** uses two signals to decide:
-- **File path** — paths on known HPC filesystems (`/home/`, `/lus/`, `/grand/`, `/scratch/`, `/projects/`, `/gpfs/`) route to HPC
-- **Mesh size** — meshes with more than 1 million faces route to HPC
+Auto-routing uses:
 
-You can switch modes at runtime from Claude without editing config files:
+- filesystem prefixes such as `/home/`, `/lus/`, `/scratch/`, `/projects/`, `/gpfs/`
+- mesh size thresholds for very large grids
 
-```
-Switch to HPC execution mode
-Set execution back to local
-```
+## Scripts and Guides
 
-## Keeping the Endpoint Running
+Use these together:
 
-The endpoint process needs to be running on your cluster whenever you want to use `use_remote=True`. If you log out, it may stop. To check:
-
-```bash
-globus-compute-endpoint list
-```
-
-To restart if stopped:
-
-```bash
-module load miniforge3
-conda activate globus-env
-globus-compute-endpoint start uxarray-endpoint
-```
-
-```{note}
-The endpoint UUID in `config.yaml` is personal — it's tied to your Globus account and your cluster allocation. Each user needs to set up their own endpoint.
-```
+- [Globus Compute Primer](globus-compute.md)
+- [Improv Playbook](improv.md)
+- [Agentic Workflows](workflows.md)
+- `scripts/hpc_doctor.py`
+- `scripts/improv_endpoint.sh`
+- `scripts/agentic_hpc_loop.py`

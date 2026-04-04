@@ -173,7 +173,7 @@ on a new cluster before trying UXarray-specific tools.
 
 For repeatable bring-up and debugging, see:
 
-- `scripts/hpc_doctor.py`
+- `scripts/hpc_doctor.py` — first-pass CLI doctor for local auth, endpoint status, remote no-op execution, and optional real-path probing
 - `scripts/agentic_hpc_loop.py`
 - `scripts/improv_endpoint.sh`
 
