@@ -23,4 +23,4 @@ echo "[SETUP] Running automated tests (no external data required)..."
 uv run pytest tests/ --ignore=tests/test_remote_agent.py
 
 echo ""
-echo "[SUCCESS] Review the 'GETTING_STARTED.md' for next steps."
+echo "[SUCCESS] Review 'GETTING_STARTED.md' for local setup and 'docs/hpc.md' for HPC bring-up."

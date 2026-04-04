@@ -157,6 +157,12 @@ Switch to HPC execution mode
 Analyze /lus/grand/projects/climate/mesh.nc — use remote execution
 ```
 
+**Prove that one exact remote file is readable first:**
+```
+Run validate_hpc_setup with probe_timeout_seconds=180 and sample_path="/path/to/file.nc"
+Run probe_path_access on /path/to/file.nc with use_remote=True
+```
+
 ---
 
 ## Troubleshooting
@@ -171,6 +177,11 @@ Install with `pip install uv`, then update your config with the full path from `
 
 **HPC tools not appearing**
 Make sure `endpoint_id` is set in `config.yaml` (not `null`), then restart the server.
+
+**Remote endpoint is online but a real file still will not open**
+Start with a single-host endpoint template first, then run
+`validate_hpc_setup(..., sample_path=...)` and `probe_path_access(..., use_remote=True)`.
+Only switch back to PBS or SLURM after that works.
 
 **Tests failing**
 ```bash
@@ -206,100 +217,11 @@ uv run pytest -v # run with verbose output
 
 ## Optional: Run Tools on an HPC Cluster
 
-By default, all tools run locally on your machine. If you have access to an HPC cluster (like Improv, Chrysalis, or any SLURM/PBS system), you can offload heavy computations there instead. The job travels from your laptop → Globus cloud → your cluster → back to Claude. No open ports or inbound SSH required.
+For the full HPC setup, debugging workflow, and endpoint templates, use:
 
-### How it works
-
-You set up a small background process (called an "endpoint") on your cluster. When you call a tool with `use_remote=True`, the MCP server sends the job to that endpoint via Globus, it runs on the cluster using the full resources available there, and the result comes back to Claude.
-
-### Step 1: Create a Globus account
-
-Sign up for free at [globus.org](https://www.globus.org). Use your institutional email if your cluster requires it.
-
-### Step 2: Set up the endpoint on your cluster
-
-SSH into your cluster and run:
-
-```bash
-# Load a conda-compatible Python module (name varies by cluster)
-module load miniforge3   # or anaconda3, miniconda, etc.
-
-# Create a dedicated environment
-conda create -n globus-env python=3.11 -y
-conda activate globus-env
-
-# Install the endpoint software and uxarray
-pip install globus-compute-endpoint uxarray
-
-# Create and start your endpoint
-globus-compute-endpoint configure uxarray-endpoint
-globus-compute-endpoint start uxarray-endpoint
-```
-
-When the endpoint starts, it will show a Globus auth URL **twice** — each one needs its own unique code from the browser. Open each URL in a new browser tab, complete the login, and paste the code back at each prompt. After both codes are accepted, you'll see:
-
-```
->>> Endpoint ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx <<<
-```
-
-Copy that UUID — you'll need it in Step 4.
-
-### Step 3: Authenticate the local client (one-time)
-
-Back on your laptop, run this once to authenticate the MCP server's connection to Globus:
-
-```bash
-cd /path/to/uxarray-mcp-server
-uv run python -c "from globus_compute_sdk import Client; Client()"
-```
-
-A browser auth URL will appear. Visit it, log in, paste the code back. This only needs to be done once — the token is saved locally.
-
-### Step 4: Add your endpoint UUID to config.yaml
-
-If you do not already have one, create a local config file first:
-
-```bash
-cp config.yaml.example config.yaml
-```
-
-Then open `config.yaml` in the project root and add your UUID:
-
-```yaml
-hpc:
-  globus_compute:
-    endpoint_id: "your-uuid-here"
-
-  execution_mode: "auto"
-  timeout_seconds: 300
-```
-
-Restart Claude Desktop after saving.
-
-### Step 5: Use remote execution
-
-Now any HPC-capable tool accepts a `use_remote` flag:
-
-```
-Use calculate_area_hpc on healpix:2 with use_remote=True
-```
-
-Claude will send the job to your cluster and return the result.
-
-### Keeping the endpoint running
-
-The endpoint process needs to be running on your cluster whenever you want to use `use_remote=True`. If you log out, it may stop. To check:
-
-```bash
-globus-compute-endpoint list
-```
-
-To restart if stopped:
-
-```bash
-module load miniforge3
-conda activate globus-env
-globus-compute-endpoint start uxarray-endpoint
-```
-
-> **Note:** The endpoint UUID in `config.yaml` is personal — it's tied to your Globus account and your cluster allocation. Each user needs to set up their own endpoint.
+- [docs/hpc.md](docs/hpc.md) for the generic cluster bring-up flow
+- [docs/improv.md](docs/improv.md) for the exact Argonne Improv lessons learned
+- [docs/workflows.md](docs/workflows.md) for sequential submit/poll/branch workflows
+- `scripts/hpc_doctor.py` for local diagnostics
+- `scripts/improv_endpoint.sh` for Improv endpoint templates
+- `scripts/agentic_hpc_loop.py` for a working example of a multi-step remote workflow

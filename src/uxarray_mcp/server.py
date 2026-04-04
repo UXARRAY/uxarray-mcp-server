@@ -14,8 +14,10 @@ from uxarray_mcp.tools import (
     inspect_mesh_hpc,
     inspect_variable,
     inspect_variable_hpc,
+    probe_path_access,
     run_scientific_agent,
     set_execution_mode,
+    validate_hpc_setup,
     validate_dataset,
 )
 
@@ -37,7 +39,9 @@ mcp.tool()(validate_dataset)
 
 # Execution mode control — always registered so users can switch modes
 mcp.tool()(get_execution_mode)
+mcp.tool()(probe_path_access)
 mcp.tool()(set_execution_mode)
+mcp.tool()(validate_hpc_setup)
 
 # HPC tools — only register when an endpoint is configured
 if load_config().has_endpoint:

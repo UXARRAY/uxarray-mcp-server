@@ -13,6 +13,8 @@ via Globus Compute.
    getting-started
    tools
    hpc
+   improv
+   workflows
    scientific-agent
 
 .. toctree::

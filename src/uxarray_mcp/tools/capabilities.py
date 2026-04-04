@@ -226,6 +226,24 @@ def get_capabilities(
             ),
             "call_example": f"validate_dataset({gp}{dp})",
         },
+        {
+            "name": "validate_hpc_setup",
+            "applicable": True,
+            "reason": (
+                "Available — validates local Globus auth, endpoint status, and "
+                "optionally submits a tiny remote probe to catch scheduler/bootstrap failures."
+            ),
+            "call_example": "validate_hpc_setup()",
+        },
+        {
+            "name": "probe_path_access",
+            "applicable": True,
+            "reason": (
+                "Available — proves whether the exact target path is readable "
+                "before debugging UXarray parsing or scheduler behavior."
+            ),
+            "call_example": 'probe_path_access("/path/to/file.nc", use_remote=True)',
+        },
     ]
 
     if load_config().has_endpoint:

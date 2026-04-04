@@ -67,6 +67,18 @@ hpc:
 
 Leave `endpoint_id` as `null` to run everything locally. HPC tools will only appear when an endpoint is configured.
 
+Before you try a real remote file, authenticate the local machine once:
+
+```bash
+uv run python -c "from globus_compute_sdk import Client; Client()"
+```
+
+```{warning}
+Run the command above in a normal interactive terminal. Do not wrap it in a
+heredoc such as `python - <<'PY' ... PY`, or the Globus prompt will fail with
+an EOF error because stdin is already consumed.
+```
+
 ### Step 4: Configure Claude Desktop
 
 Find your config file:
@@ -141,6 +153,25 @@ What is the current execution mode?
 Switch to HPC execution mode
 ```
 
+**Validate the full HPC path before a real job:**
+
+```
+Run validate_hpc_setup
+```
+
+**Validate one exact remote file before debugging UXarray parsing:**
+
+```
+Run validate_hpc_setup with probe_timeout_seconds=180 and sample_path="/path/to/file.nc"
+Run probe_path_access on /path/to/file.nc with use_remote=True
+```
+
+For the full HPC playbook and reusable scripts, see:
+
+- [HPC Setup](hpc.md)
+- [Improv Playbook](improv.md)
+- [Agentic HPC Workflows](workflows.md)
+
 ## Troubleshooting
 
 **"Command not found: uv"**
@@ -153,6 +184,22 @@ Switch to HPC execution mode
 
 **HPC tools not appearing**
 : Make sure `endpoint_id` is set in `config.yaml` (not `null`), then restart the server.
+
+**Endpoint looks online but remote tasks still fail**
+: `get_execution_mode` only confirms the endpoint manager is reachable.
+  Run `validate_hpc_setup` to catch deeper issues such as missing local Globus
+  auth, missing `globus_compute_sdk`, PBS submission failures like
+  `qsub: command not found`, or child-endpoint startup problems.
+
+**Brand-new cluster bring-up is getting stuck in PBS/SLURM**
+: Start with a single-host endpoint template first. Prove that
+  `validate_hpc_setup(..., sample_path=...)` and `probe_path_access(..., use_remote=True)`
+  work on one real file, then switch the endpoint back to PBS/SLURM.
+
+**I want reusable CLI helpers, not just MCP prompts**
+: Use `scripts/hpc_doctor.py` for local diagnostics,
+  `scripts/agentic_hpc_loop.py` for sequential remote workflows, and
+  `scripts/improv_endpoint.sh` when configuring Argonne Improv.
 
 **Tests failing**
 : Run `uv sync` to reinstall dependencies, then `uv run pytest -v` for verbose output.

@@ -1,5 +1,10 @@
 from .capabilities import get_capabilities
-from .execution_control import get_execution_mode, set_execution_mode
+from .execution_control import (
+    get_execution_mode,
+    probe_path_access,
+    set_execution_mode,
+    validate_hpc_setup,
+)
 from .inspection import (
     calculate_area,
     calculate_zonal_mean,
@@ -28,5 +33,7 @@ __all__ = [
     "inspect_variable_hpc",
     "calculate_zonal_mean_hpc",
     "get_execution_mode",
+    "probe_path_access",
     "set_execution_mode",
+    "validate_hpc_setup",
 ]
