@@ -10,6 +10,7 @@ from uxarray_mcp.tools.execution_control import probe_path_access, validate_hpc_
 
 
 def main() -> int:
+    """Parse CLI arguments, run diagnostics, and emit a JSON report."""
     parser = argparse.ArgumentParser(
         description=(
             "Validate local Globus auth, endpoint status, and optional remote "

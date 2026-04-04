@@ -5,6 +5,8 @@ They must be FULLY SELF-CONTAINED — only import packages available on the HPC
 environment (uxarray, numpy, etc.). Never import from uxarray_mcp here.
 """
 
+from __future__ import annotations
+
 from typing import Any, Dict, Optional
 
 

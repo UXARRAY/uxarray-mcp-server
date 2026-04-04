@@ -1,5 +1,7 @@
 """Shared variable inspection logic."""
 
+from __future__ import annotations
+
 from typing import Any, Optional
 
 

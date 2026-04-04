@@ -1,5 +1,7 @@
 """Autonomous scientific agent implementing Analyze -> Plan -> Execute -> Verify loop."""
 
+from __future__ import annotations
+
 import math
 from typing import Any
 
