@@ -6,7 +6,7 @@ An MCP (Model Context Protocol) server that gives AI agents a mesh-aware assista
 
 **Stable tools:** `inspect_mesh`, `inspect_variable`, `calculate_area`, `calculate_zonal_mean`, `validate_dataset` — work out of the box, no extra setup needed.
 
-**Experimental HPC tools:** `calculate_area_hpc`, `inspect_variable_hpc`, `calculate_zonal_mean_hpc` — require a personal Globus Compute endpoint on an HPC cluster. See [GETTING_STARTED.md](GETTING_STARTED.md) for setup instructions. Install with:
+**Experimental HPC tools:** `calculate_area_hpc`, `inspect_variable_hpc`, `calculate_zonal_mean_hpc` — require a personal Globus Compute endpoint on an HPC cluster. See [GETTING_STARTED.md](GETTING_STARTED.md), [docs/hpc.md](docs/hpc.md), and [docs/improv.md](docs/improv.md) for setup instructions. Install with:
 ```bash
 uv sync --extra hpc
 ```
@@ -14,11 +14,13 @@ uv sync --extra hpc
 ## Features
 
 - **Autonomous scientific agent** — Analyze → Plan → Execute → Verify loop with full reasoning trace
+- **HPC doctoring built in** — validate local auth, endpoint health, and exact remote paths before running real jobs
 - **Provenance on every output** — every tool result carries `_provenance` with timestamp, versions, venue, and artifacts
 - **Validation-gated workflows** — dataset validation runs before zonal mean; failures skip unreliable downstream steps
 - **Dynamic tool registration** — HPC tools only appear in the tool list when an endpoint is configured
 - **Execution mode control** — switch between `local`, `hpc`, and `auto` from the Claude UI without touching config files
 - **Local + HPC execution** — files on HPC filesystems or meshes >1M faces are automatically routed to Globus Compute
+- **Reusable bring-up scripts** — endpoint templating, local doctoring, and a sequential remote workflow example
 
 ## Installation
 
@@ -39,6 +41,14 @@ uv run pytest tests/ --ignore=tests/test_remote_agent.py
 # Full suite including HPC safety tests
 uv run pytest tests/
 ```
+
+## Scripts
+
+The repository includes reusable helpers under `scripts/`:
+
+- `scripts/hpc_doctor.py` — local validation wrapper around `validate_hpc_setup` and `probe_path_access`
+- `scripts/agentic_hpc_loop.py` — example submit/poll/branch workflow using Globus Compute futures directly
+- `scripts/improv_endpoint.sh` — Improv helper for switching between single-host validation and PBS debug templates
 
 ## Tools Available
 
@@ -115,6 +125,32 @@ Ask Claude: "Set execution back to local"
 
 ---
 
+#### `validate_hpc_setup(run_remote_probe=True, probe_timeout_seconds=30)`
+Validates local Globus auth, endpoint status, and optionally submits a tiny
+remote task so scheduler/bootstrap failures surface before you run a real job.
+
+Use this when `get_execution_mode()` says the endpoint is online but actual
+remote calls still hang or fall back locally.
+
+```
+Ask Claude: "Validate the HPC setup"
+Ask Claude: "Run validate_hpc_setup without the remote probe"
+Ask Claude: "Run validate_hpc_setup with sample_path='/path/to/file.nc'"
+```
+
+---
+
+#### `probe_path_access(file_path, use_remote=False, inspect_netcdf=True)`
+Proves whether the exact target path is readable before you debug UXarray
+parsing or scheduler behavior. When possible, it also tries a generic NetCDF
+open and returns dims and variable names.
+
+```
+Ask Claude: "Probe /path/to/file.nc with remote execution"
+```
+
+---
+
 ### HPC Tools *(only registered when an endpoint is configured)*
 
 #### `inspect_mesh_hpc(file_path, use_remote=False)`
@@ -145,8 +181,63 @@ hpc:
 **Setup:**
 1. Deploy a Globus Compute endpoint on your HPC system
 2. Add the endpoint UUID to `config.yaml`
-3. Install UXarray on the remote environment (the server uses `AllCodeStrategies` serialization so `uxarray_mcp` itself does not need to be installed remotely)
-4. Restart the MCP server — HPC tools will appear automatically
+3. Install the remote worker packages:
+   `python -m pip install uxarray xarray netCDF4 h5netcdf`
+4. Authenticate the local machine once with:
+   `uv run python -c "from globus_compute_sdk import Client; Client()"`
+5. Restart the MCP server — HPC tools will appear automatically
+6. Run `validate_hpc_setup()` before your first real remote job
+
+### HPC Reality Check
+
+An endpoint showing `online` only proves the endpoint manager is reachable.
+It does **not** prove that the spawned user endpoint can submit jobs or run a
+worker. On PBS systems such as Argonne Improv, the most common failure mode is
+that the child endpoint cannot find `qsub`. In that case:
+
+- add `/opt/pbs/bin` to the endpoint environment
+- restart the endpoint
+- re-run `validate_hpc_setup()`
+
+### First Bring-Up on a New Cluster
+
+Do not start with the full scheduler-backed UXarray path. Start with a
+single-host endpoint first, prove that a remote task can read a real file, then
+switch to PBS or SLURM.
+
+Use the Globus Compute default `LocalProvider`-style template as your first
+validation mode:
+
+```yaml
+endpoint_setup: ""
+
+engine:
+  type: GlobusComputeEngine
+  max_workers_per_node: 1
+  provider:
+    type: LocalProvider
+    min_blocks: 0
+    max_blocks: 1
+    init_blocks: 1
+    worker_init: |
+      source ~/venvs/globus-compute/bin/activate
+
+idle_heartbeats_soft: 10
+idle_heartbeats_hard: 5760
+```
+
+Then run:
+
+```
+Ask Claude: "Run validate_hpc_setup with probe_timeout_seconds=180 and sample_path='/path/to/file.nc'"
+Ask Claude: "Probe /path/to/file.nc with remote execution"
+```
+
+Once those succeed, switch the endpoint template to your scheduler provider and
+debug queue/worker lifecycle separately.
+
+For a concrete Argonne Improv playbook, see [docs/improv.md](docs/improv.md).
+For sequential remote orchestration, see [docs/workflows.md](docs/workflows.md).
 
 ## Provenance
 

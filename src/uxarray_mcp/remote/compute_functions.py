@@ -8,6 +8,86 @@ environment (uxarray, numpy, etc.). Never import from uxarray_mcp here.
 from typing import Any, Dict, Optional
 
 
+def remote_runtime_probe() -> Dict[str, Any]:
+    """Return lightweight runtime diagnostics from the remote worker.
+
+    This intentionally does not touch UXarray or the filesystem. The goal is to
+    prove that a submitted task can reach a real worker and report back enough
+    environment detail to diagnose scheduler/bootstrap issues.
+    """
+    import getpass
+    import os
+    import platform
+    import shutil
+    import socket
+
+    return {
+        "hostname": socket.gethostname(),
+        "user": getpass.getuser(),
+        "cwd": os.getcwd(),
+        "python_version": platform.python_version(),
+        "qsub_path": shutil.which("qsub"),
+        "path_head": os.environ.get("PATH", "").split(":")[:5],
+    }
+
+
+def remote_probe_path(file_path: str, inspect_netcdf: bool = True) -> Dict[str, Any]:
+    """Return remote path accessibility details.
+
+    This is intentionally simpler than UXarray inspection. The goal is to prove
+    that a remote worker can reach and read the exact target path before
+    debugging mesh parsing or scheduler fan-out.
+    """
+    import os
+    import socket
+    from pathlib import Path
+
+    path = Path(file_path)
+    exists = path.exists()
+    is_file = path.is_file()
+    readable = os.access(path, os.R_OK) if exists else False
+
+    result: Dict[str, Any] = {
+        "path": str(path),
+        "hostname": socket.gethostname(),
+        "exists": exists,
+        "is_file": is_file,
+        "readable": readable,
+    }
+
+    if exists:
+        stat = path.stat()
+        result["size_bytes"] = int(stat.st_size)
+        result["mtime_epoch"] = float(stat.st_mtime)
+
+        try:
+            with path.open("rb") as handle:
+                result["header_hex"] = handle.read(8).hex()
+        except Exception as exc:
+            result["header_error"] = f"{type(exc).__name__}: {exc}"
+
+    if inspect_netcdf and exists and readable and is_file:
+        try:
+            import xarray as xr
+
+            with xr.open_dataset(file_path, decode_cf=False) as ds:
+                result["netcdf"] = {
+                    "opened": True,
+                    "dims": {name: int(size) for name, size in ds.sizes.items()},
+                    "data_vars": list(ds.data_vars)[:20],
+                    "coords": list(ds.coords)[:20],
+                    "attrs_keys": sorted(list(ds.attrs.keys()))[:20],
+                }
+        except Exception as exc:
+            result["netcdf"] = {
+                "opened": False,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+
+    return result
+
+
 def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
     """Inspect mesh topology on remote HPC node.
 
