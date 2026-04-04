@@ -17,8 +17,8 @@ from uxarray_mcp.tools import (
     probe_path_access,
     run_scientific_agent,
     set_execution_mode,
-    validate_hpc_setup,
     validate_dataset,
+    validate_hpc_setup,
 )
 
 # Initialize the MCP server
