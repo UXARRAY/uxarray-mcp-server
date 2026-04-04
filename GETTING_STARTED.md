@@ -41,6 +41,10 @@ uv sync
 uv sync --extra hpc
 ```
 
+If you are new to Globus Compute, read [docs/globus-compute.md](docs/globus-compute.md)
+before continuing with HPC setup. That guide explains the terms and the split
+between local-machine setup, endpoint setup, and remote-worker packages.
+
 ### Step 2: Run Tests
 
 ```bash
@@ -56,7 +60,15 @@ If you see green passes, the server is ready.
 
 ### Step 3: (Optional) Configure HPC
 
-If you want to run computations on an HPC system via Globus Compute, first create a local config file:
+If you want to run computations on an HPC system via Globus Compute, think
+about the setup in three layers:
+
+1. the **local machine** running this repository
+2. the **endpoint** running on the HPC machine
+3. the **remote worker environment** that must also have `uxarray` and other
+   scientific packages installed
+
+First create a local config file:
 
 ```bash
 cp config.yaml.example config.yaml
@@ -73,6 +85,18 @@ hpc:
 ```
 
 Leave `endpoint_id` as `null` to run everything locally. HPC tools will only appear in Claude's tool list when an endpoint is configured.
+
+Before that endpoint UUID will actually work, you must also:
+
+- on the **local machine**:
+  - run `uv sync --extra hpc`
+  - run `uv run python -c "from globus_compute_sdk import Client; Client()"`
+- on the **remote machine**:
+  - create a virtual environment for the endpoint
+  - install `globus-compute-endpoint` and `globus-compute-sdk`
+  - install `uxarray`, `xarray`, `netCDF4`, and `h5netcdf`
+  - run `globus-compute-endpoint configure <endpoint-name>`
+  - start the endpoint and copy its UUID into `config.yaml`
 
 ### Step 4: Configure Claude Desktop
 
@@ -178,6 +202,11 @@ Install with `pip install uv`, then update your config with the full path from `
 **HPC tools not appearing**
 Make sure `endpoint_id` is set in `config.yaml` (not `null`), then restart the server.
 
+**I do not know what Globus Compute or an endpoint is**
+Read [docs/globus-compute.md](docs/globus-compute.md) first. It explains what
+gets installed locally versus remotely, what an endpoint does, and why the
+remote worker also needs `uxarray`.
+
 **Remote endpoint is online but a real file still will not open**
 Start with a single-host endpoint template first, then run
 `validate_hpc_setup(..., sample_path=...)` and `probe_path_access(..., use_remote=True)`.
@@ -219,6 +248,7 @@ uv run pytest -v # run with verbose output
 
 For the full HPC setup, debugging workflow, and endpoint templates, use:
 
+- [docs/globus-compute.md](docs/globus-compute.md) for the first-time-user Globus Compute explanation
 - [docs/hpc.md](docs/hpc.md) for the generic cluster bring-up flow
 - [docs/improv.md](docs/improv.md) for the exact Argonne Improv lessons learned
 - [docs/workflows.md](docs/workflows.md) for sequential submit/poll/branch workflows

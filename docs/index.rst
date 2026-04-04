@@ -11,6 +11,7 @@ via Globus Compute.
    :caption: User Guide
 
    getting-started
+   globus-compute
    tools
    hpc
    improv
