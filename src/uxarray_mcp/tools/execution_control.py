@@ -16,6 +16,14 @@ _VALID_MODES = ("local", "hpc", "auto")
 _CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "config.yaml"
 
 
+def _load_globus_compute_sdk():
+    """Load Globus Compute SDK classes only when HPC functionality is needed."""
+    from globus_compute_sdk import Client, Executor
+    from globus_compute_sdk.serialize import AllCodeStrategies, ComputeSerializer
+
+    return Client, Executor, AllCodeStrategies, ComputeSerializer
+
+
 def _make_check(
     name: str,
     passed: bool,
@@ -230,8 +238,9 @@ def validate_hpc_setup(
         return attach_provenance(result, tool="validate_hpc_setup", inputs={})
 
     try:
-        from globus_compute_sdk import Client, Executor
-        from globus_compute_sdk.serialize import AllCodeStrategies, ComputeSerializer
+        Client, Executor, AllCodeStrategies, ComputeSerializer = (
+            _load_globus_compute_sdk()
+        )
     except ImportError as exc:
         checks.append(
             _make_check(

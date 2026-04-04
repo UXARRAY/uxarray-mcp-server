@@ -108,10 +108,13 @@ def test_validate_hpc_setup_surfaces_remote_probe_failure(monkeypatch, tmp_path)
     mock_future.result.side_effect = RuntimeError("/bin/sh: qsub: command not found")
     mock_executor = MagicMock()
     mock_executor.submit.return_value = mock_future
+    mock_client_cls = MagicMock(return_value=mock_client)
+    mock_executor_cls = MagicMock(return_value=mock_executor)
 
-    with (
-        patch("globus_compute_sdk.Client", return_value=mock_client),
-        patch("globus_compute_sdk.Executor", return_value=mock_executor),
+    with patch.object(
+        execution_control,
+        "_load_globus_compute_sdk",
+        return_value=(mock_client_cls, mock_executor_cls, MagicMock(), MagicMock()),
     ):
         result = execution_control.validate_hpc_setup(run_remote_probe=True)
 
@@ -140,10 +143,13 @@ def test_validate_hpc_setup_surfaces_systemexit_guidance(monkeypatch, tmp_path):
     )
     mock_executor = MagicMock()
     mock_executor.submit.return_value = mock_future
+    mock_client_cls = MagicMock(return_value=mock_client)
+    mock_executor_cls = MagicMock(return_value=mock_executor)
 
-    with (
-        patch("globus_compute_sdk.Client", return_value=mock_client),
-        patch("globus_compute_sdk.Executor", return_value=mock_executor),
+    with patch.object(
+        execution_control,
+        "_load_globus_compute_sdk",
+        return_value=(mock_client_cls, mock_executor_cls, MagicMock(), MagicMock()),
     ):
         result = execution_control.validate_hpc_setup(run_remote_probe=True)
 
@@ -179,10 +185,13 @@ def test_validate_hpc_setup_can_probe_sample_path(monkeypatch, tmp_path):
 
     mock_executor = MagicMock()
     mock_executor.submit.side_effect = [mock_runtime_future, mock_path_future]
+    mock_client_cls = MagicMock(return_value=mock_client)
+    mock_executor_cls = MagicMock(return_value=mock_executor)
 
-    with (
-        patch("globus_compute_sdk.Client", return_value=mock_client),
-        patch("globus_compute_sdk.Executor", return_value=mock_executor),
+    with patch.object(
+        execution_control,
+        "_load_globus_compute_sdk",
+        return_value=(mock_client_cls, mock_executor_cls, MagicMock(), MagicMock()),
     ):
         result = execution_control.validate_hpc_setup(
             run_remote_probe=True,
