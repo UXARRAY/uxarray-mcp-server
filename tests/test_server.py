@@ -19,7 +19,9 @@ async def test_inspect_mesh_tool_registered():
         "calculate_zonal_mean",
         "validate_dataset",
         "get_execution_mode",
+        "probe_path_access",
         "set_execution_mode",
+        "validate_hpc_setup",
     }
     assert expected_tools.issubset(set(tools.keys()))
 

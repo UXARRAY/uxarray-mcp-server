@@ -1,5 +1,7 @@
 """Configuration management for remote execution."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Optional
 
