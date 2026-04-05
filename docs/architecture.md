@@ -4,18 +4,74 @@ The UXarray MCP Server is organized into three layers:
 
 ## Layer Overview
 
-```
-MCP Client (Claude, Cline, etc.)
-        |
-        v
-   Tools Layer        — MCP-facing functions (tools/)
-        |
-        v
-   Domain Layer       — Pure computation logic (domain/)
-        |
-        v
-   UXarray / HPC      — UXarray library + optional Globus Compute
-```
+<div class="arch-flow">
+  <div class="arch-box">
+    <strong>MCP Client</strong><br>
+    Claude, Cline, Continue, or another MCP-compatible client
+  </div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-box">
+    <strong>FastMCP Server</strong><br>
+    Registers tools from <code>uxarray_mcp.server</code> and exposes them to the client
+  </div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-box">
+    <strong>Tools Layer</strong><br>
+    Input handling, routing, provenance, diagnostics, and optional HPC wrappers
+  </div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-box">
+    <strong>Domain Layer</strong><br>
+    Pure computation logic shared by local and remote execution paths
+  </div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-grid">
+    <div class="arch-box">
+      <strong>Local Path</strong><br>
+      UXarray runs directly on the machine hosting the MCP server
+    </div>
+    <div class="arch-box">
+      <strong>Remote Path</strong><br>
+      Globus Compute submits work to a configured endpoint on an HPC system
+    </div>
+  </div>
+</div>
+
+## Current High-Level Flow
+
+### Local execution
+
+1. The MCP client calls a tool such as `inspect_mesh`.
+2. The tool implementation in `tools/` validates inputs and chooses the local path.
+3. The shared computation in `domain/` runs through UXarray.
+4. The result gets a `_provenance` block and is returned to the client.
+
+### Remote execution
+
+1. The MCP client calls a tool such as `inspect_mesh_hpc(..., use_remote=True)`.
+2. The HPC wrapper checks endpoint readiness and configuration.
+3. The remote agent submits a self-contained function from `remote/compute_functions.py` through Globus Compute.
+4. The endpoint receives that function and runs it in the remote worker environment.
+5. The result comes back to the local machine, where provenance is attached before returning it to the client.
+
+## Important Terms
+
+### Globus Compute
+
+The remote function-execution system used by this repository. It moves Python
+functions from the local machine to the remote endpoint and returns the result.
+
+### Endpoint
+
+A named Globus Compute service running on the remote machine or cluster. The
+endpoint manager stays connected to Globus and starts the child endpoint and
+worker processes that execute submitted functions.
+
+### Academy
+
+The lightweight agent abstraction used in `remote/agent.py` to organize local
+and remote actions. It is a convenience layer inside this repo, not the
+transport itself. Globus Compute is still the actual remote execution system.
 
 ## Tools Layer (`tools/`)
 

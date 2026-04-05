@@ -4,12 +4,15 @@ Appends a _provenance key to every tool result so scientific workflows
 can trace what ran, when, where, and with what software.
 """
 
+from __future__ import annotations
+
 import sys
 from datetime import datetime, timezone
 from typing import Any
 
 
 def _get_uxarray_version() -> str:
+    """Return the installed UXarray version or ``unknown`` on failure."""
     try:
         import uxarray
 
