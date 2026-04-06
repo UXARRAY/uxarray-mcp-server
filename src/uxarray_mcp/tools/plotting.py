@@ -200,7 +200,10 @@ def plot_zonal_mean(
         - zonal_mean_values: List of zonal mean values
         - _provenance: Provenance metadata
     """
+    grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
     data_file = Path(data_path)
+    if grid_file and not grid_file.exists():
+        raise FileNotFoundError(f"Grid file not found: {grid_path}")
     if not data_file.exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 

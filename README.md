@@ -30,6 +30,27 @@ uv sync
 uv sync --extra hpc
 ```
 
+## Fastest Way to Try It
+
+You do not need a dataset or an MCP client to evaluate the core behavior.
+The server includes a built-in `healpix` demo mesh, so you can exercise real
+tools immediately after install:
+
+```bash
+uv run python -c "from uxarray_mcp.tools.inspection import inspect_mesh; r=inspect_mesh('healpix:4'); print(r['format'], r['n_face'], r['n_node'])"
+uv run python -c "from uxarray_mcp.tools.scientific_agent import run_scientific_agent; r=run_scientific_agent('healpix:3'); print(r['execution_venue'], r['mesh_summary']['n_face'], r['area_results']['n_face'])"
+```
+
+Expected output:
+
+```text
+HEALPix 3072 3074
+local 768 768
+```
+
+If you want the full MCP workflow after that, see the Claude Desktop setup in
+[GETTING_STARTED.md](GETTING_STARTED.md).
+
 ## Testing
 
 ```bash
