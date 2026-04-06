@@ -7,6 +7,7 @@ from .inspection import (
     inspect_variable,
     validate_dataset,
 )
+from .plotting import plot_mesh, plot_variable, plot_zonal_mean
 from .remote_tools import (
     calculate_area_hpc,
     calculate_zonal_mean_hpc,
@@ -29,4 +30,7 @@ __all__ = [
     "calculate_zonal_mean_hpc",
     "get_execution_mode",
     "set_execution_mode",
+    "plot_mesh",
+    "plot_variable",
+    "plot_zonal_mean",
 ]

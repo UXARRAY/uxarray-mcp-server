@@ -20,6 +20,9 @@ async def test_inspect_mesh_tool_registered():
         "validate_dataset",
         "get_execution_mode",
         "set_execution_mode",
+        "plot_mesh",
+        "plot_variable",
+        "plot_zonal_mean",
     }
     assert expected_tools.issubset(set(tools.keys()))
 

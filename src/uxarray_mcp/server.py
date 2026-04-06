@@ -14,6 +14,9 @@ from uxarray_mcp.tools import (
     inspect_mesh_hpc,
     inspect_variable,
     inspect_variable_hpc,
+    plot_mesh,
+    plot_variable,
+    plot_zonal_mean,
     run_scientific_agent,
     set_execution_mode,
     validate_dataset,
@@ -34,6 +37,11 @@ mcp.tool()(inspect_variable)
 mcp.tool()(calculate_area)
 mcp.tool()(calculate_zonal_mean)
 mcp.tool()(validate_dataset)
+
+# Visualization tools — always registered
+mcp.tool()(plot_mesh)
+mcp.tool()(plot_variable)
+mcp.tool()(plot_zonal_mean)
 
 # Execution mode control — always registered so users can switch modes
 mcp.tool()(get_execution_mode)
