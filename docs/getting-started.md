@@ -2,6 +2,12 @@
 
 This guide walks you through setting up the UXarray MCP Server from scratch.
 
+```{tip}
+If you want to validate the service before configuring an MCP client, start
+with [Try UXarray MCP](try-it.md). It uses the built-in `healpix` demo meshes,
+so you can get real output without downloading any datasets.
+```
+
 ```{note}
 This guide uses Claude Desktop as the MCP client. Other MCP-compatible clients should work since the server uses standard stdio transport, but have not been tested.
 ```

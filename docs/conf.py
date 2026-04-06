@@ -56,7 +56,7 @@ html_theme_options = {
     "path_to_docs": "docs/",
     "home_page_in_toc": True,
     "show_navbar_depth": 2,
-    "announcement": "You're on the <strong>MCP Server</strong> docs. "
+    "announcement": 'Start with the <a href="try-it.html">2-minute demo</a>. '
     'Looking for UXarray? <a href="https://uxarray.readthedocs.io/">UXarray docs are here &rarr;</a>',
 }
 
