@@ -280,6 +280,7 @@ def remote_plot_mesh(
     import io
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import uxarray as ux
@@ -291,6 +292,7 @@ def remote_plot_mesh(
         grid = ux.open_grid(grid_path)
 
     import holoviews as hv
+
     hv.extension("matplotlib")
 
     dpi = 100
@@ -367,6 +369,7 @@ def remote_plot_variable(
     import io
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import uxarray as ux
@@ -395,15 +398,21 @@ def remote_plot_variable(
         raise ValueError(f"Variable '{variable_name}' is not face-centered.")
 
     import holoviews as hv
+
     hv.extension("matplotlib")
 
     dpi = 100
     kwargs: Dict[str, Any] = {"backend": "matplotlib", "cmap": cmap}
     if vmin is not None:
         import numpy as np
-        kwargs["clim"] = (vmin, vmax if vmax is not None else float(np.nanmax(uxda.values)))
+
+        kwargs["clim"] = (
+            vmin,
+            vmax if vmax is not None else float(np.nanmax(uxda.values)),
+        )
     elif vmax is not None:
         import numpy as np
+
         kwargs["clim"] = (float(np.nanmin(uxda.values)), vmax)
 
     element = uxda.plot.polygons(**kwargs)
@@ -483,6 +492,7 @@ def remote_plot_zonal_mean(
     import io
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import uxarray as ux
