@@ -63,7 +63,9 @@ def main() -> int:
     results["plot_mesh"] = _wait("plot_mesh", f)
     elapsed = round(time.perf_counter() - t0, 2)
     path = _save_png("plot_mesh", results["plot_mesh"])
-    print(f"  OK  {elapsed}s  {results['plot_mesh']['image_size_bytes']} bytes -> {path}")
+    print(
+        f"  OK  {elapsed}s  {results['plot_mesh']['image_size_bytes']} bytes -> {path}"
+    )
 
     # --- plot_variable ---
     print("\n[2/3] Submitting remote_plot_variable...")
@@ -72,7 +74,9 @@ def main() -> int:
     results["plot_variable"] = _wait("plot_variable", f)
     elapsed = round(time.perf_counter() - t0, 2)
     path = _save_png("plot_variable", results["plot_variable"])
-    print(f"  OK  {elapsed}s  {results['plot_variable']['image_size_bytes']} bytes -> {path}")
+    print(
+        f"  OK  {elapsed}s  {results['plot_variable']['image_size_bytes']} bytes -> {path}"
+    )
 
     # --- plot_zonal_mean ---
     print("\n[3/3] Submitting remote_plot_zonal_mean...")
@@ -81,7 +85,9 @@ def main() -> int:
     results["plot_zonal_mean"] = _wait("plot_zonal_mean", f)
     elapsed = round(time.perf_counter() - t0, 2)
     path = _save_png("plot_zonal_mean", results["plot_zonal_mean"])
-    print(f"  OK  {elapsed}s  {results['plot_zonal_mean']['image_size_bytes']} bytes -> {path}")
+    print(
+        f"  OK  {elapsed}s  {results['plot_zonal_mean']['image_size_bytes']} bytes -> {path}"
+    )
 
     # Summary (drop png_b64 from output)
     summary = {
