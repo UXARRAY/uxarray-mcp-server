@@ -1,5 +1,7 @@
 """Academy agent for orchestrating local and remote UXarray computations."""
 
+from __future__ import annotations
+
 import asyncio
 from typing import Any, Dict, Optional
 
@@ -19,6 +21,7 @@ from .compute_functions import (
     remote_calculate_zonal_mean,
     remote_inspect_mesh,
     remote_inspect_variable,
+    remote_probe_path,
 )
 from .config import HPCConfig
 
@@ -194,6 +197,16 @@ class UXarrayComputeAgent(_AcademyAgent):
             return self._run_local_calculate_zonal_mean(
                 grid_path, data_path, variable_name, lat_spec, conservative
             )
+
+    @action
+    async def probe_path_remote(
+        self, file_path: str, inspect_netcdf: bool = True, use_remote: bool = False
+    ) -> Dict[str, Any]:
+        """Probe whether a remote worker can read the exact target path."""
+        if use_remote and self.config.has_endpoint:
+            return await self._run_on_hpc(remote_probe_path, file_path, inspect_netcdf)
+        else:
+            return remote_probe_path(file_path, inspect_netcdf)
 
     async def _run_on_hpc(self, func, *args, **kwargs) -> Dict[str, Any]:
         """Execute function on HPC via Globus Compute.

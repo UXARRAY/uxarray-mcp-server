@@ -17,9 +17,11 @@ from uxarray_mcp.tools import (
     plot_mesh,
     plot_variable,
     plot_zonal_mean,
+    probe_path_access,
     run_scientific_agent,
     set_execution_mode,
     validate_dataset,
+    validate_hpc_setup,
 )
 
 # Initialize the MCP server
@@ -45,7 +47,9 @@ mcp.tool()(plot_zonal_mean)
 
 # Execution mode control — always registered so users can switch modes
 mcp.tool()(get_execution_mode)
+mcp.tool()(probe_path_access)
 mcp.tool()(set_execution_mode)
+mcp.tool()(validate_hpc_setup)
 
 # HPC tools — only register when an endpoint is configured
 if load_config().has_endpoint:

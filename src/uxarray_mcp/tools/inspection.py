@@ -1,3 +1,7 @@
+"""Local mesh inspection and analysis tools."""
+
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, Dict, Optional
 

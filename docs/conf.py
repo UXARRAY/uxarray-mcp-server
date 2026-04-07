@@ -1,6 +1,14 @@
 """Sphinx configuration for UXarray MCP Server documentation."""
 
 import importlib.metadata
+import sys
+from pathlib import Path
+
+DOCS_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = DOCS_DIR.parent
+SRC_DIR = PROJECT_ROOT / "src"
+
+sys.path.insert(0, str(SRC_DIR))
 
 project = "UXarray MCP Server"
 copyright = "2026, UXarray MCP Server Contributors"
@@ -76,3 +84,4 @@ intersphinx_mapping = {
 
 autodoc_member_order = "bysource"
 autodoc_typehints = "description"
+autodoc_mock_imports = ["fastmcp"]

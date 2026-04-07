@@ -22,8 +22,11 @@ Quick paths:
 
    try-it
    getting-started
+   globus-compute
    tools
    hpc
+   improv
+   workflows
    scientific-agent
 
 .. toctree::
