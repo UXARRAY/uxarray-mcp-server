@@ -2,6 +2,12 @@
 
 This guide walks you through setting up the UXarray MCP Server from scratch.
 
+```{tip}
+If you want to validate the service before configuring an MCP client, start
+with [Try UXarray MCP](try-it.md). It uses the built-in `healpix` demo meshes,
+so you can get real output without downloading any datasets.
+```
+
 ```{note}
 This guide uses Claude Desktop as the MCP client. Other MCP-compatible clients should work since the server uses standard stdio transport, but have not been tested.
 ```
@@ -39,6 +45,10 @@ uv sync
 uv sync --extra hpc
 ```
 
+If you are new to Globus Compute, read [Globus Compute Primer](globus-compute.md)
+before continuing with HPC setup. That guide explains what an endpoint is and
+what gets installed locally versus remotely.
+
 ### Step 2: Run tests
 
 ```bash
@@ -49,7 +59,15 @@ If you see all green passes, the server is ready.
 
 ### Step 3: (Optional) Configure HPC
 
-If you want to run computations on an HPC system via Globus Compute:
+If you want to run computations on an HPC system via Globus Compute, think
+about the setup in three layers:
+
+1. the **local machine** running this repository
+2. the **endpoint** running on the HPC machine
+3. the **remote worker environment** that must also have `uxarray` and the
+   scientific I/O packages installed
+
+Then configure the local side:
 
 ```bash
 cp config.yaml.example config.yaml
@@ -66,6 +84,30 @@ hpc:
 ```
 
 Leave `endpoint_id` as `null` to run everything locally. HPC tools will only appear when an endpoint is configured.
+
+Before that endpoint UUID will work, you must also:
+
+- on the **local machine**:
+  - run `uv sync --extra hpc`
+  - run `uv run python -c "from globus_compute_sdk import Client; Client()"`
+- on the **remote machine**:
+  - create a Python environment for the endpoint
+  - install `globus-compute-endpoint` and `globus-compute-sdk`
+  - install `uxarray`, `xarray`, `netCDF4`, and `h5netcdf`
+  - run `globus-compute-endpoint configure <endpoint-name>`
+  - start the endpoint and copy its UUID into `config.yaml`
+
+Before you try a real remote file, authenticate the local machine once:
+
+```bash
+uv run python -c "from globus_compute_sdk import Client; Client()"
+```
+
+```{warning}
+Run the command above in a normal interactive terminal. Do not wrap it in a
+heredoc such as `python - <<'PY' ... PY`, or the Globus prompt will fail with
+an EOF error because stdin is already consumed.
+```
 
 ### Step 4: Configure Claude Desktop
 
@@ -141,6 +183,25 @@ What is the current execution mode?
 Switch to HPC execution mode
 ```
 
+**Validate the full HPC path before a real job:**
+
+```
+Run validate_hpc_setup
+```
+
+**Validate one exact remote file before debugging UXarray parsing:**
+
+```
+Run validate_hpc_setup with probe_timeout_seconds=180 and sample_path="/path/to/file.nc"
+Run probe_path_access on /path/to/file.nc with use_remote=True
+```
+
+For the full HPC playbook and reusable scripts, see:
+
+- [HPC Setup](hpc.md)
+- [Improv Playbook](improv.md)
+- [Agentic HPC Workflows](workflows.md)
+
 ## Troubleshooting
 
 **"Command not found: uv"**
@@ -153,6 +214,26 @@ Switch to HPC execution mode
 
 **HPC tools not appearing**
 : Make sure `endpoint_id` is set in `config.yaml` (not `null`), then restart the server.
+
+**Endpoint looks online but remote tasks still fail**
+: `get_execution_mode` only confirms the endpoint manager is reachable.
+  Run `validate_hpc_setup` to catch deeper issues such as missing local Globus
+  auth, missing `globus_compute_sdk`, PBS submission failures like
+  `qsub: command not found`, or child-endpoint startup problems.
+
+**I do not know what Globus Compute or an endpoint is**
+: Read [Globus Compute Primer](globus-compute.md) first.
+  It explains local machine vs endpoint vs remote worker packages.
+
+**Brand-new cluster bring-up is getting stuck in PBS/SLURM**
+: Start with a single-host endpoint template first. Prove that
+  `validate_hpc_setup(..., sample_path=...)` and `probe_path_access(..., use_remote=True)`
+  work on one real file, then switch the endpoint back to PBS/SLURM.
+
+**I want reusable CLI helpers, not just MCP prompts**
+: Use `scripts/hpc_doctor.py` for local diagnostics,
+  `scripts/agentic_hpc_loop.py` for sequential remote workflows, and
+  `scripts/improv_endpoint.sh` when configuring Argonne Improv.
 
 **Tests failing**
 : Run `uv sync` to reinstall dependencies, then `uv run pytest -v` for verbose output.

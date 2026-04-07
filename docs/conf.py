@@ -1,6 +1,14 @@
 """Sphinx configuration for UXarray MCP Server documentation."""
 
 import importlib.metadata
+import sys
+from pathlib import Path
+
+DOCS_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = DOCS_DIR.parent
+SRC_DIR = PROJECT_ROOT / "src"
+
+sys.path.insert(0, str(SRC_DIR))
 
 project = "UXarray MCP Server"
 copyright = "2026, UXarray MCP Server Contributors"
@@ -56,7 +64,7 @@ html_theme_options = {
     "path_to_docs": "docs/",
     "home_page_in_toc": True,
     "show_navbar_depth": 2,
-    "announcement": "You're on the <strong>MCP Server</strong> docs. "
+    "announcement": 'Start with the <a href="try-it.html">2-minute demo</a>. '
     'Looking for UXarray? <a href="https://uxarray.readthedocs.io/">UXarray docs are here &rarr;</a>',
 }
 
@@ -76,3 +84,4 @@ intersphinx_mapping = {
 
 autodoc_member_order = "bysource"
 autodoc_typehints = "description"
+autodoc_mock_imports = ["fastmcp"]

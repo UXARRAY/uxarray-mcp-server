@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 (2026-04)
+
+### Visualization Tools
+- `plot_mesh` — mesh wireframe rendered as inline PNG; supports custom width/height
+- `plot_variable` — face-centered variable rendered as filled polygon map; supports `cmap`, `vmin`, `vmax`, `title`
+- `plot_zonal_mean` — latitude vs. value line chart; supports `line_color`, `title`, `lat_spec`, `conservative`
+- Empty file guard: clear `ValueError` raised if input file is zero bytes or rendered output is empty
+
 ## 0.1.0 (2026-03)
 
 Initial release.

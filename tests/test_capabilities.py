@@ -84,6 +84,12 @@ class TestGetCapabilitiesGridOnly:
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
         assert tools["validate_dataset"]["applicable"] is False
 
+    def test_probe_path_access_is_always_available(self):
+        """probe_path_access should be surfaced for bring-up on any dataset."""
+        result = get_capabilities("healpix:2")
+        tools = {t["name"]: t for t in result["mcp_server_tools"]}
+        assert tools["probe_path_access"]["applicable"] is True
+
     def test_uxarray_capabilities_structure(self):
         """uxarray_capabilities has all required category keys."""
         result = get_capabilities("healpix:2")
