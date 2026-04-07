@@ -10,16 +10,20 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 authors = [
     { name = "Dayan Abdulla", email = "dayanabdulla000@gmail.com" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.14.4",
-    "uxarray>=2025.12.0",
+    "holoviews>=1.19.0",
+    "matplotlib>=3.9.0",
     "pyyaml>=6.0",
+    "uxarray>=2025.12.0",
 ]
 
 [project.optional-dependencies]
@@ -43,11 +47,33 @@ Tracker = "https://github.com/UXARRAY/uxarray-mcp-server/issues"
 
 [dependency-groups]
 dev = [
+    "mypy>=1.10.0",
     "pre-commit>=4.3.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.0.0",
     "ruff>=0.15.2",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_return_any = false
+# Exclude test files and generated docs
+exclude = ["tests/", "docs/"]
+
+[[tool.mypy.overrides]]
+# yaml stubs are installed in pre-commit env via types-PyYAML;
+# suppress the missing-stubs warning in local runs without them.
+module = "yaml"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# academy is an optional HPC dependency; the fallback stubs use type: ignore
+# which are unused when academy is installed in the pre-commit env.
+module = "uxarray_mcp.remote.agent"
+warn_unused_ignores = false
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

@@ -18,10 +18,9 @@ jobs:
 
   test-core:
     runs-on: ubuntu-latest
-    # Supported core runtime: Python 3.13
     strategy:
       matrix:
-        python-version: ["3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
     - uses: actions/checkout@v4
@@ -68,3 +67,25 @@ jobs:
     - name: Run HPC tests
       run: |
         uv run pytest tests/test_remote_agent.py tests/test_hpc_safety.py -v
+
+  docs:
+    runs-on: ubuntu-latest
+    needs: [pre-commit, test-core]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install docs dependencies
+      run: |
+        uv sync --extra docs --dev
+
+    - name: Build Sphinx docs
+      run: |
+        uv run sphinx-build -b html docs docs/_build/html -W --keep-going
