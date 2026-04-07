@@ -171,8 +171,12 @@ def test_temporal_and_ensemble_tools_persist_outputs(
     assert anomaly["summary"]["shape"] == [3, 2]
     assert ensemble_mean["member_count"] == 2
     assert ensemble_spread["member_count"] == 2
-    assert Path(get_result_handle(temporal_mean["result_handle"])["artifact_path"]).exists()
-    assert Path(get_result_handle(ensemble_mean["result_handle"])["artifact_path"]).exists()
+    assert Path(
+        get_result_handle(temporal_mean["result_handle"])["artifact_path"]
+    ).exists()
+    assert Path(
+        get_result_handle(ensemble_mean["result_handle"])["artifact_path"]
+    ).exists()
 
 
 def test_export_tools_support_result_handles_and_dataset_handles(
