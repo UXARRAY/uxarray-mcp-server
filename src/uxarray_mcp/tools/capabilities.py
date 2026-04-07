@@ -136,12 +136,30 @@ def get_capabilities(
             applicable_uxarray: List[str] = []
 
             if location == "faces":
-                applicable_mcp += ["calculate_zonal_mean", "calculate_zonal_mean_hpc"]
+                applicable_mcp += [
+                    "calculate_zonal_mean",
+                    "calculate_zonal_mean_hpc",
+                    "subset_bbox",
+                    "subset_polygon",
+                    "extract_cross_section",
+                    "compare_fields",
+                    "remap_variable",
+                    "regrid_dataset",
+                    "calculate_temporal_mean",
+                    "calculate_anomaly",
+                    "calculate_ensemble_mean",
+                    "calculate_ensemble_spread",
+                    "export_to_netcdf",
+                    "export_to_csv",
+                ]
                 applicable_uxarray += [
                     "var.zonal_mean()",
                     "var.integrate()",
                     "var.gradient()",
                     "var.weighted_mean()",
+                    "var.subset.bounding_box(lon_bounds, lat_bounds)",
+                    "var.subset.constant_latitude(lat)",
+                    "var.subset.constant_longitude(lon)",
                     "var.remap.nearest_neighbor(dest_grid)",
                     "var.remap.inverse_distance_weighted(dest_grid)",
                     "var.remap.bilinear(dest_grid)",
@@ -225,6 +243,179 @@ def get_capabilities(
                 else "Requires a data file (data_path not provided)."
             ),
             "call_example": f"validate_dataset({gp}{dp})",
+        },
+        {
+            "name": "create_session",
+            "applicable": True,
+            "reason": (
+                "Available — creates a lightweight scientific session for "
+                "datasets, results, workflows, and progress tracking."
+            ),
+            "call_example": 'create_session(name="analysis")',
+        },
+        {
+            "name": "register_dataset",
+            "applicable": True,
+            "reason": (
+                "Available — registers a grid/data pair in a session so later "
+                "calls can use dataset handles instead of repeated file paths."
+            ),
+            "call_example": f'register_dataset(session_id="...", grid_path={gp}{dp})',
+        },
+        {
+            "name": "run_workflow",
+            "applicable": True,
+            "reason": (
+                "Available — runs the canonical persisted workflow: probe, "
+                "inspect, validate, analyze, and summarize."
+            ),
+            "call_example": f'run_workflow(file_path={gp}{dp}, variable_name="...")',
+        },
+        {
+            "name": "subset_bbox",
+            "applicable": has_faces,
+            "reason": (
+                "Available — crops a mesh or face-centered field by lon/lat bounds."
+                if has_faces
+                else "Not applicable — no faces found for spatial subsetting."
+            ),
+            "call_example": (
+                f"subset_bbox(lon_bounds=[0, 10], lat_bounds=[-5, 5], grid_path={gp}{dp})"
+            ),
+        },
+        {
+            "name": "subset_polygon",
+            "applicable": has_faces,
+            "reason": (
+                "Available — selects face centers within a polygon footprint."
+                if has_faces
+                else "Not applicable — no faces found for polygon selection."
+            ),
+            "call_example": (
+                f"subset_polygon(polygon_lon_lat=[[0, 0], [10, 0], [10, 5]], "
+                f"grid_path={gp}{dp})"
+            ),
+        },
+        {
+            "name": "extract_cross_section",
+            "applicable": has_faces,
+            "reason": (
+                "Available — extracts constant-latitude or constant-longitude slices."
+                if has_faces
+                else "Not applicable — no faces found for cross-sections."
+            ),
+            "call_example": (
+                f"extract_cross_section(latitude=0.0, grid_path={gp}{dp})"
+            ),
+        },
+        {
+            "name": "compare_fields",
+            "applicable": has_face_centered_vars,
+            "reason": (
+                "Available — compares same-grid fields and persists a difference field."
+                if has_face_centered_vars
+                else "Requires same-grid face-centered data for v1 comparisons."
+            ),
+            "call_example": (
+                f'compare_fields(variable_name="...", data_path_a="...", '
+                f'data_path_b="...", grid_path={gp})'
+            ),
+        },
+        {
+            "name": "remap_variable",
+            "applicable": has_face_centered_vars,
+            "reason": (
+                "Available — remaps one face-centered variable to a target grid."
+                if has_face_centered_vars
+                else "Requires a face-centered variable to remap."
+            ),
+            "call_example": (
+                f'remap_variable(target_grid_path="target.nc", variable_name="...", '
+                f"grid_path={gp}{dp})"
+            ),
+        },
+        {
+            "name": "regrid_dataset",
+            "applicable": has_face_centered_vars,
+            "reason": (
+                "Available — remaps selected face-centered variables to a target grid."
+                if has_face_centered_vars
+                else "Requires face-centered variables to regrid a dataset."
+            ),
+            "call_example": (
+                f'regrid_dataset(target_grid_path="target.nc", grid_path={gp}{dp})'
+            ),
+        },
+        {
+            "name": "calculate_temporal_mean",
+            "applicable": data_path is not None,
+            "reason": (
+                "Available when the requested variable includes a time dimension."
+                if data_path
+                else "Requires a data file with a time-aware variable."
+            ),
+            "call_example": (
+                'calculate_temporal_mean(data_path="data.nc", '
+                'variable_name="temperature")'
+            ),
+        },
+        {
+            "name": "calculate_anomaly",
+            "applicable": data_path is not None,
+            "reason": (
+                "Available when the requested variable includes a time dimension."
+                if data_path
+                else "Requires a data file with a time-aware variable."
+            ),
+            "call_example": (
+                'calculate_anomaly(data_path="data.nc", variable_name="temperature")'
+            ),
+        },
+        {
+            "name": "calculate_ensemble_mean",
+            "applicable": data_path is not None,
+            "reason": (
+                "Available — computes a mean across multiple explicitly provided files."
+                if data_path
+                else "Requires one or more data files with a common variable."
+            ),
+            "call_example": (
+                'calculate_ensemble_mean(variable_name="temperature", '
+                'data_paths=["run1.nc", "run2.nc"])'
+            ),
+        },
+        {
+            "name": "calculate_ensemble_spread",
+            "applicable": data_path is not None,
+            "reason": (
+                "Available — computes ensemble spread across multiple files."
+                if data_path
+                else "Requires one or more data files with a common variable."
+            ),
+            "call_example": (
+                'calculate_ensemble_spread(variable_name="temperature", '
+                'data_paths=["run1.nc", "run2.nc"])'
+            ),
+        },
+        {
+            "name": "export_to_netcdf",
+            "applicable": True,
+            "reason": (
+                "Available — exports a persisted result handle or session dataset to NetCDF."
+            ),
+            "call_example": (
+                'export_to_netcdf(output_path="out.nc", result_handle="result_...")'
+            ),
+        },
+        {
+            "name": "export_to_csv",
+            "applicable": True,
+            "reason": (
+                "Available — exports a persisted result handle or session dataset to CSV."
+            ),
+            "call_example": (
+                'export_to_csv(output_path="out.csv", result_handle="result_...")'
+            ),
         },
         {
             "name": "validate_hpc_setup",
@@ -330,8 +521,8 @@ def get_capabilities(
     ]
     if has_faces:
         uxarray_capabilities["subsetting"] += [
-            "grid.cross_section.constant_latitude(lat)",
-            "grid.cross_section.constant_longitude(lon)",
+            "grid.subset.constant_latitude(lat)",
+            "grid.subset.constant_longitude(lon)",
             "grid.get_faces_at_constant_latitude(lat)",
             "grid.get_faces_between_latitudes(lat_min, lat_max)",
             "grid.get_faces_containing_point(lon, lat)",
@@ -411,7 +602,19 @@ def get_capabilities(
         var_list = ", ".join(face_centered_var_names)
         recommendations.append(
             f"Face-centered variables ({var_list}) support the full analysis pipeline: "
-            "validate_dataset → calculate_area → calculate_zonal_mean → remap to a new grid."
+            "validate_dataset → calculate_area → calculate_zonal_mean → subset/compare/remap/export."
+        )
+
+    if has_faces:
+        recommendations.append(
+            "If you only need a region or transect, start with subset_bbox, "
+            "subset_polygon, or extract_cross_section before running heavier analysis."
+        )
+
+    if data_path is not None:
+        recommendations.append(
+            "For repeated multi-step work, create a session and register the dataset "
+            "once so later calls can use handles instead of repeating file paths."
         )
 
     if (

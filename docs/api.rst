@@ -45,6 +45,10 @@ MCP tool functions that are exposed to AI agents.
    :members:
    :undoc-members:
 
+.. automodule:: uxarray_mcp.tools.advanced
+   :members:
+   :undoc-members:
+
 .. automodule:: uxarray_mcp.tools.execution_control
    :members:
    :undoc-members:
@@ -57,6 +61,10 @@ MCP tool functions that are exposed to AI agents.
    :members:
    :undoc-members:
 
+.. automodule:: uxarray_mcp.tools.stateful
+   :members:
+   :undoc-members:
+
 .. automodule:: uxarray_mcp.tools.remote_tools
    :members:
    :undoc-members:
@@ -65,6 +73,13 @@ Provenance
 ----------
 
 .. automodule:: uxarray_mcp.provenance
+   :members:
+   :undoc-members:
+
+State
+-----
+
+.. automodule:: uxarray_mcp.state
    :members:
    :undoc-members:
 

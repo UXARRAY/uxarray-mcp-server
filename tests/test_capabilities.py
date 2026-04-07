@@ -90,6 +90,13 @@ class TestGetCapabilitiesGridOnly:
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
         assert tools["probe_path_access"]["applicable"] is True
 
+    def test_session_and_workflow_tools_are_surfaced(self):
+        """Stateful orchestration tools should be discoverable without data."""
+        result = get_capabilities("healpix:2")
+        tools = {t["name"]: t for t in result["mcp_server_tools"]}
+        assert tools["create_session"]["applicable"] is True
+        assert tools["run_workflow"]["applicable"] is True
+
     def test_uxarray_capabilities_structure(self):
         """uxarray_capabilities has all required category keys."""
         result = get_capabilities("healpix:2")
@@ -216,6 +223,17 @@ class TestGetCapabilitiesWithData:
         result = get_capabilities(grid_file, data_file)
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
         assert tools["validate_dataset"]["applicable"] is True
+
+    def test_subset_compare_and_remap_tools_surface_with_face_data(
+        self, synthetic_mesh_with_data
+    ):
+        """Face-centered data should unlock the newer analysis tools."""
+        grid_file, data_file = synthetic_mesh_with_data
+        result = get_capabilities(grid_file, data_file)
+        tools = {t["name"]: t for t in result["mcp_server_tools"]}
+        assert tools["subset_bbox"]["applicable"] is True
+        assert tools["compare_fields"]["applicable"] is True
+        assert tools["remap_variable"]["applicable"] is True
 
     def test_face_var_applicable_tools(self, synthetic_mesh_with_data):
         """Face-centered variables list calculate_zonal_mean as applicable."""

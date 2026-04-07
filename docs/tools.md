@@ -194,6 +194,111 @@ on a new cluster before trying UXarray-specific tools.
 
 ---
 
+## Session And Workflow Tools
+
+### `create_session`
+
+Create a persisted scientific session for datasets, workflows, results, and
+operation tracking.
+
+**Parameters:** `name` (optional)
+
+**Returns:** `session_id`, `name`, `created_at`, `_provenance`
+
+---
+
+### `register_dataset`
+
+Register a grid/data pair in a session so later calls can use a
+`dataset_handle` instead of repeating file paths.
+
+**Parameters:** `session_id`, `grid_path`, `data_path` (optional), `name` (optional)
+
+**Returns:** `dataset_handle`, `dataset`, `dataset_count`, `_provenance`
+
+---
+
+### `run_workflow`
+
+Run the persisted canonical workflow:
+`validate_hpc_setup` → `probe_path_access` → `inspect_*` → `validate_dataset`
+→ `calculate_area` → `calculate_zonal_mean` when applicable.
+
+**Parameters:** `file_path` or `dataset_handle`, optional `data_path`, `variable_name`, `session_id`, `sample_path`
+
+**Returns:** Workflow record with `workflow_id`, `status`, per-step states, `events`, `result_handle`, `_provenance`
+
+---
+
+### `resume_workflow`, `get_workflow_status`, `get_result_handle`, `get_operation_status`, `list_operations`, `get_session_state`, `reset_session_state`
+
+Inspect or manage persisted workflow/session state.
+
+These tools let clients:
+
+- resume a previously failed or partial workflow
+- inspect per-step status and progress events
+- inspect persisted result handles and artifact paths
+- list tracked long-running operations
+- reset session-scoped results, workflows, and operation history
+
+---
+
+## Advanced Analysis Tools
+
+### `subset_bbox`, `subset_polygon`, `extract_cross_section`
+
+Spatial query tools for cropping or slicing a mesh or face-centered variable.
+
+**Returns:** selection metadata, subset summary, `result_handle`, `_provenance`
+
+---
+
+### `compare_fields`, `calculate_bias`, `calculate_rmse`, `calculate_pattern_correlation`
+
+Same-grid comparison metrics for aligned fields.
+
+`compare_fields` also persists a difference field artifact and returns a
+`difference_field_handle` that can be exported later.
+
+---
+
+### `remap_variable`, `regrid_dataset`
+
+Transfer one variable or multiple face-centered variables onto a target grid
+using UXarray-supported remapping methods.
+
+**Key parameters:** source grid/data, `target_grid_path`, variable selection,
+`method`, `remap_to`
+
+---
+
+### `calculate_temporal_mean`, `calculate_anomaly`
+
+Time-aware summaries for variables with a `time` dimension.
+
+`calculate_temporal_mean` supports a whole-time mean or grouped means via
+`groupby`. `calculate_anomaly` currently uses the temporal mean as the v1
+baseline.
+
+---
+
+### `calculate_ensemble_mean`, `calculate_ensemble_spread`
+
+Ensemble summaries across explicitly provided `data_paths`. All ensemble
+members must share the same dims and shape in v1.
+
+---
+
+### `export_to_netcdf`, `export_to_csv`, `write_result`
+
+Persist a prior `result_handle` or registered session dataset to NetCDF or CSV.
+
+Use these tools when a derived result needs to be shared outside the MCP
+response channel or fed into a downstream workflow.
+
+---
+
 ## Helper Scripts
 
 For repeatable bring-up and debugging, see:

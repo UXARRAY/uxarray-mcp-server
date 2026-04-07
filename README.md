@@ -40,6 +40,17 @@ Analysis:
 - `calculate_zonal_mean` — latitude-band averaging (conservative or standard)
 - `validate_dataset` — NaN, Inf, and fill value checks
 - `run_scientific_agent` — autonomous Analyze → Plan → Execute → Verify pipeline
+- `subset_bbox` / `subset_polygon` / `extract_cross_section` — spatial queries and regional reductions
+- `compare_fields`, `calculate_bias`, `calculate_rmse`, `calculate_pattern_correlation` — same-grid comparison metrics
+- `remap_variable` / `regrid_dataset` — UXarray-backed remapping to a target grid
+- `calculate_temporal_mean`, `calculate_anomaly`, `calculate_ensemble_mean`, `calculate_ensemble_spread` — temporal and ensemble summaries
+- `export_to_netcdf`, `export_to_csv`, `write_result` — persist derived results to downstream formats
+
+Stateful workflows:
+
+- `create_session`, `register_dataset`, `get_session_state`, `reset_session_state`
+- `run_workflow`, `resume_workflow`, `get_workflow_status`
+- `get_result_handle`, `get_operation_status`, `list_operations`
 
 Visualization (returns inline PNG):
 
