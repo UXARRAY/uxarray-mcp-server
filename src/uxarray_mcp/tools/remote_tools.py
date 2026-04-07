@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from uxarray_mcp.state import OperationTracker
 
@@ -299,6 +299,275 @@ def calculate_zonal_mean_hpc(
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_zonal_mean_remote(
                 grid_path, data_path, variable_name, lat_spec, conservative, use_remote
+            )
+        ),
+    )
+
+
+def plot_mesh_hpc(
+    grid_path: str,
+    width: int = 800,
+    height: int = 400,
+    use_remote: bool = False,
+    session_id: str | None = None,
+) -> Dict[str, Any]:
+    """Render a mesh wireframe PNG with optional HPC execution.
+
+    When use_remote=True the mesh is rendered on the HPC endpoint and only
+    the base64-encoded PNG is transferred back to the client — no large
+    grid file needs to cross the network.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to mesh file. Can be a local path or an HPC filesystem path
+        when use_remote=True.
+    width : int
+        Image width in pixels (default 800).
+    height : int
+        Image height in pixels (default 400).
+    use_remote : bool
+        If True and HPC is configured, render on the remote endpoint.
+
+    Returns
+    -------
+    dict
+        - png_b64: Base64-encoded PNG string
+        - image_size_bytes: PNG size in bytes
+        - grid_info: {n_face, n_node, n_edge}
+        - execution_venue: "local" or "hpc:<endpoint_id>"
+
+    Examples
+    --------
+    >>> result = plot_mesh_hpc("/hpc/data/grid.nc", use_remote=True)
+    >>> open("mesh.png", "wb").write(base64.b64decode(result["png_b64"]))
+    """
+    from .plotting import plot_mesh
+
+    def _local() -> Dict[str, Any]:
+        import base64
+        import json
+
+        items = plot_mesh(grid_path, width=width, height=height)
+        # plot_mesh returns [ImageContent, TextContent]; extract png_b64 + metadata
+        img = items[0]
+        meta = json.loads(items[1].text)
+        return {
+            "png_b64": img.data,
+            "image_size_bytes": meta.get(
+                "image_size_bytes", len(base64.b64decode(img.data))
+            ),
+            "grid_info": meta.get("grid_info", {}),
+            "execution_venue": "local",
+            "_provenance": meta.get("_provenance", {}),
+        }
+
+    return _run_with_optional_hpc(
+        tool_name="plot_mesh_hpc",
+        use_remote=use_remote,
+        session_id=session_id,
+        local_call=_local,
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.plot_mesh_remote(grid_path, width, height, use_remote)
+        ),
+    )
+
+
+def plot_variable_hpc(
+    grid_path: str,
+    data_path: str,
+    variable_name: Optional[str] = None,
+    width: int = 800,
+    height: int = 400,
+    cmap: str = "viridis",
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    title: Optional[str] = None,
+    use_remote: bool = False,
+    session_id: str | None = None,
+) -> Dict[str, Any]:
+    """Render a face-centered variable as a filled-polygon PNG with optional HPC execution.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to mesh grid file (local or HPC filesystem).
+    data_path : str
+        Path to data file (local or HPC filesystem).
+    variable_name : str | None
+        Variable to plot. If None, the first face-centered variable is used.
+    width : int
+        Image width in pixels (default 800).
+    height : int
+        Image height in pixels (default 400).
+    cmap : str
+        Matplotlib colormap name (default "viridis").
+    vmin : float | None
+        Colormap minimum. Defaults to data minimum.
+    vmax : float | None
+        Colormap maximum. Defaults to data maximum.
+    title : str | None
+        Custom plot title.
+    use_remote : bool
+        If True and HPC is configured, render on the remote endpoint.
+
+    Returns
+    -------
+    dict
+        - png_b64: Base64-encoded PNG string
+        - image_size_bytes: PNG size in bytes
+        - variable_name: Name of the plotted variable
+        - grid_info: {n_face, n_node, n_edge}
+        - execution_venue: "local" or "hpc:<endpoint_id>"
+    """
+    from .plotting import plot_variable
+
+    def _local() -> Dict[str, Any]:
+        import base64
+        import json
+
+        items = plot_variable(
+            grid_path,
+            data_path,
+            variable_name,
+            width=width,
+            height=height,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            title=title,
+        )
+        img = items[0]
+        meta = json.loads(items[1].text)
+        return {
+            "png_b64": img.data,
+            "image_size_bytes": meta.get(
+                "image_size_bytes", len(base64.b64decode(img.data))
+            ),
+            "variable_name": meta.get("variable_name", variable_name),
+            "grid_info": meta.get("grid_info", {}),
+            "execution_venue": "local",
+            "_provenance": meta.get("_provenance", {}),
+        }
+
+    return _run_with_optional_hpc(
+        tool_name="plot_variable_hpc",
+        use_remote=use_remote,
+        session_id=session_id,
+        local_call=_local,
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.plot_variable_remote(
+                grid_path,
+                data_path,
+                variable_name,
+                width,
+                height,
+                cmap,
+                vmin,
+                vmax,
+                title,
+                use_remote,
+            )
+        ),
+    )
+
+
+def plot_zonal_mean_hpc(
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+    width: int = 800,
+    height: int = 400,
+    lat_spec: Optional[tuple | float | List] = None,
+    conservative: bool = False,
+    line_color: str = "#1f77b4",
+    title: Optional[str] = None,
+    use_remote: bool = False,
+    session_id: str | None = None,
+) -> Dict[str, Any]:
+    """Render a zonal mean profile PNG with optional HPC execution.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to mesh grid file (local or HPC filesystem).
+    data_path : str
+        Path to data file (local or HPC filesystem).
+    variable_name : str
+        Face-centered variable to compute and plot.
+    width : int
+        Image width in pixels (default 800).
+    height : int
+        Image height in pixels (default 400).
+    lat_spec : tuple | float | list | None
+        Latitude specification for zonal bands.
+    conservative : bool
+        Use area-weighted conservative averaging.
+    line_color : str
+        Matplotlib color for the profile line (default "#1f77b4").
+    title : str | None
+        Custom plot title.
+    use_remote : bool
+        If True and HPC is configured, render on the remote endpoint.
+
+    Returns
+    -------
+    dict
+        - png_b64: Base64-encoded PNG string
+        - image_size_bytes: PNG size in bytes
+        - variable_name: Name of the plotted variable
+        - latitudes: List of latitude values
+        - zonal_mean_values: List of zonal mean values
+        - execution_venue: "local" or "hpc:<endpoint_id>"
+    """
+    from .plotting import plot_zonal_mean
+
+    def _local() -> Dict[str, Any]:
+        import base64
+        import json
+
+        items = plot_zonal_mean(
+            grid_path,
+            data_path,
+            variable_name,
+            width=width,
+            height=height,
+            lat_spec=lat_spec,
+            conservative=conservative,
+            line_color=line_color,
+            title=title,
+        )
+        img = items[0]
+        meta = json.loads(items[1].text)
+        return {
+            "png_b64": img.data,
+            "image_size_bytes": meta.get(
+                "image_size_bytes", len(base64.b64decode(img.data))
+            ),
+            "variable_name": meta.get("variable_name", variable_name),
+            "latitudes": meta.get("latitudes", []),
+            "zonal_mean_values": meta.get("zonal_mean_values", []),
+            "execution_venue": "local",
+            "_provenance": meta.get("_provenance", {}),
+        }
+
+    return _run_with_optional_hpc(
+        tool_name="plot_zonal_mean_hpc",
+        use_remote=use_remote,
+        session_id=session_id,
+        local_call=_local,
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.plot_zonal_mean_remote(
+                grid_path,
+                data_path,
+                variable_name,
+                width,
+                height,
+                lat_spec,
+                conservative,
+                line_color,
+                title,
+                use_remote,
             )
         ),
     )

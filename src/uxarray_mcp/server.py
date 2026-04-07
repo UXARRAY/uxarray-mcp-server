@@ -33,8 +33,11 @@ from uxarray_mcp.tools import (
     list_datasets,
     list_operations,
     plot_mesh,
+    plot_mesh_hpc,
     plot_variable,
+    plot_variable_hpc,
     plot_zonal_mean,
+    plot_zonal_mean_hpc,
     probe_path_access,
     register_dataset,
     regrid_dataset,
@@ -113,6 +116,9 @@ if load_config().has_endpoint:
     mcp.tool()(calculate_area_hpc)
     mcp.tool()(inspect_variable_hpc)
     mcp.tool()(calculate_zonal_mean_hpc)
+    mcp.tool()(plot_mesh_hpc)
+    mcp.tool()(plot_variable_hpc)
+    mcp.tool()(plot_zonal_mean_hpc)
 
 if __name__ == "__main__":
     mcp.run()
