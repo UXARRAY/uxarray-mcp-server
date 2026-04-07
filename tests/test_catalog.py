@@ -1,6 +1,5 @@
 """Tests for the list_datasets catalog tool."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
