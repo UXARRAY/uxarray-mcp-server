@@ -171,6 +171,14 @@ Use inspect_mesh with healpix:4
 Run a complete scientific analysis on healpix:4
 ```
 
+**Create a reusable session and run the persisted workflow:**
+
+```
+Create a session called baseline-analysis
+Register /path/to/grid.nc and /path/to/data.nc in that session
+Run the workflow for temperature using the registered dataset
+```
+
 **Check and change execution mode:**
 
 ```

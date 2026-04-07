@@ -11,6 +11,7 @@ import yaml
 
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.config import normalize_execution_mode
+from uxarray_mcp.state import OperationTracker
 
 _VALID_MODES = ("local", "hpc", "auto")
 _CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "config.yaml"
@@ -33,7 +34,7 @@ def _make_check(
     guidance: str | None = None,
 ) -> Dict[str, Any]:
     """Build a consistent diagnostic check payload."""
-    result = {
+    result: Dict[str, Any] = {
         "name": name,
         "passed": passed,
         "summary": summary,
@@ -135,7 +136,10 @@ def _run_sync(awaitable_factory) -> Dict[str, Any]:
 
 
 def probe_path_access(
-    file_path: str, use_remote: bool = False, inspect_netcdf: bool = True
+    file_path: str,
+    use_remote: bool = False,
+    inspect_netcdf: bool = True,
+    session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Probe whether a path is reachable and readable.
 
@@ -143,25 +147,12 @@ def probe_path_access(
     a new cluster. It answers the simpler question first: can the endpoint read
     the exact target path at all?
     """
+    tracker = OperationTracker("probe_path_access", session_id=session_id)
+    tracker.stage("preparing", "Preparing path probe.")
     from uxarray_mcp.remote.compute_functions import remote_probe_path
 
     if not use_remote:
-        result = remote_probe_path(file_path, inspect_netcdf)
-        return attach_provenance(
-            result,
-            tool="probe_path_access",
-            inputs={
-                "file_path": file_path,
-                "use_remote": use_remote,
-                "inspect_netcdf": inspect_netcdf,
-            },
-            venue="local",
-        )
-
-    from uxarray_mcp.remote.agent import get_agent
-
-    agent = get_agent()
-    if not agent.config.has_endpoint:
+        tracker.stage("running", "Running path probe locally.")
         result = remote_probe_path(file_path, inspect_netcdf)
         result = attach_provenance(
             result,
@@ -170,23 +161,54 @@ def probe_path_access(
                 "file_path": file_path,
                 "use_remote": use_remote,
                 "inspect_netcdf": inspect_netcdf,
+                "session_id": session_id,
+            },
+            venue="local",
+        )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.succeed("Local path probe completed.")
+        return result
+
+    from uxarray_mcp.remote.agent import get_agent
+
+    agent = get_agent()
+    if not agent.config.has_endpoint:
+        tracker.stage("fallback", "No endpoint configured; probing locally.")
+        result = remote_probe_path(file_path, inspect_netcdf)
+        result = attach_provenance(
+            result,
+            tool="probe_path_access",
+            inputs={
+                "file_path": file_path,
+                "use_remote": use_remote,
+                "inspect_netcdf": inspect_netcdf,
+                "session_id": session_id,
             },
             venue="local",
         )
         result["_provenance"]["warnings"].append(
             "No HPC endpoint configured; ran path probe locally."
         )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.succeed(
+            "Path probe completed locally because no endpoint is configured."
+        )
         return result
 
-    return _run_sync(
+    tracker.stage("submitted", "Submitting remote path probe.")
+    result = _run_sync(
         lambda: agent.probe_path_remote(file_path, inspect_netcdf, use_remote)
     )
+    result["_provenance"]["operation_id"] = tracker.operation_id
+    tracker.succeed("Remote path probe completed.")
+    return result
 
 
 def validate_hpc_setup(
     run_remote_probe: bool = True,
     probe_timeout_seconds: int = 30,
     sample_path: str | None = None,
+    session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Validate end-to-end HPC readiness beyond simple endpoint registration.
 
@@ -195,6 +217,8 @@ def validate_hpc_setup(
     SDK/auth state, endpoint status, and optionally submits a tiny remote probe
     so scheduler or worker bootstrap failures surface as structured output.
     """
+    tracker = OperationTracker("validate_hpc_setup", session_id=session_id)
+    tracker.stage("config", "Loading HPC configuration.")
     from uxarray_mcp.remote.config import load_config
 
     config = load_config(_CONFIG_PATH)
@@ -224,6 +248,7 @@ def validate_hpc_setup(
     endpoint_status = "no_endpoint"
     remote_probe: Dict[str, Any] | None = None
     sample_path_probe: Dict[str, Any] | None = None
+    result: Dict[str, Any]
 
     if not config.has_endpoint:
         result = {
@@ -235,9 +260,22 @@ def validate_hpc_setup(
             "remote_probe": remote_probe,
             "sample_path_probe": sample_path_probe,
         }
-        return attach_provenance(result, tool="validate_hpc_setup", inputs={})
+        result = attach_provenance(
+            result,
+            tool="validate_hpc_setup",
+            inputs={
+                "run_remote_probe": run_remote_probe,
+                "probe_timeout_seconds": probe_timeout_seconds,
+                "sample_path": sample_path,
+                "session_id": session_id,
+            },
+        )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.fail("HPC validation failed because no endpoint is configured.")
+        return result
 
     try:
+        tracker.stage("dependencies", "Loading local Globus Compute dependencies.")
         Client, Executor, AllCodeStrategies, ComputeSerializer = (
             _load_globus_compute_sdk()
         )
@@ -260,9 +298,22 @@ def validate_hpc_setup(
             "remote_probe": remote_probe,
             "sample_path_probe": sample_path_probe,
         }
-        return attach_provenance(result, tool="validate_hpc_setup", inputs={})
+        result = attach_provenance(
+            result,
+            tool="validate_hpc_setup",
+            inputs={
+                "run_remote_probe": run_remote_probe,
+                "probe_timeout_seconds": probe_timeout_seconds,
+                "sample_path": sample_path,
+                "session_id": session_id,
+            },
+        )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.fail("HPC validation failed because local dependencies are missing.")
+        return result
 
     try:
+        tracker.stage("auth", "Querying endpoint status through the local SDK.")
         client = Client()
         endpoint = client.get_endpoint_status(config.endpoint_id)
         endpoint_status = endpoint.get("status", "unknown")
@@ -299,7 +350,19 @@ def validate_hpc_setup(
             "remote_probe": remote_probe,
             "sample_path_probe": sample_path_probe,
         }
-        return attach_provenance(result, tool="validate_hpc_setup", inputs={})
+        result = attach_provenance(
+            result,
+            tool="validate_hpc_setup",
+            inputs={
+                "run_remote_probe": run_remote_probe,
+                "probe_timeout_seconds": probe_timeout_seconds,
+                "sample_path": sample_path,
+                "session_id": session_id,
+            },
+        )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.fail("HPC validation failed while querying endpoint status.")
+        return result
 
     if run_remote_probe and endpoint_status in {"online", "healthy"}:
         from uxarray_mcp.remote.compute_functions import (
@@ -308,6 +371,7 @@ def validate_hpc_setup(
         )
 
         try:
+            tracker.stage("submitted", "Submitting remote runtime probe.")
             executor = Executor(
                 endpoint_id=config.endpoint_id,
                 serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
@@ -325,6 +389,7 @@ def validate_hpc_setup(
                 )
             )
             if sample_path:
+                tracker.stage("verifying", "Submitting remote sample-path probe.")
                 sample_future = executor.submit(remote_probe_path, sample_path, True)
                 sample_path_probe = sample_future.result(
                     timeout=min(config.timeout_seconds, probe_timeout_seconds)
@@ -377,15 +442,22 @@ def validate_hpc_setup(
         "remote_probe": remote_probe,
         "sample_path_probe": sample_path_probe,
     }
-    return attach_provenance(
+    result = attach_provenance(
         result,
         tool="validate_hpc_setup",
         inputs={
             "run_remote_probe": run_remote_probe,
             "probe_timeout_seconds": probe_timeout_seconds,
             "sample_path": sample_path,
+            "session_id": session_id,
         },
     )
+    result["_provenance"]["operation_id"] = tracker.operation_id
+    if passed:
+        tracker.succeed("HPC validation completed.")
+    else:
+        tracker.fail("HPC validation completed with failed checks.")
+    return result
 
 
 def get_execution_mode() -> Dict[str, Any]:
@@ -414,7 +486,7 @@ def get_execution_mode() -> Dict[str, Any]:
         "auto": "Auto mode: uses HPC when endpoint is available, local otherwise.",
     }
 
-    result = {
+    result: Dict[str, Any] = {
         "mode": config.execution_mode,
         "endpoint_id": config.endpoint_id,
         "endpoint_status": health.get("status", "unknown"),
@@ -494,7 +566,7 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
     # Reset singleton agent so next call picks up the new config
     _agent_module._agent_instance = None
 
-    result = {
+    result: Dict[str, Any] = {
         "mode": normalized_mode,
         "previous_mode": previous_mode,
         "endpoint_id": config.endpoint_id,
