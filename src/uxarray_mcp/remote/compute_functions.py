@@ -253,6 +253,297 @@ def remote_inspect_variable(
     }
 
 
+def remote_plot_mesh(
+    grid_path: str,
+    width: int = 800,
+    height: int = 400,
+) -> Dict[str, Any]:
+    """Render a mesh wireframe on the remote HPC node and return base64 PNG.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to mesh file on HPC filesystem, or "healpix:<zoom>".
+    width : int
+        Image width in pixels.
+    height : int
+        Image height in pixels.
+
+    Returns
+    -------
+    dict
+        - png_b64: base64-encoded PNG string
+        - image_size_bytes: size of the PNG
+        - grid_info: n_face, n_node, n_edge
+    """
+    import base64
+    import io
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import uxarray as ux
+
+    if grid_path.startswith("healpix:"):
+        zoom = int(grid_path.split(":")[1])
+        grid = ux.Grid.from_healpix(zoom)
+    else:
+        grid = ux.open_grid(grid_path)
+
+    import holoviews as hv
+
+    hv.extension("matplotlib")
+
+    dpi = 100
+    element = grid.plot.mesh(backend="matplotlib")
+    renderer = hv.Store.renderers["matplotlib"]
+    plot = renderer.get_plot(element)
+    fig = plot.state
+    fig.set_size_inches(width / dpi, height / dpi)
+    fig.set_dpi(dpi)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    png_bytes = buf.read()
+    if not png_bytes:
+        raise ValueError("Rendered mesh plot is empty.")
+
+    return {
+        "png_b64": base64.b64encode(png_bytes).decode("utf-8"),
+        "image_size_bytes": len(png_bytes),
+        "grid_info": {
+            "n_face": int(grid.n_face),
+            "n_node": int(grid.n_node),
+            "n_edge": int(grid.n_edge),
+        },
+    }
+
+
+def remote_plot_variable(
+    grid_path: str,
+    data_path: str,
+    variable_name: Optional[str] = None,
+    width: int = 800,
+    height: int = 400,
+    cmap: str = "viridis",
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    title: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Render a face-centered variable plot on the remote HPC node and return base64 PNG.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to mesh grid file on HPC filesystem.
+    data_path : str
+        Path to data file on HPC filesystem.
+    variable_name : str | None
+        Variable to plot. If None, first face-centered variable is used.
+    width : int
+        Image width in pixels.
+    height : int
+        Image height in pixels.
+    cmap : str
+        Matplotlib colormap name.
+    vmin : float | None
+        Colormap minimum.
+    vmax : float | None
+        Colormap maximum.
+    title : str | None
+        Plot title.
+
+    Returns
+    -------
+    dict
+        - png_b64: base64-encoded PNG string
+        - image_size_bytes: size of the PNG
+        - variable_name: plotted variable name
+        - grid_info: n_face, n_node, n_edge
+    """
+    import base64
+    import io
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import uxarray as ux
+
+    uxds = ux.open_dataset(grid_path, data_path)
+
+    face_dims = {"n_face", "nCells"}
+
+    if variable_name is None:
+        for var in uxds.data_vars:
+            if any(d in face_dims for d in uxds[var].dims):
+                variable_name = var
+                break
+        if variable_name is None:
+            raise ValueError(
+                f"No face-centered variable found. Available: {list(uxds.data_vars.keys())}"
+            )
+
+    if variable_name not in uxds.data_vars:
+        raise ValueError(
+            f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars.keys())}"
+        )
+
+    uxda = uxds[variable_name]
+    if not any(d in face_dims for d in uxda.dims):
+        raise ValueError(f"Variable '{variable_name}' is not face-centered.")
+
+    import holoviews as hv
+
+    hv.extension("matplotlib")
+
+    dpi = 100
+    kwargs: Dict[str, Any] = {"backend": "matplotlib", "cmap": cmap}
+    if vmin is not None:
+        import numpy as np
+
+        kwargs["clim"] = (
+            vmin,
+            vmax if vmax is not None else float(np.nanmax(uxda.values)),
+        )
+    elif vmax is not None:
+        import numpy as np
+
+        kwargs["clim"] = (float(np.nanmin(uxda.values)), vmax)
+
+    element = uxda.plot.polygons(**kwargs)
+    renderer = hv.Store.renderers["matplotlib"]
+    plot = renderer.get_plot(element)
+    fig = plot.state
+    fig.set_size_inches(width / dpi, height / dpi)
+    fig.set_dpi(dpi)
+    if title is not None:
+        fig.axes[0].set_title(title)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    png_bytes = buf.read()
+    if not png_bytes:
+        raise ValueError("Rendered variable plot is empty.")
+
+    return {
+        "png_b64": base64.b64encode(png_bytes).decode("utf-8"),
+        "image_size_bytes": len(png_bytes),
+        "variable_name": variable_name,
+        "grid_info": {
+            "n_face": int(uxds.uxgrid.n_face),
+            "n_node": int(uxds.uxgrid.n_node),
+            "n_edge": int(uxds.uxgrid.n_edge),
+        },
+    }
+
+
+def remote_plot_zonal_mean(
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+    width: int = 800,
+    height: int = 400,
+    lat_spec: Optional[tuple | float | list] = None,
+    conservative: bool = False,
+    line_color: str = "#1f77b4",
+    title: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Render a zonal mean profile on the remote HPC node and return base64 PNG.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to mesh grid file on HPC filesystem.
+    data_path : str
+        Path to data file on HPC filesystem.
+    variable_name : str
+        Variable to compute zonal mean for (must be face-centered).
+    width : int
+        Image width in pixels.
+    height : int
+        Image height in pixels.
+    lat_spec : tuple | float | list | None
+        Latitude specification. None uses default 10-degree bands.
+    conservative : bool
+        Use area-weighted averaging.
+    line_color : str
+        Matplotlib color string for the profile line.
+    title : str | None
+        Plot title.
+
+    Returns
+    -------
+    dict
+        - png_b64: base64-encoded PNG string
+        - image_size_bytes: size of the PNG
+        - variable_name: plotted variable name
+        - latitudes: list of latitude values
+        - zonal_mean_values: list of zonal mean values
+    """
+    import base64
+    import io
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import uxarray as ux
+
+    uxds = ux.open_dataset(grid_path, data_path)
+
+    if variable_name not in uxds:
+        raise ValueError(f"Variable '{variable_name}' not found")
+
+    var = uxds[variable_name]
+    face_dims = {"n_face", "nCells"}
+    if not any(d in face_dims for d in var.dims):
+        raise ValueError(f"Variable '{variable_name}' is not face-centered")
+
+    if lat_spec is None:
+        lat_spec = (-90, 90, 10)
+
+    if conservative:
+        result = var.zonal_mean(lat=lat_spec, conservative=True)
+    else:
+        result = var.zonal_mean(lat=lat_spec)
+
+    latitudes = result.coords[result.dims[0]].values.tolist()
+    values = result.values.tolist()
+
+    dpi = 100
+    fig, ax = plt.subplots(figsize=(width / dpi, height / dpi), dpi=dpi)
+    ax.plot(latitudes, values, linewidth=1.5, color=line_color)
+    ax.set_xlabel("Latitude (°)")
+    ax.set_ylabel(variable_name)
+    ax.set_title(title if title is not None else f"Zonal Mean — {variable_name}")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    png_bytes = buf.read()
+    if not png_bytes:
+        raise ValueError("Rendered zonal mean plot is empty.")
+
+    return {
+        "png_b64": base64.b64encode(png_bytes).decode("utf-8"),
+        "image_size_bytes": len(png_bytes),
+        "variable_name": variable_name,
+        "latitudes": latitudes,
+        "zonal_mean_values": values,
+    }
+
+
 def remote_calculate_zonal_mean(
     grid_path: str,
     data_path: str,
