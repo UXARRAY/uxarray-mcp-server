@@ -238,7 +238,7 @@ def run_scientific_agent(
         area_results = calculate_area(file_path)
 
     zonal_mean_results = None
-    if face_centered_var:
+    if face_centered_var and data_path is not None:
         target_var = variable_name or face_centered_var
         reasoning_trace.append(
             {"stage": "execute", "action": f"calculate_zonal_mean({target_var!r})"}

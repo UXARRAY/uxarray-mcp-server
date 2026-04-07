@@ -9,9 +9,9 @@ try:
     from academy.agent import Agent as _AcademyAgent
     from academy.agent import action
 except ImportError:
-    _AcademyAgent = object
+    _AcademyAgent = object  # type: ignore[assignment,misc]
 
-    def action(fn):
+    def action(fn):  # type: ignore[no-redef]
         """No-op decorator when academy is not installed."""
         return fn
 
@@ -47,7 +47,7 @@ class UXarrayComputeAgent(_AcademyAgent):
     def __init__(self, config: HPCConfig):
         super().__init__()
         self.config = config
-        self._executor = None
+        self._executor: Any = None
 
     def _get_executor(self):
         """Get or create Globus Compute executor with AllCodeStrategies.
