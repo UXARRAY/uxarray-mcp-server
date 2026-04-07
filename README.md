@@ -31,23 +31,28 @@ uv sync --extra hpc
 
 ## Main Tools
 
-Core tools:
+Analysis:
 
-- `inspect_mesh`
-- `inspect_variable`
-- `calculate_area`
-- `calculate_zonal_mean`
-- `validate_dataset`
-- `run_scientific_agent`
+- `inspect_mesh` — topology, format detection, face/node/edge counts
+- `inspect_variable` — variable metadata, location, and statistics
+- `calculate_area` — face area statistics
+- `calculate_zonal_mean` — latitude-band averaging (conservative or standard)
+- `validate_dataset` — NaN, Inf, and fill value checks
+- `run_scientific_agent` — autonomous Analyze → Plan → Execute → Verify pipeline
+
+Visualization (returns inline PNG):
+
+- `plot_mesh` — mesh wireframe
+- `plot_variable` — face-centered variable as filled polygon map; supports `cmap`, `vmin`, `vmax`, `title`
+- `plot_zonal_mean` — latitude vs. value line chart; supports `line_color`, `title`
 
 HPC diagnostics:
 
-- `get_execution_mode`
-- `set_execution_mode`
+- `get_execution_mode` / `set_execution_mode`
 - `validate_hpc_setup`
 - `probe_path_access`
 
-Optional remote wrappers:
+Optional remote wrappers (registered only when an endpoint is configured):
 
 - `inspect_mesh_hpc`
 - `inspect_variable_hpc`
