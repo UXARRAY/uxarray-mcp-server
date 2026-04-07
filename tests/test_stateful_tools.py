@@ -99,6 +99,4 @@ def test_reset_session_state_clears_results_workflows_and_operations(
     assert state["results"] == {}
     assert state["workflow_ids"] == []
     assert state["operation_ids"] == []
-    assert not Path(
-        state_dir, "results", f"{workflow['result_handle']}.json"
-    ).exists()
+    assert not Path(state_dir, "results", f"{workflow['result_handle']}.json").exists()

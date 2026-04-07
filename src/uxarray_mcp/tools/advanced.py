@@ -238,7 +238,9 @@ def subset_polygon(
         data_path=data_path,
     )
     grid = load_grid(resolved_grid)
-    face_points = np.column_stack((np.asarray(grid.face_lon), np.asarray(grid.face_lat)))
+    face_points = np.column_stack(
+        (np.asarray(grid.face_lon), np.asarray(grid.face_lat))
+    )
     polygon = MplPath(np.asarray(polygon_lon_lat))
     selected_indices = np.flatnonzero(polygon.contains_points(face_points))
 

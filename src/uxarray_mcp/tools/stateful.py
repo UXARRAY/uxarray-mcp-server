@@ -199,15 +199,19 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
         ("inspect_mesh", lambda: inspect_mesh(file_path)),
         (
             "inspect_variable",
-            lambda: inspect_variable(file_path, data_path, variable_name)
-            if data_path is not None
-            else {"skipped": True},
+            lambda: (
+                inspect_variable(file_path, data_path, variable_name)
+                if data_path is not None
+                else {"skipped": True}
+            ),
         ),
         (
             "validate_dataset",
-            lambda: validate_dataset(file_path, data_path)
-            if data_path is not None
-            else {"skipped": True},
+            lambda: (
+                validate_dataset(file_path, data_path)
+                if data_path is not None
+                else {"skipped": True}
+            ),
         ),
         ("calculate_area", lambda: calculate_area(file_path)),
     ]
@@ -221,7 +225,9 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
         state = next(step for step in current["steps"] if step["name"] == step_name)
         if resume and state["status"] == "completed":
             continue
-        append_workflow_event(workflow_id, stage=step_name, message=f"Running {step_name}")
+        append_workflow_event(
+            workflow_id, stage=step_name, message=f"Running {step_name}"
+        )
         tracker.stage(step_name, f"Running {step_name}")
         update_workflow_step(workflow_id, step_name, status="running")
         try:
@@ -267,7 +273,9 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
         and validation_result.get("passed", True) is not False
     )
     zonal_state = next(
-        step for step in get_workflow(workflow_id)["steps"] if step["name"] == zonal_step_name
+        step
+        for step in get_workflow(workflow_id)["steps"]
+        if step["name"] == zonal_step_name
     )
     if should_run_zonal:
         if not (resume and zonal_state["status"] == "completed"):
@@ -308,7 +316,9 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
         session_id=session_id,
         metadata=workflow_summary,
     )
-    artifact_path = write_json_artifact(workflow_summary, result_record["result_handle"])
+    artifact_path = write_json_artifact(
+        workflow_summary, result_record["result_handle"]
+    )
     result_record["artifact_path"] = artifact_path
     save_result(result_record)
     workflow = get_workflow(workflow_id)
