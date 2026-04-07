@@ -1,6 +1,11 @@
 # Tools Reference
 
-All tools available through the MCP server. Each tool returns structured data with a `_provenance` block for traceability.
+All tools available through the MCP server.
+
+Most analysis and control tools return structured dictionaries with a
+`_provenance` block for traceability. The plotting tools are different: they
+return two MCP content blocks, an inline PNG image plus a JSON text block that
+contains the provenance metadata.
 
 ## Core Tools
 
@@ -90,6 +95,26 @@ Check dataset integrity — NaN coverage, Inf values, and common fill value dete
 
 ---
 
+### `list_datasets`
+
+Scan a local directory for NetCDF, HDF5, and GRIB files and group results by
+subdirectory with heuristic grid-vs-data classification.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `directory` | `str` | Local path to scan |
+| `recursive` | `bool` | Recurse into subdirectories (default: `False`) |
+| `max_files` | `int` | Cap the result set to avoid huge trees (default: `200`) |
+
+**Returns:** `directory`, `total_files`, `truncated`, grouped `files`, `recommendations`, `_provenance`
+
+Use this when you have a directory full of climate files and need a quick map
+of likely grid files, data files, and next-step tool calls.
+
+---
+
 ### `get_capabilities`
 
 Discover which tools and UXarray features apply to a specific grid and dataset. Filters results based on grid topology and variable locations.
@@ -176,6 +201,71 @@ For repeatable bring-up and debugging, see:
 - `scripts/hpc_doctor.py` — first-pass CLI doctor for local auth, endpoint status, remote no-op execution, and optional real-path probing
 - `scripts/agentic_hpc_loop.py`
 - `scripts/improv_endpoint.sh`
+
+## Plotting Tools
+
+These tools return:
+
+- an inline PNG image block that MCP clients can render directly
+- a JSON text block with `_provenance`, image metadata, and selected inputs
+
+### `plot_mesh`
+
+Render a mesh wireframe from a grid file or a `healpix:<zoom>` mesh spec.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `grid_path` | `str` | Path to the mesh file or `healpix:<zoom>` |
+| `width` | `int` | Image width in pixels (default: `800`) |
+| `height` | `int` | Image height in pixels (default: `400`) |
+
+**JSON metadata returns:** `image_size_bytes`, `grid_info`, `_provenance`
+
+---
+
+### `plot_variable`
+
+Render a face-centered variable as a filled polygon map.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `grid_path` | `str` | Path to the grid/mesh file |
+| `data_path` | `str` | Path to the data file |
+| `variable_name` | `str` (optional) | Variable to plot, or first face-centered variable if omitted |
+| `width` | `int` | Image width in pixels (default: `800`) |
+| `height` | `int` | Image height in pixels (default: `400`) |
+| `cmap` | `str` | Matplotlib colormap name (default: `"viridis"`) |
+| `vmin` | `float` (optional) | Lower bound for the color scale |
+| `vmax` | `float` (optional) | Upper bound for the color scale |
+| `title` | `str` (optional) | Custom plot title |
+
+**JSON metadata returns:** `image_size_bytes`, `variable_name`, `grid_info`, `_provenance`
+
+---
+
+### `plot_zonal_mean`
+
+Compute and render a zonal-mean profile as latitude versus value.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `grid_path` | `str` | Path to the grid/mesh file |
+| `data_path` | `str` | Path to the data file |
+| `variable_name` | `str` | Face-centered variable to average and plot |
+| `width` | `int` | Image width in pixels (default: `800`) |
+| `height` | `int` | Image height in pixels (default: `400`) |
+| `lat_spec` | `tuple`, `float`, `list`, or `None` | Latitude specification for zonal bands |
+| `conservative` | `bool` | Area-weighted conservative averaging (default: `False`) |
+| `line_color` | `str` | Matplotlib color string (default: `"#1f77b4"`) |
+| `title` | `str` (optional) | Custom plot title |
+
+**JSON metadata returns:** `image_size_bytes`, `variable_name`, `latitudes`, `zonal_mean_values`, `_provenance`
 
 ## HPC Tools
 

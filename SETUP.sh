@@ -2,8 +2,8 @@
 set -e
 
 echo "[SETUP] Checking prerequisites..."
-if ! python3 -c "import sys; assert sys.version_info >= (3, 13)" &> /dev/null; then
-  echo "[ERROR] Python 3.13+ is required."
+if ! python3 -c "import sys; assert sys.version_info >= (3, 11)" &> /dev/null; then
+  echo "[ERROR] Python 3.11+ is required."
   exit 1
 fi
 

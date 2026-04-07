@@ -23,11 +23,12 @@ uv sync --extra hpc
 
 ## Most Users Should Read These in Order
 
-1. [GETTING_STARTED.md](GETTING_STARTED.md)
-2. [docs/globus-compute.md](docs/globus-compute.md) if you are new to Globus Compute
-3. [docs/hpc.md](docs/hpc.md) for generic cluster bring-up
-4. [docs/improv.md](docs/improv.md) if you are on Argonne Improv
-5. [docs/workflows.md](docs/workflows.md) for sequential remote workflows
+1. [GETTING_STARTED.md](GETTING_STARTED.md) for the short setup path
+2. [docs/getting-started.md](docs/getting-started.md) for the full walkthrough
+3. [docs/globus-compute.md](docs/globus-compute.md) if you are new to Globus Compute
+4. [docs/hpc.md](docs/hpc.md) for generic cluster bring-up
+5. [docs/improv.md](docs/improv.md) if you are on Argonne Improv
+6. [docs/workflows.md](docs/workflows.md) for sequential remote workflows
 
 ## Main Tools
 
@@ -104,6 +105,7 @@ If `endpoint_id` is `null`, the server runs locally only.
 ```bash
 uv run pre-commit run --all-files
 uv run pytest tests/ --ignore=tests/test_remote_agent.py
+uv sync --extra docs --dev
 uv run sphinx-build -b html docs docs/_build/html
 ```
 
