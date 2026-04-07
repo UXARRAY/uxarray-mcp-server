@@ -1,10 +1,12 @@
 """MCP plotting tools for UXarray mesh visualization."""
 
 import base64
+import json
 from pathlib import Path
 from typing import Any, Optional
 
 import uxarray as ux
+from mcp.types import ImageContent, TextContent
 
 from uxarray_mcp.domain.mesh import load_grid
 from uxarray_mcp.domain.plotting import render_mesh, render_variable, render_zonal_mean
@@ -16,7 +18,7 @@ def plot_mesh(
     grid_path: str,
     width: int = 800,
     height: int = 400,
-) -> dict[str, Any]:
+) -> list[Any]:
     """Plot an unstructured mesh wireframe.
 
     Renders the mesh topology (edges/faces outline) and returns the image
@@ -35,14 +37,22 @@ def plot_mesh(
         - grid_info: Grid summary (n_face, n_node, n_edge)
         - _provenance: Provenance metadata
     """
+    grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
+    if grid_file:
+        if not grid_file.exists():
+            raise FileNotFoundError(f"Grid file not found: {grid_path}")
+        if grid_file.stat().st_size == 0:
+            raise ValueError(
+                f"Grid file appears to be empty: {grid_path}. "
+                "The file may not have been written correctly."
+            )
+
     grid = load_grid(grid_path)
 
     png_bytes = render_mesh(grid, width=width, height=height)
     b64 = base64.b64encode(png_bytes).decode("utf-8")
-    data_uri = f"data:image/png;base64,{b64}"
 
     result = {
-        "image": data_uri,
         "image_size_bytes": len(png_bytes),
         "grid_info": {
             "n_face": int(grid.n_face),
@@ -51,7 +61,7 @@ def plot_mesh(
         },
     }
 
-    return attach_provenance(
+    provenance = attach_provenance(
         result,
         tool="plot_mesh",
         inputs={"grid_path": grid_path, "width": width, "height": height},
@@ -65,6 +75,11 @@ def plot_mesh(
         ],
     )
 
+    return [
+        ImageContent(type="image", data=b64, mimeType="image/png"),
+        TextContent(type="text", text=json.dumps(provenance, indent=2)),
+    ]
+
 
 def plot_variable(
     grid_path: str,
@@ -73,7 +88,7 @@ def plot_variable(
     width: int = 800,
     height: int = 400,
     cmap: str = "viridis",
-) -> dict[str, Any]:
+) -> list[Any]:
     """Plot a face-centered variable as a filled polygon map.
 
     Renders a choropleth-style visualization of the variable on the mesh
@@ -98,10 +113,21 @@ def plot_variable(
     """
     grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
     data_file = Path(data_path)
-    if grid_file and not grid_file.exists():
-        raise FileNotFoundError(f"Grid file not found: {grid_path}")
+    if grid_file:
+        if not grid_file.exists():
+            raise FileNotFoundError(f"Grid file not found: {grid_path}")
+        if grid_file.stat().st_size == 0:
+            raise ValueError(
+                f"Grid file appears to be empty: {grid_path}. "
+                "The file may not have been written correctly."
+            )
     if not data_file.exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
+    if data_file.stat().st_size == 0:
+        raise ValueError(
+            f"Data file appears to be empty: {data_path}. "
+            "The file may not have been written correctly."
+        )
 
     uxds = ux.open_dataset(grid_path, data_path)
 
@@ -131,10 +157,8 @@ def plot_variable(
 
     png_bytes = render_variable(uxda, width=width, height=height, cmap=cmap)
     b64 = base64.b64encode(png_bytes).decode("utf-8")
-    data_uri = f"data:image/png;base64,{b64}"
 
     result = {
-        "image": data_uri,
         "image_size_bytes": len(png_bytes),
         "variable_name": variable_name,
         "grid_info": {
@@ -144,7 +168,7 @@ def plot_variable(
         },
     }
 
-    return attach_provenance(
+    provenance = attach_provenance(
         result,
         tool="plot_variable",
         inputs={
@@ -167,6 +191,11 @@ def plot_variable(
         ],
     )
 
+    return [
+        ImageContent(type="image", data=b64, mimeType="image/png"),
+        TextContent(type="text", text=json.dumps(provenance, indent=2)),
+    ]
+
 
 def plot_zonal_mean(
     grid_path: str,
@@ -176,7 +205,7 @@ def plot_zonal_mean(
     height: int = 400,
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
-) -> dict[str, Any]:
+) -> list[Any]:
     """Plot a zonal mean profile (latitude vs value).
 
     Computes the zonal mean of a face-centered variable and renders
@@ -202,10 +231,21 @@ def plot_zonal_mean(
     """
     grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
     data_file = Path(data_path)
-    if grid_file and not grid_file.exists():
-        raise FileNotFoundError(f"Grid file not found: {grid_path}")
+    if grid_file:
+        if not grid_file.exists():
+            raise FileNotFoundError(f"Grid file not found: {grid_path}")
+        if grid_file.stat().st_size == 0:
+            raise ValueError(
+                f"Grid file appears to be empty: {grid_path}. "
+                "The file may not have been written correctly."
+            )
     if not data_file.exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
+    if data_file.stat().st_size == 0:
+        raise ValueError(
+            f"Data file appears to be empty: {data_path}. "
+            "The file may not have been written correctly."
+        )
 
     uxds = ux.open_dataset(grid_path, data_path)
 
@@ -220,17 +260,15 @@ def plot_zonal_mean(
         latitudes, values, variable_name, width=width, height=height
     )
     b64 = base64.b64encode(png_bytes).decode("utf-8")
-    data_uri = f"data:image/png;base64,{b64}"
 
     result = {
-        "image": data_uri,
         "image_size_bytes": len(png_bytes),
         "variable_name": variable_name,
         "latitudes": latitudes,
         "zonal_mean_values": values,
     }
 
-    return attach_provenance(
+    provenance = attach_provenance(
         result,
         tool="plot_zonal_mean",
         inputs={
@@ -252,3 +290,8 @@ def plot_zonal_mean(
             }
         ],
     )
+
+    return [
+        ImageContent(type="image", data=b64, mimeType="image/png"),
+        TextContent(type="text", text=json.dumps(provenance, indent=2)),
+    ]
