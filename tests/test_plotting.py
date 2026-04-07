@@ -50,12 +50,21 @@ class TestPlotMeshMocked:
 
         result = plot_mesh("healpix:2")
 
-        assert "image" in result
-        assert result["image"].startswith("data:image/png;base64,")
-        assert result["image_size_bytes"] == len(b"\x89PNG_fake_data")
-        assert result["grid_info"]["n_face"] == 100
-        assert "_provenance" in result
-        assert result["_provenance"]["tool"] == "plot_mesh"
+        assert len(result) == 2
+        assert result[0].type == "image"
+        assert (
+            result[0].data.startswith("iVBORw0K")
+            or result[0].data.startswith("data:image/")
+            or "PNG" in base64.b64decode(result[0].data)[:8].decode("utf-8", "ignore")
+        )
+
+        import json
+
+        prov = json.loads(result[1].text)
+        assert prov["image_size_bytes"] == len(b"\x89PNG_fake_data")
+        assert prov["grid_info"]["n_face"] == 100
+        assert "_provenance" in prov
+        assert prov["_provenance"]["tool"] == "plot_mesh"
 
     @patch("uxarray_mcp.tools.plotting.render_mesh", return_value=b"\x89PNG_fake")
     @patch("uxarray_mcp.tools.plotting.load_grid")
@@ -69,7 +78,10 @@ class TestPlotMeshMocked:
         result = plot_mesh("healpix:1", width=400, height=300)
 
         mock_render.assert_called_once_with(mock_grid, width=400, height=300)
-        assert result["_provenance"]["inputs"]["width"] == 400
+        import json
+
+        prov = json.loads(result[1].text)
+        assert prov["_provenance"]["inputs"]["width"] == 400
 
 
 class TestPlotMeshErrors:
@@ -110,9 +122,14 @@ class TestPlotVariableMocked:
 
             result = plot_variable("grid.nc", "data.nc")
 
-            assert "image" in result
-            assert result["variable_name"] == "temperature"
-            assert result["_provenance"]["tool"] == "plot_variable"
+            assert len(result) == 2
+            assert result[0].type == "image"
+
+            import json
+
+            prov = json.loads(result[1].text)
+            assert prov["variable_name"] == "temperature"
+            assert prov["_provenance"]["tool"] == "plot_variable"
 
     def test_data_file_not_found(self):
         with pytest.raises(FileNotFoundError, match="Data file not found"):
@@ -149,10 +166,15 @@ class TestPlotZonalMeanMocked:
 
             result = plot_zonal_mean("grid.nc", "data.nc", "temperature")
 
-            assert "image" in result
-            assert result["variable_name"] == "temperature"
-            assert result["latitudes"] == [-90.0, 0.0, 90.0]
-            assert result["_provenance"]["tool"] == "plot_zonal_mean"
+            assert len(result) == 2
+            assert result[0].type == "image"
+
+            import json
+
+            prov = json.loads(result[1].text)
+            assert prov["variable_name"] == "temperature"
+            assert prov["latitudes"] == [-90.0, 0.0, 90.0]
+            assert prov["_provenance"]["tool"] == "plot_zonal_mean"
 
 
 # -----------------------------------------------------------------------------
@@ -166,16 +188,23 @@ class TestPlotMeshIntegration:
     def test_plot_mesh_healpix(self):
         result = plot_mesh("healpix:2")
 
-        assert result["image"].startswith("data:image/png;base64,")
-        assert result["image_size_bytes"] > 1000
-        assert result["grid_info"]["n_face"] == 192
-        assert "_provenance" in result
+        assert len(result) == 2
+        assert result[0].type == "image"
 
-        b64_data = result["image"].split(",", 1)[1]
-        png_bytes = base64.b64decode(b64_data)
+        import json
+
+        prov = json.loads(result[1].text)
+        assert prov["image_size_bytes"] > 1000
+        assert prov["grid_info"]["n_face"] == 192
+        assert "_provenance" in prov
+
+        png_bytes = base64.b64decode(result[0].data)
         assert png_bytes[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_plot_mesh_healpix_custom_size(self):
         result = plot_mesh("healpix:1", width=400, height=200)
-        assert result["image_size_bytes"] > 0
-        assert result["grid_info"]["n_face"] == 48
+        import json
+
+        prov = json.loads(result[1].text)
+        assert prov["image_size_bytes"] > 0
+        assert prov["grid_info"]["n_face"] == 48

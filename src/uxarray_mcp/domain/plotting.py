@@ -56,7 +56,13 @@ def render_mesh(
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     buf.seek(0)
-    return buf.read()
+    png_bytes = buf.read()
+    if not png_bytes:
+        raise ValueError(
+            "Rendered mesh plot is empty. The file may be empty or contain no "
+            "plottable geometry."
+        )
+    return png_bytes
 
 
 def render_variable(
@@ -106,7 +112,13 @@ def render_variable(
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     buf.seek(0)
-    return buf.read()
+    png_bytes = buf.read()
+    if not png_bytes:
+        raise ValueError(
+            "Rendered variable plot is empty. The file may be empty or contain "
+            "no plottable data."
+        )
+    return png_bytes
 
 
 def render_zonal_mean(
@@ -154,4 +166,10 @@ def render_zonal_mean(
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     buf.seek(0)
-    return buf.read()
+    png_bytes = buf.read()
+    if not png_bytes:
+        raise ValueError(
+            "Rendered zonal mean plot is empty. The data may be empty or contain "
+            "no plottable values."
+        )
+    return png_bytes
