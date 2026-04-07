@@ -127,6 +127,105 @@ Switch execution mode without editing config files.
 
 ---
 
+## Visualization Tools
+
+These tools render mesh visualizations and return a base64-encoded PNG image that MCP clients display inline, alongside a JSON provenance block.
+
+### `plot_mesh`
+
+Render a mesh wireframe — topology only, no data.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `grid_path` | `str` | — | Path to mesh file, or `healpix:<zoom>` |
+| `width` | `int` | `800` | Image width in pixels |
+| `height` | `int` | `400` | Image height in pixels |
+
+**Returns:** `ImageContent` (PNG) + `TextContent` with `image_size_bytes`, `grid_info`, `_provenance`
+
+**Example prompts:**
+
+```
+Plot the mesh in /data/grid.nc
+Plot healpix:4 at 1200x600
+```
+
+---
+
+### `plot_variable`
+
+Render a face-centered variable as a filled polygon (choropleth) map.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `grid_path` | `str` | — | Path to the mesh grid file |
+| `data_path` | `str` | — | Path to the data file |
+| `variable_name` | `str` | auto | Variable to plot. If omitted, the first face-centered variable is used |
+| `width` | `int` | `800` | Image width in pixels |
+| `height` | `int` | `400` | Image height in pixels |
+| `cmap` | `str` | `"viridis"` | Matplotlib colormap name (see below) |
+| `vmin` | `float` | data min | Minimum value for the colormap scale |
+| `vmax` | `float` | data max | Maximum value for the colormap scale |
+| `title` | `str` | variable name | Custom plot title |
+
+**Returns:** `ImageContent` (PNG) + `TextContent` with `image_size_bytes`, `variable_name`, `grid_info`, `_provenance`
+
+**Colormap guide:**
+
+| Use case | Recommended colormaps |
+|----------|-----------------------|
+| Sequential (low → high) | `viridis`, `plasma`, `inferno`, `magma`, `cividis` |
+| Diverging (anomalies, +/−) | `RdBu_r`, `coolwarm`, `bwr`, `seismic`, `PiYG` |
+| Temperature | `RdYlBu_r`, `hot`, `afmhot` |
+| Precipitation | `YlGnBu`, `Blues`, `GnBu` |
+| Reversed | Append `_r` to any name: `viridis_r`, `plasma_r` |
+
+**Example prompts:**
+
+```
+Plot the temperature variable in data.nc using the RdBu_r colormap
+Plot precip with vmin=0, vmax=50 so the scale is fixed
+Plot temperature anomaly with cmap=coolwarm, vmin=-5, vmax=5, title="Jan 2025 Anomaly"
+```
+
+---
+
+### `plot_zonal_mean`
+
+Render a zonal mean profile as a latitude vs. value line chart.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `grid_path` | `str` | — | Path to the mesh grid file |
+| `data_path` | `str` | — | Path to the data file |
+| `variable_name` | `str` | — | Name of the face-centered variable |
+| `width` | `int` | `800` | Image width in pixels |
+| `height` | `int` | `400` | Image height in pixels |
+| `lat_spec` | `tuple/float/list` | default bands | Latitude band specification (see `calculate_zonal_mean`) |
+| `conservative` | `bool` | `False` | Use area-weighted averaging |
+| `line_color` | `str` | `"#1f77b4"` | Matplotlib color for the profile line (see below) |
+| `title` | `str` | auto | Custom plot title |
+
+**Color specification:**
+
+Any valid matplotlib color works: named colors (`"red"`, `"steelblue"`, `"darkorange"`), hex strings (`"#e74c3c"`), or RGB tuples as strings.
+
+**Example prompts:**
+
+```
+Plot the zonal mean of temperature
+Plot zonal mean of precipitation in red with title "Annual Mean Precipitation"
+Plot temperature zonal mean with 2-degree bands and area-weighted averaging
+```
+
+---
+
 ## HPC Tools
 
 These tools are only registered when an HPC endpoint is configured. They have the same interface as their core counterparts, plus a `use_remote` flag.

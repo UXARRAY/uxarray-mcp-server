@@ -88,6 +88,9 @@ def plot_variable(
     width: int = 800,
     height: int = 400,
     cmap: str = "viridis",
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    title: Optional[str] = None,
 ) -> list[Any]:
     """Plot a face-centered variable as a filled polygon map.
 
@@ -101,7 +104,13 @@ def plot_variable(
                        face-centered variable is used.
         width: Image width in pixels (default 800).
         height: Image height in pixels (default 400).
-        cmap: Matplotlib colormap name (default "viridis").
+        cmap: Matplotlib colormap name (default "viridis"). Common choices:
+              "plasma", "inferno", "magma", "RdBu_r", "coolwarm", "bwr",
+              "seismic", "PiYG", "PRGn". Append "_r" to reverse any colormap.
+        vmin: Minimum value for the colormap scale. Defaults to data minimum.
+              Useful for comparing plots across datasets on a consistent scale.
+        vmax: Maximum value for the colormap scale. Defaults to data maximum.
+        title: Custom plot title. Defaults to the variable name.
 
     Returns:
         Dictionary containing:
@@ -110,6 +119,22 @@ def plot_variable(
         - variable_name: Name of the plotted variable
         - grid_info: Grid summary (n_face, n_node, n_edge)
         - _provenance: Provenance metadata
+
+    Examples:
+        Basic plot with default colormap::
+
+            plot_variable("grid.nc", "data.nc", "temperature")
+
+        Diverging colormap centered on zero for anomaly data::
+
+            plot_variable(
+                "grid.nc", "data.nc", "temp_anomaly", cmap="RdBu_r", vmin=-5.0, vmax=5.0
+            )
+
+        Fixed scale for comparing two datasets::
+
+            plot_variable("grid.nc", "jan.nc", "precip", vmin=0, vmax=100)
+            plot_variable("grid.nc", "jul.nc", "precip", vmin=0, vmax=100)
     """
     grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
     data_file = Path(data_path)
@@ -155,7 +180,9 @@ def plot_variable(
             "Polygon plots require face-centered data."
         )
 
-    png_bytes = render_variable(uxda, width=width, height=height, cmap=cmap)
+    png_bytes = render_variable(
+        uxda, width=width, height=height, cmap=cmap, vmin=vmin, vmax=vmax, title=title
+    )
     b64 = base64.b64encode(png_bytes).decode("utf-8")
 
     result = {
@@ -178,6 +205,9 @@ def plot_variable(
             "width": width,
             "height": height,
             "cmap": cmap,
+            "vmin": vmin,
+            "vmax": vmax,
+            "title": title,
         },
         selected_variable=variable_name,
         artifacts=[
@@ -205,6 +235,8 @@ def plot_zonal_mean(
     height: int = 400,
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
+    line_color: str = "#1f77b4",
+    title: Optional[str] = None,
 ) -> list[Any]:
     """Plot a zonal mean profile (latitude vs value).
 
@@ -217,8 +249,14 @@ def plot_zonal_mean(
         variable_name: Name of the face-centered variable to plot.
         width: Image width in pixels (default 800).
         height: Image height in pixels (default 400).
-        lat_spec: Latitude specification for zonal bands. None uses default.
+        lat_spec: Latitude specification for zonal bands. None uses default
+                  bands from -90 to 90 in 10-degree steps.
         conservative: If True, use area-weighted conservative averaging.
+        line_color: Matplotlib color string for the profile line. Accepts
+                    named colors ("red", "steelblue", "darkorange"), hex
+                    strings ("#e74c3c"), or any valid matplotlib color.
+                    Defaults to "#1f77b4" (matplotlib blue).
+        title: Custom plot title. Defaults to "Zonal Mean — <variable_name>".
 
     Returns:
         Dictionary containing:
@@ -228,6 +266,31 @@ def plot_zonal_mean(
         - latitudes: List of latitude values
         - zonal_mean_values: List of zonal mean values
         - _provenance: Provenance metadata
+
+    Examples:
+        Default profile::
+
+            plot_zonal_mean("grid.nc", "data.nc", "temperature")
+
+        Custom color and title::
+
+            plot_zonal_mean(
+                "grid.nc",
+                "data.nc",
+                "temperature",
+                line_color="darkorange",
+                title="Jan Temperature Zonal Mean",
+            )
+
+        High-resolution latitude bands::
+
+            plot_zonal_mean(
+                "grid.nc",
+                "data.nc",
+                "precipitation",
+                lat_spec=(-90, 90, 2),
+                conservative=True,
+            )
     """
     grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
     data_file = Path(data_path)
@@ -257,7 +320,13 @@ def plot_zonal_mean(
     values = zonal_result["zonal_mean_values"]
 
     png_bytes = render_zonal_mean(
-        latitudes, values, variable_name, width=width, height=height
+        latitudes,
+        values,
+        variable_name,
+        width=width,
+        height=height,
+        line_color=line_color,
+        title=title,
     )
     b64 = base64.b64encode(png_bytes).decode("utf-8")
 
@@ -278,6 +347,8 @@ def plot_zonal_mean(
             "width": width,
             "height": height,
             "conservative": conservative,
+            "line_color": line_color,
+            "title": title,
         },
         selected_variable=variable_name,
         artifacts=[

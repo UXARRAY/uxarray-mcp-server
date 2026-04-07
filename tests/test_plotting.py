@@ -1,6 +1,8 @@
 """Tests for plotting tools and domain rendering functions."""
 
 import base64
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,6 +31,48 @@ class TestRenderZonalMean:
         result = render_zonal_mean(lats, vals, "temp", width=400, height=300)
         assert isinstance(result, bytes)
         assert len(result) > 0
+
+    def test_custom_line_color(self):
+        lats = [-90.0, 0.0, 90.0]
+        vals = [270.0, 300.0, 270.0]
+        result = render_zonal_mean(lats, vals, "temp", line_color="red")
+        assert isinstance(result, bytes)
+        assert result[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_custom_title(self):
+        lats = [-90.0, 0.0, 90.0]
+        vals = [270.0, 300.0, 270.0]
+        result = render_zonal_mean(lats, vals, "temp", title="My Custom Title")
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    def test_empty_bytes_raises(self):
+        """render_zonal_mean should raise if savefig produces empty output."""
+        lats = [-90.0, 0.0, 90.0]
+        vals = [270.0, 300.0, 270.0]
+        with patch("uxarray_mcp.domain.plotting.plt") as mock_plt:
+            mock_fig = MagicMock()
+            mock_ax = MagicMock()
+            mock_plt.subplots.return_value = (mock_fig, mock_ax)
+            mock_fig.savefig.side_effect = lambda buf, **kw: None  # writes nothing
+            with pytest.raises(ValueError, match="empty"):
+                render_zonal_mean(lats, vals, "temp")
+
+
+class TestRenderEmptyBytesGuard:
+    """Test the post-render empty-bytes guard in domain rendering functions."""
+
+    def test_render_zonal_mean_empty_raises(self):
+        """render_zonal_mean raises ValueError when savefig produces no bytes."""
+        lats = [-90.0, 0.0, 90.0]
+        vals = [270.0, 300.0, 270.0]
+        with patch("uxarray_mcp.domain.plotting.plt") as mock_plt:
+            mock_fig = MagicMock()
+            mock_ax = MagicMock()
+            mock_plt.subplots.return_value = (mock_fig, mock_ax)
+            mock_fig.savefig.side_effect = lambda buf, **kw: None  # writes nothing
+            with pytest.raises(ValueError, match="empty"):
+                render_zonal_mean(lats, vals, "temp")
 
 
 # -----------------------------------------------------------------------------
@@ -95,6 +139,16 @@ class TestPlotMeshErrors:
         with pytest.raises(FileNotFoundError):
             plot_mesh("/nonexistent.nc")
 
+    def test_empty_file_raises(self):
+        """plot_mesh should raise ValueError for a zero-byte file."""
+        with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as f:
+            empty_path = f.name  # file is created but empty
+        try:
+            with pytest.raises(ValueError, match="empty"):
+                plot_mesh(empty_path)
+        finally:
+            Path(empty_path).unlink(missing_ok=True)
+
 
 # -----------------------------------------------------------------------------
 # Tool Layer Tests — plot_variable (mocked)
@@ -135,6 +189,64 @@ class TestPlotVariableMocked:
         with pytest.raises(FileNotFoundError, match="Data file not found"):
             plot_variable("healpix:2", "/nonexistent/data.nc")
 
+    def test_empty_data_file_raises(self):
+        """plot_variable should raise ValueError for a zero-byte data file."""
+        with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as f:
+            empty_path = f.name
+        try:
+            with pytest.raises(ValueError, match="empty"):
+                plot_variable("healpix:2", empty_path)
+        finally:
+            Path(empty_path).unlink(missing_ok=True)
+
+    @patch("uxarray_mcp.tools.plotting.render_variable", return_value=b"\x89PNG_var")
+    @patch("uxarray_mcp.tools.plotting.ux")
+    def test_plot_variable_vmin_vmax(self, mock_ux, mock_render):
+        """vmin/vmax are passed through to render_variable."""
+        mock_var = MagicMock()
+        mock_var.dims = ("n_face",)
+        mock_uxds = MagicMock()
+        mock_uxds.data_vars = ["temperature"]
+        mock_uxds.__getitem__ = lambda self, key: mock_var
+        mock_uxds.uxgrid.n_face = 100
+        mock_uxds.uxgrid.n_node = 200
+        mock_uxds.uxgrid.n_edge = 300
+        mock_ux.open_dataset.return_value = mock_uxds
+
+        with patch("uxarray_mcp.tools.plotting.Path") as MockPath:
+            MockPath.return_value.exists.return_value = True
+            MockPath.return_value.stat.return_value.st_size = 1000
+
+            plot_variable("grid.nc", "data.nc", vmin=-5.0, vmax=5.0)
+
+            mock_render.assert_called_once()
+            _, kwargs = mock_render.call_args
+            assert kwargs["vmin"] == -5.0
+            assert kwargs["vmax"] == 5.0
+
+    @patch("uxarray_mcp.tools.plotting.render_variable", return_value=b"\x89PNG_var")
+    @patch("uxarray_mcp.tools.plotting.ux")
+    def test_plot_variable_custom_title(self, mock_ux, mock_render):
+        """title is passed through to render_variable."""
+        mock_var = MagicMock()
+        mock_var.dims = ("n_face",)
+        mock_uxds = MagicMock()
+        mock_uxds.data_vars = ["temperature"]
+        mock_uxds.__getitem__ = lambda self, key: mock_var
+        mock_uxds.uxgrid.n_face = 100
+        mock_uxds.uxgrid.n_node = 200
+        mock_uxds.uxgrid.n_edge = 300
+        mock_ux.open_dataset.return_value = mock_uxds
+
+        with patch("uxarray_mcp.tools.plotting.Path") as MockPath:
+            MockPath.return_value.exists.return_value = True
+            MockPath.return_value.stat.return_value.st_size = 1000
+
+            plot_variable("grid.nc", "data.nc", title="My Title")
+
+            _, kwargs = mock_render.call_args
+            assert kwargs["title"] == "My Title"
+
 
 # -----------------------------------------------------------------------------
 # Tool Layer Tests — plot_zonal_mean (mocked)
@@ -163,6 +275,7 @@ class TestPlotZonalMeanMocked:
             ),
         ):
             MockPath.return_value.exists.return_value = True
+            MockPath.return_value.stat.return_value.st_size = 1000
 
             result = plot_zonal_mean("grid.nc", "data.nc", "temperature")
 
@@ -175,6 +288,47 @@ class TestPlotZonalMeanMocked:
             assert prov["variable_name"] == "temperature"
             assert prov["latitudes"] == [-90.0, 0.0, 90.0]
             assert prov["_provenance"]["tool"] == "plot_zonal_mean"
+
+    @patch("uxarray_mcp.tools.plotting.render_zonal_mean", return_value=b"\x89PNG_zm")
+    @patch("uxarray_mcp.tools.plotting.ux")
+    def test_plot_zonal_mean_line_color_and_title(self, mock_ux, mock_render):
+        """line_color and title are passed through to render_zonal_mean."""
+        mock_ux.open_dataset.return_value = MagicMock()
+        zonal_stats = {
+            "latitudes": [-90.0, 0.0, 90.0],
+            "zonal_mean_values": [270.0, 300.0, 270.0],
+        }
+        with (
+            patch("uxarray_mcp.tools.plotting.Path") as MockPath,
+            patch(
+                "uxarray_mcp.tools.plotting.compute_zonal_mean_stats",
+                return_value=zonal_stats,
+            ),
+        ):
+            MockPath.return_value.exists.return_value = True
+            MockPath.return_value.stat.return_value.st_size = 1000
+
+            plot_zonal_mean(
+                "grid.nc",
+                "data.nc",
+                "temperature",
+                line_color="darkorange",
+                title="Custom Title",
+            )
+
+            _, kwargs = mock_render.call_args
+            assert kwargs["line_color"] == "darkorange"
+            assert kwargs["title"] == "Custom Title"
+
+    def test_empty_data_file_raises(self):
+        """plot_zonal_mean should raise ValueError for a zero-byte data file."""
+        with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as f:
+            empty_path = f.name
+        try:
+            with pytest.raises(ValueError, match="empty"):
+                plot_zonal_mean("healpix:2", empty_path, "temperature")
+        finally:
+            Path(empty_path).unlink(missing_ok=True)
 
 
 # -----------------------------------------------------------------------------

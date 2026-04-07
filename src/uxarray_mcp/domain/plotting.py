@@ -4,6 +4,7 @@ Pure rendering functions that take loaded UXarray objects and return
 PNG bytes. No MCP, provenance, or file-loading logic belongs here.
 """
 
+import io
 from typing import Any
 
 import matplotlib
@@ -50,8 +51,6 @@ def render_mesh(
     fig.set_dpi(dpi)
     fig.tight_layout()
 
-    import io
-
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
     plt.close(fig)
@@ -70,6 +69,9 @@ def render_variable(
     width: int = 800,
     height: int = 400,
     cmap: str = "viridis",
+    vmin: float | None = None,
+    vmax: float | None = None,
+    title: str | None = None,
 ) -> bytes:
     """Render a face-centered variable as a filled polygon plot to PNG bytes.
 
@@ -82,7 +84,13 @@ def render_variable(
     height : int
         Image height in pixels.
     cmap : str
-        Matplotlib colormap name.
+        Matplotlib colormap name (e.g. "viridis", "plasma", "RdBu_r", "coolwarm").
+    vmin : float | None
+        Minimum value for the colormap. Defaults to data minimum.
+    vmax : float | None
+        Maximum value for the colormap. Defaults to data maximum.
+    title : str | None
+        Plot title. Defaults to the variable name.
 
     Returns
     -------
@@ -97,16 +105,24 @@ def render_variable(
     fig_w = width / dpi
     fig_h = height / dpi
 
-    element = uxda.plot.polygons(backend="matplotlib", cmap=cmap)
+    kwargs: dict[str, Any] = {"backend": "matplotlib", "cmap": cmap}
+    if vmin is not None:
+        kwargs["clim"] = (vmin, vmax if vmax is not None else uxda.values.max())
+    elif vmax is not None:
+        kwargs["clim"] = (uxda.values.min(), vmax)
+
+    element = uxda.plot.polygons(**kwargs)
 
     renderer = hv.Store.renderers["matplotlib"]
     plot = renderer.get_plot(element)
     fig = plot.state
     fig.set_size_inches(fig_w, fig_h)
     fig.set_dpi(dpi)
-    fig.tight_layout()
 
-    import io
+    if title is not None:
+        fig.axes[0].set_title(title)
+
+    fig.tight_layout()
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
@@ -127,6 +143,8 @@ def render_zonal_mean(
     variable_name: str,
     width: int = 800,
     height: int = 400,
+    line_color: str = "#1f77b4",
+    title: str | None = None,
 ) -> bytes:
     """Render a zonal mean profile (latitude vs value) to PNG bytes.
 
@@ -142,6 +160,11 @@ def render_zonal_mean(
         Image width in pixels.
     height : int
         Image height in pixels.
+    line_color : str
+        Matplotlib color string for the profile line (e.g. "red", "#e74c3c",
+        "steelblue"). Defaults to "#1f77b4" (matplotlib blue).
+    title : str | None
+        Plot title. Defaults to "Zonal Mean — <variable_name>".
 
     Returns
     -------
@@ -153,14 +176,12 @@ def render_zonal_mean(
     fig_h = height / dpi
 
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=dpi)
-    ax.plot(latitudes, values, linewidth=1.5, color="#1f77b4")
+    ax.plot(latitudes, values, linewidth=1.5, color=line_color)
     ax.set_xlabel("Latitude (°)")
     ax.set_ylabel(variable_name)
-    ax.set_title(f"Zonal Mean — {variable_name}")
+    ax.set_title(title if title is not None else f"Zonal Mean — {variable_name}")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-
-    import io
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
