@@ -4,25 +4,51 @@ from fastmcp import FastMCP
 
 from uxarray_mcp.remote.config import load_config
 from uxarray_mcp.tools import (
+    calculate_anomaly,
     calculate_area,
     calculate_area_hpc,
+    calculate_bias,
+    calculate_ensemble_mean,
+    calculate_ensemble_spread,
+    calculate_pattern_correlation,
+    calculate_rmse,
+    calculate_temporal_mean,
     calculate_zonal_mean,
     calculate_zonal_mean_hpc,
+    compare_fields,
+    create_session,
+    export_to_csv,
+    export_to_netcdf,
+    extract_cross_section,
     get_capabilities,
     get_execution_mode,
+    get_operation_status,
+    get_result_handle,
+    get_session_state,
+    get_workflow_status,
     inspect_mesh,
     inspect_mesh_hpc,
     inspect_variable,
     inspect_variable_hpc,
     list_datasets,
+    list_operations,
     plot_mesh,
     plot_variable,
     plot_zonal_mean,
     probe_path_access,
+    register_dataset,
+    regrid_dataset,
+    remap_variable,
+    reset_session_state,
+    resume_workflow,
     run_scientific_agent,
+    run_workflow,
     set_execution_mode,
+    subset_bbox,
+    subset_polygon,
     validate_dataset,
     validate_hpc_setup,
+    write_result,
 )
 
 # Initialize the MCP server
@@ -33,6 +59,16 @@ mcp.tool()(get_capabilities)
 
 # Autonomous scientific agent — Analyze → Plan → Execute → Verify
 mcp.tool()(run_scientific_agent)
+mcp.tool()(run_workflow)
+mcp.tool()(resume_workflow)
+mcp.tool()(get_workflow_status)
+mcp.tool()(create_session)
+mcp.tool()(register_dataset)
+mcp.tool()(get_session_state)
+mcp.tool()(reset_session_state)
+mcp.tool()(get_result_handle)
+mcp.tool()(get_operation_status)
+mcp.tool()(list_operations)
 
 # Core local tools — always registered
 mcp.tool()(inspect_mesh)
@@ -46,6 +82,24 @@ mcp.tool()(list_datasets)
 mcp.tool()(plot_mesh)
 mcp.tool()(plot_variable)
 mcp.tool()(plot_zonal_mean)
+
+# Analysis extensions — always registered
+mcp.tool()(subset_bbox)
+mcp.tool()(subset_polygon)
+mcp.tool()(extract_cross_section)
+mcp.tool()(compare_fields)
+mcp.tool()(calculate_bias)
+mcp.tool()(calculate_rmse)
+mcp.tool()(calculate_pattern_correlation)
+mcp.tool()(remap_variable)
+mcp.tool()(regrid_dataset)
+mcp.tool()(calculate_temporal_mean)
+mcp.tool()(calculate_anomaly)
+mcp.tool()(calculate_ensemble_mean)
+mcp.tool()(calculate_ensemble_spread)
+mcp.tool()(export_to_netcdf)
+mcp.tool()(export_to_csv)
+mcp.tool()(write_result)
 
 # Execution mode control — always registered so users can switch modes
 mcp.tool()(get_execution_mode)

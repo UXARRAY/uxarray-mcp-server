@@ -1,20 +1,66 @@
-# Agentic HPC Workflows
+# Workflows
 
-Once a remote endpoint is healthy, you can run more than one isolated tool call.
-The repository now supports a straightforward sequential workflow:
+The repository now includes a first-class persisted workflow surface for
+multi-step scientific runs:
 
-1. Submit a remote probe.
-2. Poll until it finishes.
-3. Use that result to decide the next job.
-4. Repeat.
+- `create_session(...)`
+- `register_dataset(...)`
+- `run_workflow(...)`
+- `resume_workflow(...)`
+- `get_workflow_status(...)`
+- `get_operation_status(...)`
 
-## What Is Possible Today
+The default workflow template is a deterministic sequence that runs:
 
-This is already possible with the current Globus Compute integration because the
-remote compute functions are serializable and the endpoint can execute them one
-after another.
+1. `validate_hpc_setup`
+2. `probe_path_access`
+3. `inspect_mesh`
+4. `inspect_variable`
+5. `validate_dataset`
+6. `calculate_area`
+7. `calculate_zonal_mean` when a valid face-centered variable is available
 
-The repository includes an example:
+Each workflow stores:
+
+- workflow status and per-step state
+- progress events
+- a final result handle with a JSON artifact
+- session-visible result and operation references when a `session_id` is used
+
+## Recommended Usage
+
+For repeated work across multiple datasets, create a session first:
+
+```python
+from uxarray_mcp.tools import create_session, register_dataset, run_workflow
+
+session = create_session("baseline-analysis")
+dataset = register_dataset(
+    session["session_id"],
+    grid_path="/path/to/grid.nc",
+    data_path="/path/to/data.nc",
+    name="baseline",
+)
+
+workflow = run_workflow(
+    session_id=session["session_id"],
+    dataset_handle=dataset["dataset_handle"],
+    variable_name="temperature",
+)
+```
+
+Then inspect it later:
+
+```python
+from uxarray_mcp.tools import get_workflow_status, get_result_handle
+
+status = get_workflow_status(workflow["workflow_id"])
+summary = get_result_handle(status["result_handle"])
+```
+
+## Relationship to the Example Script
+
+The repository still includes:
 
 ```bash
 uv run python scripts/agentic_hpc_loop.py \
@@ -24,42 +70,18 @@ uv run python scripts/agentic_hpc_loop.py \
   --timeout-seconds 300
 ```
 
-This script does the following:
+That script remains useful as a lower-level example of explicit remote polling
+and branching. The new workflow tools are the supported persisted runtime for
+the common probe → inspect → validate → analyze sequence.
 
-1. Submit `remote_runtime_probe`
-2. Poll until the worker responds
-3. Submit `remote_probe_path` for the grid path
-4. Submit `remote_probe_path` for the data path
-5. Submit `remote_inspect_mesh`
-6. Submit `remote_inspect_variable`
-7. Select the first face-centered variable if none was provided
-8. Submit `remote_calculate_area`
-9. Submit `remote_calculate_zonal_mean` when applicable
+## Current Scope
 
-## Why This Matters
+The first workflow implementation is intentionally narrow:
 
-This is the pattern you need for longer scientific workflows:
+- one canonical workflow template
+- JSON-backed local state
+- explicit resume support
+- stage-based progress events instead of percentage completion
 
-- probe the environment first
-- submit the smallest safe job
-- inspect the result
-- branch to the next computation based on that result
-
-That pattern is more robust than trying to jump directly to a large autonomous
-run on a brand-new cluster.
-
-## What Is Still Missing
-
-The current MCP tools are synchronous wrappers around remote jobs. They work
-well for one tool call at a time, but they do not yet expose a first-class
-multi-step remote workflow engine with persisted state, retries, or background
-job orchestration.
-
-The next product step would be a higher-level workflow tool or agent that can:
-
-- persist remote task state
-- retry failed stages selectively
-- branch on validation results
-- collect structured artifacts across multiple remote jobs
-
-The example script in `scripts/agentic_hpc_loop.py` is the first building block.
+This keeps the workflow layer predictable and makes it compose well with the
+new session, comparison, remapping, and export tools.

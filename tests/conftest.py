@@ -134,3 +134,113 @@ def synthetic_mesh_with_data(tmp_path):
     data_ds.to_netcdf(data_file)
 
     return str(grid_file), str(data_file)
+
+
+@pytest.fixture
+def state_dir(monkeypatch, tmp_path):
+    """Redirect persistent tool state into a temporary test directory."""
+    state_path = tmp_path / "state"
+    monkeypatch.setenv("UXARRAY_MCP_STATE_DIR", str(state_path))
+    return state_path
+
+
+def _write_simple_grid(path, *, node_x, node_y, face_nodes):
+    """Write a compact UGRID mesh for integration-style tool tests."""
+    ds = xr.Dataset(
+        {
+            "Mesh2": (
+                [],
+                0,
+                {
+                    "cf_role": "mesh_topology",
+                    "topology_dimension": 2,
+                    "node_coordinates": "Mesh2_node_x Mesh2_node_y",
+                    "face_node_connectivity": "Mesh2_face_nodes",
+                },
+            ),
+            "Mesh2_node_x": (["nMesh2_node"], node_x),
+            "Mesh2_node_y": (["nMesh2_node"], node_y),
+            "Mesh2_face_nodes": (
+                ["nMesh2_face", "nMaxMesh2_face_nodes"],
+                face_nodes,
+                {"cf_role": "face_node_connectivity", "start_index": 0},
+            ),
+        }
+    )
+    ds.to_netcdf(path)
+
+
+@pytest.fixture
+def comparison_mesh_with_data(tmp_path):
+    """Create one grid and two same-grid data files for comparison tests."""
+    grid_file = tmp_path / "grid.nc"
+    data_a = tmp_path / "data_a.nc"
+    data_b = tmp_path / "data_b.nc"
+
+    _write_simple_grid(
+        grid_file,
+        node_x=[0.0, 1.0, 1.0, 0.0],
+        node_y=[0.0, 0.0, 1.0, 1.0],
+        face_nodes=[[0, 1, 2, 3]],
+    )
+
+    xr.Dataset(
+        {
+            "temperature": (["nMesh2_face"], [280.0], {"units": "K"}),
+            "pressure": (["nMesh2_face"], [1000.0], {"units": "hPa"}),
+        }
+    ).to_netcdf(data_a)
+    xr.Dataset(
+        {
+            "temperature": (["nMesh2_face"], [282.0], {"units": "K"}),
+            "pressure": (["nMesh2_face"], [1005.0], {"units": "hPa"}),
+        }
+    ).to_netcdf(data_b)
+
+    return str(grid_file), str(data_a), str(data_b)
+
+
+@pytest.fixture
+def remap_target_grid(tmp_path):
+    """Create a small target grid for remapping tests."""
+    grid_file = tmp_path / "target_grid.nc"
+    _write_simple_grid(
+        grid_file,
+        node_x=[10.0, 11.0, 10.5],
+        node_y=[0.0, 0.0, 1.0],
+        face_nodes=[[0, 1, 2]],
+    )
+    return str(grid_file)
+
+
+@pytest.fixture
+def time_series_dataset(tmp_path):
+    """Create a time-aware dataset for temporal mean and anomaly tests."""
+    data_file = tmp_path / "time_series.nc"
+    xr.Dataset(
+        {
+            "temperature": (
+                ["time", "sample"],
+                [[280.0, 281.0], [282.0, 283.0], [284.0, 285.0]],
+                {"units": "K"},
+            )
+        },
+        coords={"time": [0, 1, 2], "sample": [0, 1]},
+    ).to_netcdf(data_file)
+    return str(data_file)
+
+
+@pytest.fixture
+def ensemble_data_files(tmp_path):
+    """Create multiple files with a common variable for ensemble statistics."""
+    first = tmp_path / "member_1.nc"
+    second = tmp_path / "member_2.nc"
+    xr.Dataset(
+        {"temperature": (["sample"], [280.0, 282.0], {"units": "K"})},
+        coords={"sample": [0, 1]},
+    ).to_netcdf(first)
+    xr.Dataset(
+        {"temperature": (["sample"], [284.0, 286.0], {"units": "K"})},
+        coords={"sample": [0, 1]},
+    ).to_netcdf(second)
+    return [str(first), str(second)]

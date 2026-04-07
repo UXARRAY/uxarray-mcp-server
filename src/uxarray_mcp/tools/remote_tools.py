@@ -6,6 +6,8 @@ import asyncio
 import concurrent.futures
 from typing import Any, Callable, Dict, Optional
 
+from uxarray_mcp.state import OperationTracker
+
 
 def _endpoint_is_ready(agent) -> tuple[bool, str]:
     """Pre-flight check: return (ready, reason) before submitting an HPC job.
@@ -43,32 +45,56 @@ def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
 
 def _run_with_optional_hpc(
     *,
+    tool_name: str,
     use_remote: bool,
+    session_id: str | None,
     local_call: Callable[[], Dict[str, Any]],
     remote_call: Callable[[Any], Dict[str, Any]],
 ) -> Dict[str, Any]:
     """Run a tool locally or remotely with a consistent fallback path."""
+    tracker = OperationTracker(tool_name, session_id=session_id)
     if not use_remote:
-        return local_call()
+        tracker.stage("running", f"Running {tool_name} locally.")
+        result = local_call()
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.succeed(f"{tool_name} completed locally.")
+        return result
 
     from uxarray_mcp.remote.agent import get_agent
 
     agent = get_agent()
     if not agent.config.has_endpoint:
-        return local_call()
+        tracker.stage("fallback", "No endpoint configured; running locally.")
+        result = local_call()
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.succeed(
+            f"{tool_name} completed locally because no endpoint is configured."
+        )
+        return result
 
     ready, reason = _endpoint_is_ready(agent)
     if not ready:
+        tracker.stage("fallback", "Endpoint not ready; running locally.")
         result = local_call()
         result["_provenance"]["warnings"].append(
             f"HPC endpoint not ready ({reason}); ran locally."
         )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.succeed(
+            f"{tool_name} completed locally because the endpoint was not ready."
+        )
         return result
 
-    return remote_call(agent)
+    tracker.stage("submitted", f"Submitting {tool_name} to the HPC endpoint.")
+    result = remote_call(agent)
+    result["_provenance"]["operation_id"] = tracker.operation_id
+    tracker.succeed(f"{tool_name} completed with remote execution.")
+    return result
 
 
-def inspect_mesh_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]:
+def inspect_mesh_hpc(
+    file_path: str, use_remote: bool = False, session_id: str | None = None
+) -> Dict[str, Any]:
     """Inspect mesh topology with optional HPC execution.
 
     Parameters
@@ -99,7 +125,9 @@ def inspect_mesh_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]
     from .inspection import inspect_mesh
 
     return _run_with_optional_hpc(
+        tool_name="inspect_mesh_hpc",
         use_remote=use_remote,
+        session_id=session_id,
         local_call=lambda: inspect_mesh(file_path),
         remote_call=lambda agent: _run_sync(
             lambda: agent.inspect_mesh_remote(file_path, use_remote)
@@ -107,7 +135,9 @@ def inspect_mesh_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]
     )
 
 
-def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, Any]:
+def calculate_area_hpc(
+    file_path: str, use_remote: bool = False, session_id: str | None = None
+) -> Dict[str, Any]:
     """Calculate face areas with optional HPC execution.
 
     Parameters
@@ -147,7 +177,9 @@ def calculate_area_hpc(file_path: str, use_remote: bool = False) -> Dict[str, An
     from .inspection import calculate_area
 
     return _run_with_optional_hpc(
+        tool_name="calculate_area_hpc",
         use_remote=use_remote,
+        session_id=session_id,
         local_call=lambda: calculate_area(file_path),
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_area_remote(file_path, use_remote)
@@ -160,6 +192,7 @@ def inspect_variable_hpc(
     data_path: str,
     variable_name: Optional[str] = None,
     use_remote: bool = False,
+    session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Inspect data variables with optional HPC execution.
 
@@ -196,7 +229,9 @@ def inspect_variable_hpc(
     from .inspection import inspect_variable
 
     return _run_with_optional_hpc(
+        tool_name="inspect_variable_hpc",
         use_remote=use_remote,
+        session_id=session_id,
         local_call=lambda: inspect_variable(grid_path, data_path, variable_name),
         remote_call=lambda agent: _run_sync(
             lambda: agent.inspect_variable_remote(
@@ -213,6 +248,7 @@ def calculate_zonal_mean_hpc(
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
     use_remote: bool = False,
+    session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Calculate zonal mean with optional HPC execution.
 
@@ -254,7 +290,9 @@ def calculate_zonal_mean_hpc(
     from .inspection import calculate_zonal_mean
 
     return _run_with_optional_hpc(
+        tool_name="calculate_zonal_mean_hpc",
         use_remote=use_remote,
+        session_id=session_id,
         local_call=lambda: calculate_zonal_mean(
             grid_path, data_path, variable_name, lat_spec, conservative
         ),
