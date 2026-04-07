@@ -8,7 +8,7 @@ This guide uses Claude Desktop as the MCP client. Other MCP-compatible clients s
 
 ## Prerequisites
 
-- **Python 3.13+** — Check with: `python3 --version`
+- **Python 3.11+** — Check with: `python3 --version`
 - **uv** — Install with: `pip install uv`
 - **MCP Client** — Claude Desktop or any MCP-compatible client
 - **Git** (optional) — For cloning the repository
@@ -20,7 +20,8 @@ cd /path/to/uxarray-mcp-server
 bash SETUP.sh
 ```
 
-Then skip to **Configure Claude Desktop** below.
+This script installs core dependencies, creates `config.yaml` if needed, and
+runs the local test suite. Then skip to **Configure Claude Desktop** below.
 
 ## Manual Setup
 
