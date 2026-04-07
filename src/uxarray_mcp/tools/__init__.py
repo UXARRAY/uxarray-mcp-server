@@ -37,6 +37,9 @@ from .remote_tools import (
     calculate_zonal_mean_hpc,
     inspect_mesh_hpc,
     inspect_variable_hpc,
+    plot_mesh_hpc,
+    plot_variable_hpc,
+    plot_zonal_mean_hpc,
 )
 from .scientific_agent import run_scientific_agent
 from .stateful import (
@@ -94,6 +97,9 @@ __all__ = [
     "calculate_area_hpc",
     "inspect_variable_hpc",
     "calculate_zonal_mean_hpc",
+    "plot_mesh_hpc",
+    "plot_variable_hpc",
+    "plot_zonal_mean_hpc",
     "get_execution_mode",
     "probe_path_access",
     "set_execution_mode",

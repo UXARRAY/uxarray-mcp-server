@@ -14,10 +14,36 @@ from uxarray_mcp.domain.zonal import compute_zonal_mean_stats
 from uxarray_mcp.provenance import attach_provenance
 
 
+def _resolve_plot_paths(
+    grid_path: Optional[str],
+    data_path: Optional[str],
+    session_id: Optional[str],
+    dataset_handle: Optional[str],
+) -> tuple[str, Optional[str]]:
+    """Resolve grid/data paths from either direct paths or a session dataset handle."""
+    if dataset_handle is not None:
+        if session_id is None:
+            raise ValueError("session_id is required when dataset_handle is provided.")
+        from uxarray_mcp.state import get_session
+
+        session = get_session(session_id)
+        dataset = session["datasets"].get(dataset_handle)
+        if dataset is None:
+            raise FileNotFoundError(
+                f"Dataset handle {dataset_handle!r} not found in session {session_id!r}"
+            )
+        return dataset["grid_path"], dataset.get("data_path")
+    if grid_path is None:
+        raise ValueError("grid_path is required when dataset_handle is not provided.")
+    return grid_path, data_path
+
+
 def plot_mesh(
-    grid_path: str,
+    grid_path: Optional[str] = None,
     width: int = 800,
     height: int = 400,
+    session_id: Optional[str] = None,
+    dataset_handle: Optional[str] = None,
 ) -> list[Any]:
     """Plot an unstructured mesh wireframe.
 
@@ -27,8 +53,12 @@ def plot_mesh(
     Args:
         grid_path: Path to the mesh file (supports UGRID, MPAS, SCRIP, ESMF,
                    etc.) or "healpix:<zoom_level>" for HEALPix grids.
+                   Optional when session_id + dataset_handle are provided.
         width: Image width in pixels (default 800).
         height: Image height in pixels (default 400).
+        session_id: Session ID for looking up a registered dataset handle.
+        dataset_handle: Handle returned by register_dataset. When provided,
+                        grid_path is looked up from the session.
 
     Returns:
         Dictionary containing:
@@ -37,6 +67,8 @@ def plot_mesh(
         - grid_info: Grid summary (n_face, n_node, n_edge)
         - _provenance: Provenance metadata
     """
+    grid_path, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
+
     grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
     if grid_file:
         if not grid_file.exists():
@@ -64,7 +96,13 @@ def plot_mesh(
     provenance = attach_provenance(
         result,
         tool="plot_mesh",
-        inputs={"grid_path": grid_path, "width": width, "height": height},
+        inputs={
+            "grid_path": grid_path,
+            "width": width,
+            "height": height,
+            "session_id": session_id,
+            "dataset_handle": dataset_handle,
+        },
         artifacts=[
             {
                 "type": "plot",
@@ -82,8 +120,8 @@ def plot_mesh(
 
 
 def plot_variable(
-    grid_path: str,
-    data_path: str,
+    grid_path: Optional[str] = None,
+    data_path: Optional[str] = None,
     variable_name: Optional[str] = None,
     width: int = 800,
     height: int = 400,
@@ -91,6 +129,8 @@ def plot_variable(
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     title: Optional[str] = None,
+    session_id: Optional[str] = None,
+    dataset_handle: Optional[str] = None,
 ) -> list[Any]:
     """Plot a face-centered variable as a filled polygon map.
 
@@ -136,6 +176,15 @@ def plot_variable(
             plot_variable("grid.nc", "jan.nc", "precip", vmin=0, vmax=100)
             plot_variable("grid.nc", "jul.nc", "precip", vmin=0, vmax=100)
     """
+    grid_path, data_path = _resolve_plot_paths(
+        grid_path, data_path, session_id, dataset_handle
+    )
+    if data_path is None:
+        raise ValueError(
+            "data_path is required for plot_variable. "
+            "Provide data_path directly or register a dataset with a data file."
+        )
+
     grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
     data_file = Path(data_path)
     if grid_file:
@@ -208,6 +257,8 @@ def plot_variable(
             "vmin": vmin,
             "vmax": vmax,
             "title": title,
+            "session_id": session_id,
+            "dataset_handle": dataset_handle,
         },
         selected_variable=variable_name,
         artifacts=[
@@ -228,15 +279,17 @@ def plot_variable(
 
 
 def plot_zonal_mean(
-    grid_path: str,
-    data_path: str,
-    variable_name: str,
+    grid_path: Optional[str] = None,
+    data_path: Optional[str] = None,
+    variable_name: Optional[str] = None,
     width: int = 800,
     height: int = 400,
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
     line_color: str = "#1f77b4",
     title: Optional[str] = None,
+    session_id: Optional[str] = None,
+    dataset_handle: Optional[str] = None,
 ) -> list[Any]:
     """Plot a zonal mean profile (latitude vs value).
 
@@ -292,6 +345,17 @@ def plot_zonal_mean(
                 conservative=True,
             )
     """
+    grid_path, data_path = _resolve_plot_paths(
+        grid_path, data_path, session_id, dataset_handle
+    )
+    if data_path is None:
+        raise ValueError(
+            "data_path is required for plot_zonal_mean. "
+            "Provide data_path directly or register a dataset with a data file."
+        )
+    if variable_name is None:
+        raise ValueError("variable_name is required for plot_zonal_mean.")
+
     grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
     data_file = Path(data_path)
     if grid_file:
@@ -349,6 +413,8 @@ def plot_zonal_mean(
             "conservative": conservative,
             "line_color": line_color,
             "title": title,
+            "session_id": session_id,
+            "dataset_handle": dataset_handle,
         },
         selected_variable=variable_name,
         artifacts=[

@@ -89,6 +89,12 @@ def inspect_mesh(file_path: str) -> Dict[str, Any]:
             "n_edge": int(grid.n_edge),
             "n_max_face_nodes": int(grid.n_max_face_nodes),
             "file_size_mb": round(file_size_mb, 2),
+            "recommended_next_steps": [
+                f'calculate_area("{file_path}")',
+                f'plot_mesh("{file_path}")',
+                f'inspect_variable("{file_path}", "<data_path>")',
+                f'validate_dataset("{file_path}", "<data_path>")',
+            ],
         },
         tool="inspect_mesh",
         inputs={"file_path": file_path},
@@ -149,8 +155,25 @@ def inspect_variable(
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
+    info = compute_variable_info(uxds, variable_name)
+    face_vars = [
+        v["name"] for v in info.get("variables", []) if v.get("location") == "faces"
+    ]
+    next_steps = []
+    if face_vars:
+        v0 = face_vars[0]
+        next_steps = [
+            f'plot_variable("{grid_path}", "{data_path}", "{v0}")',
+            f'calculate_zonal_mean("{grid_path}", "{data_path}", "{v0}")',
+            f'validate_dataset("{grid_path}", "{data_path}")',
+            f'subset_bbox([-60,60], [-30,30], grid_path="{grid_path}", '
+            f'data_path="{data_path}", variable_name="{v0}")',
+        ]
+    else:
+        next_steps = [f'validate_dataset("{grid_path}", "{data_path}")']
+    info["recommended_next_steps"] = next_steps
     return attach_provenance(
-        compute_variable_info(uxds, variable_name),
+        info,
         tool="inspect_variable",
         inputs={
             "grid_path": grid_path,
@@ -209,6 +232,11 @@ def calculate_area(file_path: str) -> Dict[str, Any]:
     except Exception as e:
         raise RuntimeError(f"Failed to calculate face areas: {str(e)}")
 
+    result["recommended_next_steps"] = [
+        f'plot_mesh("{file_path}")',
+        f'inspect_variable("{file_path}", "<data_path>")',
+        f'calculate_zonal_mean("{file_path}", "<data_path>", "<variable_name>")',
+    ]
     return attach_provenance(
         result, tool="calculate_area", inputs={"file_path": file_path}
     )
