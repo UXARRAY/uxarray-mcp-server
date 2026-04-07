@@ -12,12 +12,16 @@ async def test_inspect_mesh_tool_registered():
 
     expected_tools = {
         "get_capabilities",
+        "list_datasets",
         "run_scientific_agent",
         "inspect_mesh",
         "inspect_variable",
         "calculate_area",
         "calculate_zonal_mean",
         "validate_dataset",
+        "plot_mesh",
+        "plot_variable",
+        "plot_zonal_mean",
         "get_execution_mode",
         "probe_path_access",
         "set_execution_mode",

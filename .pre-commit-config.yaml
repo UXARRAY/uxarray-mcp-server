@@ -23,3 +23,14 @@ repos:
         args: [ --select, I, --fix ]
       - id: ruff-format
         name: format with ruff
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.20.0
+    hooks:
+      - id: mypy
+        name: type check with mypy
+        args: ["--config-file=pyproject.toml"]
+        additional_dependencies:
+          - "types-PyYAML"
+        # Only check source, not tests or docs
+        files: ^src/
