@@ -21,6 +21,9 @@ from .compute_functions import (
     remote_calculate_zonal_mean,
     remote_inspect_mesh,
     remote_inspect_variable,
+    remote_plot_mesh,
+    remote_plot_variable,
+    remote_plot_zonal_mean,
     remote_probe_path,
 )
 from .config import HPCConfig
@@ -207,6 +210,102 @@ class UXarrayComputeAgent(_AcademyAgent):
             return await self._run_on_hpc(remote_probe_path, file_path, inspect_netcdf)
         else:
             return remote_probe_path(file_path, inspect_netcdf)
+
+    @action
+    async def plot_mesh_remote(
+        self,
+        grid_path: str,
+        width: int = 800,
+        height: int = 400,
+        use_remote: bool = False,
+    ) -> Dict[str, Any]:
+        """Render mesh wireframe PNG on HPC and return base64 bytes."""
+        if use_remote and self.config.has_endpoint:
+            return await self._run_on_hpc(remote_plot_mesh, grid_path, width, height)
+        else:
+            return remote_plot_mesh(grid_path, width, height)
+
+    @action
+    async def plot_variable_remote(
+        self,
+        grid_path: str,
+        data_path: str,
+        variable_name: Optional[str] = None,
+        width: int = 800,
+        height: int = 400,
+        cmap: str = "viridis",
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        title: Optional[str] = None,
+        use_remote: bool = False,
+    ) -> Dict[str, Any]:
+        """Render face-centered variable PNG on HPC and return base64 bytes."""
+        if use_remote and self.config.has_endpoint:
+            return await self._run_on_hpc(
+                remote_plot_variable,
+                grid_path,
+                data_path,
+                variable_name,
+                width,
+                height,
+                cmap,
+                vmin,
+                vmax,
+                title,
+            )
+        else:
+            return remote_plot_variable(
+                grid_path,
+                data_path,
+                variable_name,
+                width,
+                height,
+                cmap,
+                vmin,
+                vmax,
+                title,
+            )
+
+    @action
+    async def plot_zonal_mean_remote(
+        self,
+        grid_path: str,
+        data_path: str,
+        variable_name: str,
+        width: int = 800,
+        height: int = 400,
+        lat_spec=None,
+        conservative: bool = False,
+        line_color: str = "#1f77b4",
+        title: Optional[str] = None,
+        use_remote: bool = False,
+    ) -> Dict[str, Any]:
+        """Render zonal mean profile PNG on HPC and return base64 bytes."""
+        if use_remote and self.config.has_endpoint:
+            return await self._run_on_hpc(
+                remote_plot_zonal_mean,
+                grid_path,
+                data_path,
+                variable_name,
+                width,
+                height,
+                lat_spec,
+                conservative,
+                line_color,
+                title,
+            )
+        else:
+            return remote_plot_zonal_mean(
+                grid_path,
+                data_path,
+                variable_name,
+                width,
+                height,
+                lat_spec,
+                conservative,
+                line_color,
+                title,
+            )
 
     async def _run_on_hpc(self, func, *args, **kwargs) -> Dict[str, Any]:
         """Execute function on HPC via Globus Compute.
