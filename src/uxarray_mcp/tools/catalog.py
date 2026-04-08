@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from uxarray_mcp.provenance import attach_provenance
+from uxarray_mcp.remote.agent import get_agent
+from uxarray_mcp.remote.config import load_config
+from uxarray_mcp.tools.remote_tools import _endpoint_is_ready
 
 # File extensions recognised as potential mesh/data files
 _MESH_EXTENSIONS = {".nc", ".nc4", ".h5", ".he5", ".grb", ".grib"}
@@ -306,22 +309,27 @@ def _list_datasets_remote(
     directory: str, recursive: bool, max_files: int
 ) -> Dict[str, Any]:
     """Run list_datasets on the configured HPC endpoint."""
-    try:
-        from globus_compute_sdk import Executor
-        from globus_compute_sdk.serialize import AllCodeStrategies, ComputeSerializer
-
-        from uxarray_mcp.remote.config import load_config
-    except ImportError as exc:
-        raise RuntimeError(
-            "HPC dependencies not installed. Run: uv sync --extra hpc"
-        ) from exc
-
     config = load_config()
     if not config.has_endpoint:
         raise RuntimeError(
             "No HPC endpoint configured. Set endpoint_id in config.yaml "
             "or the GLOBUS_COMPUTE_ENDPOINT_ID environment variable."
         )
+
+    agent = get_agent()
+    ready, reason = _endpoint_is_ready(agent)
+    if not ready:
+        raise RuntimeError(
+            f"HPC endpoint not ready ({reason}). Remote catalog scan not submitted."
+        )
+
+    try:
+        from globus_compute_sdk import Executor
+        from globus_compute_sdk.serialize import AllCodeStrategies, ComputeSerializer
+    except ImportError as exc:
+        raise RuntimeError(
+            "HPC dependencies not installed. Run: uv sync --extra hpc"
+        ) from exc
 
     executor = Executor(
         endpoint_id=config.endpoint_id,

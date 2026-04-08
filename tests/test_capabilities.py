@@ -168,6 +168,9 @@ class TestGetCapabilitiesGridOnly:
         assert "calculate_area_hpc" not in tool_names
         assert "inspect_variable_hpc" not in tool_names
         assert "calculate_zonal_mean_hpc" not in tool_names
+        assert "plot_mesh_hpc" not in tool_names
+        assert "plot_variable_hpc" not in tool_names
+        assert "plot_zonal_mean_hpc" not in tool_names
 
     def test_hpc_tools_shown_with_endpoint(self):
         """HPC tools are surfaced when an endpoint is configured."""
@@ -180,6 +183,9 @@ class TestGetCapabilitiesGridOnly:
         assert "calculate_area_hpc" in tool_names
         assert "inspect_variable_hpc" in tool_names
         assert "calculate_zonal_mean_hpc" in tool_names
+        assert "plot_mesh_hpc" in tool_names
+        assert "plot_variable_hpc" in tool_names
+        assert "plot_zonal_mean_hpc" in tool_names
 
 
 class TestGetCapabilitiesWithData:

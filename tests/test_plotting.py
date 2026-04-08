@@ -1,6 +1,7 @@
 """Tests for plotting tools and domain rendering functions."""
 
 import base64
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -9,6 +10,11 @@ import pytest
 
 from uxarray_mcp.domain.plotting import render_zonal_mean
 from uxarray_mcp.tools.plotting import plot_mesh, plot_variable, plot_zonal_mean
+from uxarray_mcp.tools.remote_tools import (
+    plot_mesh_hpc,
+    plot_variable_hpc,
+    plot_zonal_mean_hpc,
+)
 
 # -----------------------------------------------------------------------------
 # Domain Layer Tests (render functions)
@@ -362,3 +368,61 @@ class TestPlotMeshIntegration:
         prov = json.loads(result[1].text)
         assert prov["image_size_bytes"] > 0
         assert prov["grid_info"]["n_face"] == 48
+
+
+class TestHpcPlotWrappers:
+    """HPC plot wrappers should preserve the inline plot UX."""
+
+    @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
+    def test_plot_mesh_hpc_returns_image_content(self, mock_run):
+        mock_run.return_value = {
+            "png_b64": base64.b64encode(b"\x89PNG_fake").decode("utf-8"),
+            "image_size_bytes": 9,
+            "grid_info": {"n_face": 192},
+            "_provenance": {"execution_venue": "local", "warnings": []},
+        }
+
+        result = plot_mesh_hpc("healpix:2")
+
+        assert len(result) == 2
+        assert result[0].type == "image"
+        metadata = json.loads(result[1].text)
+        assert metadata["image_size_bytes"] == 9
+        assert "png_b64" not in metadata
+
+    @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
+    def test_plot_variable_hpc_returns_image_content(self, mock_run):
+        mock_run.return_value = {
+            "png_b64": base64.b64encode(b"\x89PNG_fake").decode("utf-8"),
+            "image_size_bytes": 9,
+            "variable_name": "temperature",
+            "grid_info": {"n_face": 192},
+            "_provenance": {"execution_venue": "local", "warnings": []},
+        }
+
+        result = plot_variable_hpc("grid.nc", "data.nc", "temperature")
+
+        assert len(result) == 2
+        assert result[0].type == "image"
+        metadata = json.loads(result[1].text)
+        assert metadata["variable_name"] == "temperature"
+        assert "png_b64" not in metadata
+
+    @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
+    def test_plot_zonal_mean_hpc_returns_image_content(self, mock_run):
+        mock_run.return_value = {
+            "png_b64": base64.b64encode(b"\x89PNG_fake").decode("utf-8"),
+            "image_size_bytes": 9,
+            "variable_name": "temperature",
+            "latitudes": [-90.0, 0.0, 90.0],
+            "zonal_mean_values": [270.0, 300.0, 270.0],
+            "_provenance": {"execution_venue": "local", "warnings": []},
+        }
+
+        result = plot_zonal_mean_hpc("grid.nc", "data.nc", "temperature")
+
+        assert len(result) == 2
+        assert result[0].type == "image"
+        metadata = json.loads(result[1].text)
+        assert metadata["latitudes"] == [-90.0, 0.0, 90.0]
+        assert "png_b64" not in metadata

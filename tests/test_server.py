@@ -60,6 +60,9 @@ async def test_inspect_mesh_tool_registered():
         "calculate_area_hpc",
         "inspect_variable_hpc",
         "calculate_zonal_mean_hpc",
+        "plot_mesh_hpc",
+        "plot_variable_hpc",
+        "plot_zonal_mean_hpc",
     }
     if load_config().has_endpoint:
         assert hpc_tools.issubset(set(tools.keys()))
