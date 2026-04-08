@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import json
 from typing import Any, Callable, Dict, List, Optional
+
+from mcp.types import ImageContent, TextContent
 
 from uxarray_mcp.state import OperationTracker
 
@@ -90,6 +93,15 @@ def _run_with_optional_hpc(
     result["_provenance"]["operation_id"] = tracker.operation_id
     tracker.succeed(f"{tool_name} completed with remote execution.")
     return result
+
+
+def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
+    """Convert a plot result dict into inline MCP image + metadata contents."""
+    metadata = {key: value for key, value in result.items() if key != "png_b64"}
+    return [
+        ImageContent(type="image", data=result["png_b64"], mimeType="image/png"),
+        TextContent(type="text", text=json.dumps(metadata, indent=2)),
+    ]
 
 
 def inspect_mesh_hpc(
@@ -310,7 +322,7 @@ def plot_mesh_hpc(
     height: int = 400,
     use_remote: bool = False,
     session_id: str | None = None,
-) -> Dict[str, Any]:
+) -> list[Any]:
     """Render a mesh wireframe PNG with optional HPC execution.
 
     When use_remote=True the mesh is rendered on the HPC endpoint and only
@@ -362,7 +374,7 @@ def plot_mesh_hpc(
             "_provenance": meta.get("_provenance", {}),
         }
 
-    return _run_with_optional_hpc(
+    result = _run_with_optional_hpc(
         tool_name="plot_mesh_hpc",
         use_remote=use_remote,
         session_id=session_id,
@@ -371,6 +383,7 @@ def plot_mesh_hpc(
             lambda: agent.plot_mesh_remote(grid_path, width, height, use_remote)
         ),
     )
+    return _plot_result_to_mcp_contents(result)
 
 
 def plot_variable_hpc(
@@ -385,7 +398,7 @@ def plot_variable_hpc(
     title: Optional[str] = None,
     use_remote: bool = False,
     session_id: str | None = None,
-) -> Dict[str, Any]:
+) -> list[Any]:
     """Render a face-centered variable as a filled-polygon PNG with optional HPC execution.
 
     Parameters
@@ -450,7 +463,7 @@ def plot_variable_hpc(
             "_provenance": meta.get("_provenance", {}),
         }
 
-    return _run_with_optional_hpc(
+    result = _run_with_optional_hpc(
         tool_name="plot_variable_hpc",
         use_remote=use_remote,
         session_id=session_id,
@@ -470,6 +483,7 @@ def plot_variable_hpc(
             )
         ),
     )
+    return _plot_result_to_mcp_contents(result)
 
 
 def plot_zonal_mean_hpc(
@@ -484,7 +498,7 @@ def plot_zonal_mean_hpc(
     title: Optional[str] = None,
     use_remote: bool = False,
     session_id: str | None = None,
-) -> Dict[str, Any]:
+) -> list[Any]:
     """Render a zonal mean profile PNG with optional HPC execution.
 
     Parameters
@@ -551,7 +565,7 @@ def plot_zonal_mean_hpc(
             "_provenance": meta.get("_provenance", {}),
         }
 
-    return _run_with_optional_hpc(
+    result = _run_with_optional_hpc(
         tool_name="plot_zonal_mean_hpc",
         use_remote=use_remote,
         session_id=session_id,
@@ -571,3 +585,4 @@ def plot_zonal_mean_hpc(
             )
         ),
     )
+    return _plot_result_to_mcp_contents(result)

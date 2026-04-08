@@ -1,6 +1,7 @@
 """Tests for the list_datasets catalog tool."""
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -150,6 +151,22 @@ class TestListDatasetsErrors:
         f.touch()
         with pytest.raises(ValueError, match="Not a directory"):
             list_datasets(str(f))
+
+    def test_remote_scan_fails_fast_when_endpoint_unavailable(self, tmp_path):
+        with (
+            patch("uxarray_mcp.tools.catalog.load_config") as mock_load_config,
+            patch("uxarray_mcp.tools.catalog.get_agent") as mock_get_agent,
+            patch(
+                "uxarray_mcp.tools.catalog._endpoint_is_ready",
+                return_value=(False, "endpoint status='stopped': "),
+            ),
+        ):
+            mock_load_config.return_value.has_endpoint = True
+            mock_load_config.return_value.endpoint_id = "fake-endpoint"
+            mock_get_agent.return_value = MagicMock()
+
+            with pytest.raises(RuntimeError, match="HPC endpoint not ready"):
+                list_datasets(str(tmp_path), use_remote=True)
 
 
 class TestListDatasetsRecommendations:
