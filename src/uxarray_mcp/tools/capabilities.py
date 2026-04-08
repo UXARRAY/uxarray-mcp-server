@@ -245,6 +245,44 @@ def get_capabilities(
             "call_example": f"validate_dataset({gp}{dp})",
         },
         {
+            "name": "plot_mesh",
+            "applicable": has_faces,
+            "reason": (
+                "Available — renders a wireframe visualization of the mesh."
+                if has_faces
+                else "Not applicable — no faces found to visualize as a mesh."
+            ),
+            "call_example": f"plot_mesh({gp})",
+        },
+        {
+            "name": "plot_variable",
+            "applicable": has_face_centered_vars,
+            "reason": (
+                f"Available — face-centered variables found: {face_centered_var_names}."
+                if has_face_centered_vars
+                else (
+                    "Requires face-centered data — provide data_path with face-centered variables."
+                    if data_path is None
+                    else "Not applicable — no face-centered variables found for polygon plotting."
+                )
+            ),
+            "call_example": f'plot_variable({gp}{dp}, variable_name="...")',
+        },
+        {
+            "name": "plot_zonal_mean",
+            "applicable": has_face_centered_vars,
+            "reason": (
+                f"Available — face-centered variables found: {face_centered_var_names}."
+                if has_face_centered_vars
+                else (
+                    "Requires face-centered data — provide data_path with face-centered variables."
+                    if data_path is None
+                    else "Not applicable — no face-centered variables found for zonal plotting."
+                )
+            ),
+            "call_example": f'plot_zonal_mean({gp}{dp}, variable_name="...")',
+        },
+        {
             "name": "create_session",
             "applicable": True,
             "reason": (
@@ -479,6 +517,40 @@ def get_capabilities(
                 "call_example": (
                     f'calculate_zonal_mean_hpc({gp}{dp}, variable_name="...", '
                     "use_remote=True)"
+                ),
+            },
+            {
+                "name": "plot_mesh_hpc",
+                "applicable": has_faces,
+                "reason": (
+                    "Available — renders a mesh wireframe with optional remote execution."
+                    if has_faces
+                    else "Not applicable — no faces found to visualize as a mesh."
+                ),
+                "call_example": f"plot_mesh_hpc({gp}, use_remote=True)",
+            },
+            {
+                "name": "plot_variable_hpc",
+                "applicable": has_face_centered_vars,
+                "reason": (
+                    f"Available — face-centered variables: {face_centered_var_names}."
+                    if has_face_centered_vars
+                    else "Not applicable — no face-centered variables found for polygon plotting."
+                ),
+                "call_example": (
+                    f'plot_variable_hpc({gp}{dp}, variable_name="...", use_remote=True)'
+                ),
+            },
+            {
+                "name": "plot_zonal_mean_hpc",
+                "applicable": has_face_centered_vars,
+                "reason": (
+                    f"Available — face-centered variables: {face_centered_var_names}."
+                    if has_face_centered_vars
+                    else "Not applicable — no face-centered variables found for zonal plotting."
+                ),
+                "call_example": (
+                    f'plot_zonal_mean_hpc({gp}{dp}, variable_name="...", use_remote=True)'
                 ),
             },
         ]
