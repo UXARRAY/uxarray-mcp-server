@@ -606,3 +606,171 @@ def remote_calculate_zonal_mean(
             "n_edge": int(uxds.uxgrid.n_edge),
         },
     }
+
+
+def remote_subset_bbox_plot(
+    grid_path: str,
+    lon_bounds: list,
+    lat_bounds: list,
+    region_name: str = "",
+    width: int = 800,
+    height: int = 450,
+    edgecolor: str = "steelblue",
+    facecolor: str = "lightcyan",
+    linewidth: float = 0.3,
+) -> Dict[str, Any]:
+    """Subset a mesh by bounding box and return stats + a wireframe PNG.
+
+    Runs entirely on the HPC worker so multi-GB files never leave the
+    facility filesystem.  All rendering parameters are echoed back in the
+    return dict so the caller has a complete provenance record: to reproduce
+    or modify the plot, change any field and resubmit.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to mesh file on HPC filesystem.
+    lon_bounds : list
+        [lon_min, lon_max] in degrees.
+    lat_bounds : list
+        [lat_min, lat_max] in degrees.
+    region_name : str
+        Human-readable label for the plot title.
+    width, height : int
+        PNG dimensions in pixels.
+    edgecolor : str
+        Matplotlib color for cell edges.
+    facecolor : str
+        Matplotlib color for cell fill.
+    linewidth : float
+        Edge line width in points.
+
+    Returns
+    -------
+    dict
+        - region_name, lon_bounds, lat_bounds: inputs echoed for provenance
+        - plot_params: all rendering parameters (edgecolor, facecolor,
+          linewidth, width, height, dpi) — change any field and resubmit
+          to modify the plot without re-running the analysis
+        - n_face_total, n_face_subset, fraction_of_mesh: coverage statistics
+        - mean_area_full_sr, mean_area_subset_sr: face-area statistics (sr)
+        - resolution_ratio: mean_area_full / mean_area_subset  (>1 = finer)
+        - uxarray_version: library version on the HPC worker
+        - png_b64: base64 PNG of the subset wireframe
+        - image_size_bytes: PNG size in bytes
+    """
+    import base64
+    import importlib.metadata
+    import io
+    import math
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import uxarray as ux
+
+    grid = ux.open_grid(grid_path)
+    n_face_total = int(grid.n_face)
+
+    # full-mesh mean area
+    full_areas = grid.face_areas
+    mean_area_full = float(full_areas.values.mean())
+
+    # subset by bounding box
+    subset = grid.subset.bounding_box(
+        lon_bounds=lon_bounds,
+        lat_bounds=lat_bounds,
+    )
+    n_face_subset = int(subset.n_face)
+
+    subset_areas = subset.face_areas
+    mean_area_subset = (
+        float(subset_areas.values.mean()) if n_face_subset > 0 else float("nan")
+    )
+
+    resolution_ratio = (
+        mean_area_full / mean_area_subset
+        if mean_area_subset and not math.isnan(mean_area_subset)
+        else None
+    )
+
+    # plot subset: draw face-edge polygons using node coordinates
+    dpi = 100
+    fig, ax = plt.subplots(figsize=(width / dpi, height / dpi), dpi=dpi)
+    title = region_name if region_name else f"lon{lon_bounds} lat{lat_bounds}"
+    subtitle = (
+        f"{n_face_subset:,} faces  |  res_ratio={resolution_ratio:.2f}x"
+        if resolution_ratio
+        else f"{n_face_subset:,} faces"
+    )
+
+    from matplotlib.collections import PolyCollection
+
+    # Build polygon vertices from face-node connectivity
+    try:
+        face_lon = subset.node_lon.values  # (n_node,)
+        face_lat = subset.node_lat.values  # (n_node,)
+        conn = subset.face_node_connectivity.values  # (n_face, max_nodes)
+        fill_val = getattr(subset.face_node_connectivity, "_FillValue", -1)
+        polys = []
+        for row in conn:
+            idx = row[row != fill_val]
+            if len(idx) >= 3:
+                polys.append(list(zip(face_lon[idx], face_lat[idx])))
+        if polys:
+            col = PolyCollection(
+                polys, edgecolors=edgecolor, facecolors=facecolor, linewidths=linewidth
+            )
+            ax.add_collection(col)
+            ax.set_xlim(lon_bounds)
+            ax.set_ylim(lat_bounds)
+        else:
+            raise ValueError("no valid polygons")
+    except Exception:
+        # fallback: scatter face centres
+        lons = subset.face_lon.values
+        lats = subset.face_lat.values
+        ax.scatter(lons, lats, s=2, color=edgecolor, alpha=0.6)
+        ax.set_xlim(lon_bounds)
+        ax.set_ylim(lat_bounds)
+
+    ax.set_title(f"{title}\n{subtitle}", fontsize=10)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.set_aspect("equal", adjustable="box")
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi)
+    plt.close(fig)
+    buf.seek(0)
+    png_bytes = buf.read()
+
+    try:
+        ux_version = importlib.metadata.version("uxarray")
+    except Exception:
+        ux_version = "unknown"
+
+    return {
+        "region_name": region_name,
+        "lon_bounds": lon_bounds,
+        "lat_bounds": lat_bounds,
+        "plot_params": {
+            "edgecolor": edgecolor,
+            "facecolor": facecolor,
+            "linewidth": linewidth,
+            "width_px": width,
+            "height_px": height,
+            "dpi": dpi,
+        },
+        "n_face_total": n_face_total,
+        "n_face_subset": n_face_subset,
+        "fraction_of_mesh": n_face_subset / n_face_total if n_face_total else None,
+        "mean_area_full_sr": mean_area_full,
+        "mean_area_subset_sr": mean_area_subset,
+        "resolution_ratio": resolution_ratio,
+        "uxarray_version": ux_version,
+        "png_b64": base64.b64encode(png_bytes).decode(),
+        "image_size_bytes": len(png_bytes),
+    }
