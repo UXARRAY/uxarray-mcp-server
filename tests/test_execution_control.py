@@ -203,6 +203,82 @@ def test_validate_hpc_setup_can_probe_sample_path(monkeypatch, tmp_path):
     assert result["sample_path_probe"]["path"] == "/home/jain/test.nc"
 
 
+def test_validate_hpc_setup_selects_named_endpoint(monkeypatch, tmp_path):
+    """Diagnostics validate the selected endpoint profile."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+hpc:
+  default_endpoint: ucar
+  endpoints:
+    ucar:
+      endpoint_id: ucar-uuid
+    improv:
+      endpoint_id: improv-uuid
+  execution_mode: auto
+  timeout_seconds: 300
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(execution_control, "_CONFIG_PATH", config_path)
+
+    mock_client = MagicMock()
+    mock_client.get_endpoint_status.return_value = {"status": "online"}
+    mock_client_cls = MagicMock(return_value=mock_client)
+
+    with patch.object(
+        execution_control,
+        "_load_globus_compute_sdk",
+        return_value=(mock_client_cls, MagicMock(), MagicMock(), MagicMock()),
+    ):
+        result = execution_control.validate_hpc_setup(
+            endpoint="improv", run_remote_probe=False
+        )
+
+    assert result["endpoint_name"] == "improv"
+    assert result["endpoint_id"] == "improv-uuid"
+    mock_client.get_endpoint_status.assert_called_once_with("improv-uuid")
+
+
+def test_validate_hpc_setup_uses_default_endpoint_with_sample_path(
+    monkeypatch, tmp_path
+):
+    """Sample paths are probed on the selected endpoint, not used for routing."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+hpc:
+  default_endpoint: improv
+  endpoints:
+    ucar:
+      endpoint_id: ucar-uuid
+    improv:
+      endpoint_id: improv-uuid
+  execution_mode: auto
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(execution_control, "_CONFIG_PATH", config_path)
+
+    mock_client = MagicMock()
+    mock_client.get_endpoint_status.return_value = {"status": "online"}
+    mock_client_cls = MagicMock(return_value=mock_client)
+
+    with patch.object(
+        execution_control,
+        "_load_globus_compute_sdk",
+        return_value=(mock_client_cls, MagicMock(), MagicMock(), MagicMock()),
+    ):
+        result = execution_control.validate_hpc_setup(
+            sample_path="/glade/u/home/rajeevj/test.nc",
+            run_remote_probe=False,
+        )
+
+    assert result["endpoint_name"] == "improv"
+    assert result["endpoint_id"] == "improv-uuid"
+    mock_client.get_endpoint_status.assert_called_once_with("improv-uuid")
+
+
 def test_probe_path_access_local(tmp_path):
     """Local path probing returns file metadata with provenance."""
     sample = tmp_path / "sample.txt"

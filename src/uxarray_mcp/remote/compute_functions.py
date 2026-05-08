@@ -11,25 +11,37 @@ from typing import Any, Dict, Optional
 
 
 def remote_runtime_probe() -> Dict[str, Any]:
-    """Return lightweight runtime diagnostics from the remote worker.
-
-    This intentionally does not touch UXarray or the filesystem. The goal is to
-    prove that a submitted task can reach a real worker and report back enough
-    environment detail to diagnose scheduler/bootstrap issues.
-    """
+    """Return lightweight runtime diagnostics from the remote worker."""
     import getpass
+    import importlib.util
     import os
     import platform
     import shutil
     import socket
+    import sys
+
+    modules: Dict[str, Any] = {}
+    for name in ("uxarray", "xarray", "numpy", "yac"):
+        spec = importlib.util.find_spec(name)
+        info: Dict[str, Any] = {"available": spec is not None}
+        if spec is not None:
+            try:
+                module = __import__(name)
+                info["version"] = getattr(module, "__version__", None)
+                info["file"] = getattr(module, "__file__", None)
+            except Exception as exc:
+                info["import_error"] = f"{type(exc).__name__}: {exc}"
+        modules[name] = info
 
     return {
         "hostname": socket.gethostname(),
         "user": getpass.getuser(),
         "cwd": os.getcwd(),
+        "python_executable": sys.executable,
         "python_version": platform.python_version(),
         "qsub_path": shutil.which("qsub"),
         "path_head": os.environ.get("PATH", "").split(":")[:5],
+        "modules": modules,
     }
 
 

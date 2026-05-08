@@ -111,6 +111,25 @@ hpc:
 
 If `endpoint_id` is `null`, the server runs locally only.
 
+For multiple facilities, use named endpoint profiles:
+
+```yaml
+hpc:
+  default_endpoint: "ucar"
+  endpoints:
+    ucar:
+      endpoint_id: "your-ucar-endpoint-uuid"
+      path_prefixes: ["/glade/"]
+    improv:
+      endpoint_id: "your-improv-endpoint-uuid"
+      path_prefixes: ["/gpfs/fs1/", "/home/jain/"]
+  execution_mode: "auto"
+  timeout_seconds: 300
+```
+
+Remote tools accept `endpoint="ucar"` or `endpoint="improv"`; when omitted,
+the server routes by path prefix before falling back to `default_endpoint`.
+
 ## Development Checks
 
 ```bash

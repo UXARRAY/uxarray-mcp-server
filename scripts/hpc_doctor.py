@@ -30,6 +30,11 @@ def main() -> int:
         help="Timeout to use for remote probes.",
     )
     parser.add_argument(
+        "--endpoint",
+        default=None,
+        help="Named endpoint profile to validate (for example: ucar or improv).",
+    )
+    parser.add_argument(
         "--skip-remote-probe",
         action="store_true",
         help="Only validate config and endpoint status, without submitting work.",
@@ -46,11 +51,17 @@ def main() -> int:
         run_remote_probe=not args.skip_remote_probe,
         probe_timeout_seconds=args.timeout_seconds,
         sample_path=sample_path,
+        endpoint=args.endpoint,
     )
 
     if len(args.sample_path) > 1:
         report["additional_path_probes"] = [
-            probe_path_access(path, use_remote=True, inspect_netcdf=not args.no_netcdf)
+            probe_path_access(
+                path,
+                use_remote=True,
+                inspect_netcdf=not args.no_netcdf,
+                endpoint=args.endpoint,
+            )
             for path in args.sample_path[1:]
         ]
 

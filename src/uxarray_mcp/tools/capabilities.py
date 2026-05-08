@@ -475,16 +475,30 @@ def get_capabilities(
         },
     ]
 
-    if load_config().has_endpoint:
+    config = load_config()
+    endpoint_hint = (
+        ', endpoint="..."'
+        if len(config.endpoint_names) > 1
+        else (
+            f', endpoint="{config.endpoint_names[0]}"'
+            if len(config.endpoint_names) == 1
+            else ""
+        )
+    )
+
+    if config.has_endpoint:
         mcp_tools += [
             {
                 "name": "inspect_mesh_hpc",
                 "applicable": True,
                 "reason": (
                     "Available — same as inspect_mesh with optional remote execution "
-                    "on a configured Globus Compute endpoint."
+                    "on a configured Globus Compute endpoint. Pass endpoint='name' "
+                    "when several endpoint profiles are configured."
                 ),
-                "call_example": f"inspect_mesh_hpc({gp}, use_remote=True)",
+                "call_example": (
+                    f"inspect_mesh_hpc({gp}, use_remote=True{endpoint_hint})"
+                ),
             },
             {
                 "name": "calculate_area_hpc",
@@ -494,7 +508,9 @@ def get_capabilities(
                     if has_faces
                     else "Not applicable — no faces found."
                 ),
-                "call_example": f"calculate_area_hpc({gp}, use_remote=True)",
+                "call_example": (
+                    f"calculate_area_hpc({gp}, use_remote=True{endpoint_hint})"
+                ),
             },
             {
                 "name": "inspect_variable_hpc",
@@ -504,7 +520,9 @@ def get_capabilities(
                     if data_path
                     else "Requires a data file."
                 ),
-                "call_example": f"inspect_variable_hpc({gp}{dp}, use_remote=True)",
+                "call_example": (
+                    f"inspect_variable_hpc({gp}{dp}, use_remote=True{endpoint_hint})"
+                ),
             },
             {
                 "name": "calculate_zonal_mean_hpc",
@@ -516,7 +534,7 @@ def get_capabilities(
                 ),
                 "call_example": (
                     f'calculate_zonal_mean_hpc({gp}{dp}, variable_name="...", '
-                    "use_remote=True)"
+                    f"use_remote=True{endpoint_hint})"
                 ),
             },
             {
@@ -527,7 +545,9 @@ def get_capabilities(
                     if has_faces
                     else "Not applicable — no faces found to visualize as a mesh."
                 ),
-                "call_example": f"plot_mesh_hpc({gp}, use_remote=True)",
+                "call_example": (
+                    f"plot_mesh_hpc({gp}, use_remote=True{endpoint_hint})"
+                ),
             },
             {
                 "name": "plot_variable_hpc",
@@ -538,7 +558,7 @@ def get_capabilities(
                     else "Not applicable — no face-centered variables found for polygon plotting."
                 ),
                 "call_example": (
-                    f'plot_variable_hpc({gp}{dp}, variable_name="...", use_remote=True)'
+                    f'plot_variable_hpc({gp}{dp}, variable_name="...", use_remote=True{endpoint_hint})'
                 ),
             },
             {
@@ -550,7 +570,7 @@ def get_capabilities(
                     else "Not applicable — no face-centered variables found for zonal plotting."
                 ),
                 "call_example": (
-                    f'plot_zonal_mean_hpc({gp}{dp}, variable_name="...", use_remote=True)'
+                    f'plot_zonal_mean_hpc({gp}{dp}, variable_name="...", use_remote=True{endpoint_hint})'
                 ),
             },
         ]
@@ -709,6 +729,10 @@ def get_capabilities(
     result: Dict[str, Any] = {
         "grid_summary": grid_summary,
         "mcp_server_tools": mcp_tools,
+        "endpoint_profiles": {
+            "default_endpoint": config.default_endpoint,
+            "configured_endpoints": config.endpoint_names,
+        },
         "uxarray_capabilities": uxarray_capabilities,
         "recommendations": recommendations,
     }
