@@ -139,6 +139,7 @@ def probe_path_access(
     file_path: str,
     use_remote: bool = False,
     inspect_netcdf: bool = True,
+    endpoint: str | None = None,
     session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Probe whether a path is reachable and readable.
@@ -161,6 +162,7 @@ def probe_path_access(
                 "file_path": file_path,
                 "use_remote": use_remote,
                 "inspect_netcdf": inspect_netcdf,
+                "endpoint": endpoint,
                 "session_id": session_id,
             },
             venue="local",
@@ -171,8 +173,8 @@ def probe_path_access(
 
     from uxarray_mcp.remote.agent import get_agent
 
-    agent = get_agent()
-    if not agent.config.has_endpoint:
+    agent = get_agent(endpoint=endpoint, path=file_path)
+    if not agent.config.endpoint_id:
         tracker.stage("fallback", "No endpoint configured; probing locally.")
         result = remote_probe_path(file_path, inspect_netcdf)
         result = attach_provenance(
@@ -182,6 +184,7 @@ def probe_path_access(
                 "file_path": file_path,
                 "use_remote": use_remote,
                 "inspect_netcdf": inspect_netcdf,
+                "endpoint": endpoint,
                 "session_id": session_id,
             },
             venue="local",
@@ -208,6 +211,7 @@ def validate_hpc_setup(
     run_remote_probe: bool = True,
     probe_timeout_seconds: int = 30,
     sample_path: str | None = None,
+    endpoint: str | None = None,
     session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Validate end-to-end HPC readiness beyond simple endpoint registration.
@@ -221,25 +225,31 @@ def validate_hpc_setup(
     tracker.stage("config", "Loading HPC configuration.")
     from uxarray_mcp.remote.config import load_config
 
-    config = load_config(_CONFIG_PATH)
+    base_config = load_config(_CONFIG_PATH)
+    config = base_config.for_endpoint(endpoint=endpoint, path=sample_path)
     checks: List[Dict[str, Any]] = []
     checks.append(
         _make_check(
             "config",
-            config.has_endpoint,
+            bool(config.endpoint_id),
             (
-                f"Configured endpoint_id={config.endpoint_id!r} in {_CONFIG_PATH.name}."
-                if config.has_endpoint
-                else f"No endpoint_id configured in {_CONFIG_PATH.name}."
+                f"Configured endpoint_id={config.endpoint_id!r} "
+                f"({config.endpoint_name or 'default'}) in {_CONFIG_PATH.name}."
+                if config.endpoint_id
+                else f"No endpoint could be resolved in {_CONFIG_PATH.name}."
             ),
             details={
                 "mode": config.execution_mode,
+                "endpoint_name": config.endpoint_name,
+                "default_endpoint": config.default_endpoint,
+                "configured_endpoints": config.endpoint_names,
                 "config_path": str(_CONFIG_PATH),
             },
             guidance=(
                 "Copy config.yaml.example to config.yaml and set "
-                "`hpc.globus_compute.endpoint_id`."
-                if not config.has_endpoint
+                "`hpc.globus_compute.endpoint_id`, or define "
+                "`hpc.endpoints` and pass endpoint='name'."
+                if not config.endpoint_id
                 else None
             ),
         )
@@ -250,10 +260,11 @@ def validate_hpc_setup(
     sample_path_probe: Dict[str, Any] | None = None
     result: Dict[str, Any]
 
-    if not config.has_endpoint:
+    if not config.endpoint_id:
         result = {
             "passed": False,
             "mode": config.execution_mode,
+            "endpoint_name": config.endpoint_name,
             "endpoint_id": config.endpoint_id,
             "endpoint_status": endpoint_status,
             "checks": checks,
@@ -267,6 +278,7 @@ def validate_hpc_setup(
                 "run_remote_probe": run_remote_probe,
                 "probe_timeout_seconds": probe_timeout_seconds,
                 "sample_path": sample_path,
+                "endpoint": endpoint,
                 "session_id": session_id,
             },
         )
@@ -292,6 +304,7 @@ def validate_hpc_setup(
         result = {
             "passed": False,
             "mode": config.execution_mode,
+            "endpoint_name": config.endpoint_name,
             "endpoint_id": config.endpoint_id,
             "endpoint_status": endpoint_status,
             "checks": checks,
@@ -305,6 +318,7 @@ def validate_hpc_setup(
                 "run_remote_probe": run_remote_probe,
                 "probe_timeout_seconds": probe_timeout_seconds,
                 "sample_path": sample_path,
+                "endpoint": endpoint,
                 "session_id": session_id,
             },
         )
@@ -315,14 +329,19 @@ def validate_hpc_setup(
     try:
         tracker.stage("auth", "Querying endpoint status through the local SDK.")
         client = Client()
-        endpoint = client.get_endpoint_status(config.endpoint_id)
-        endpoint_status = endpoint.get("status", "unknown")
+        raw_endpoint_status = client.get_endpoint_status(config.endpoint_id)
+        endpoint_payload = (
+            raw_endpoint_status
+            if isinstance(raw_endpoint_status, dict)
+            else {"status": str(raw_endpoint_status)}
+        )
+        endpoint_status = endpoint_payload.get("status", "unknown")
         checks.append(
             _make_check(
                 "endpoint_status",
                 endpoint_status in {"online", "healthy"},
                 f"Endpoint manager reports status={endpoint_status!r}.",
-                details={"raw_status": endpoint},
+                details={"raw_status": endpoint_payload},
                 guidance=(
                     None
                     if endpoint_status in {"online", "healthy"}
@@ -344,6 +363,7 @@ def validate_hpc_setup(
         result = {
             "passed": False,
             "mode": config.execution_mode,
+            "endpoint_name": config.endpoint_name,
             "endpoint_id": config.endpoint_id,
             "endpoint_status": "unreachable",
             "checks": checks,
@@ -357,6 +377,7 @@ def validate_hpc_setup(
                 "run_remote_probe": run_remote_probe,
                 "probe_timeout_seconds": probe_timeout_seconds,
                 "sample_path": sample_path,
+                "endpoint": endpoint,
                 "session_id": session_id,
             },
         )
@@ -436,6 +457,7 @@ def validate_hpc_setup(
     result = {
         "passed": passed,
         "mode": config.execution_mode,
+        "endpoint_name": config.endpoint_name,
         "endpoint_id": config.endpoint_id,
         "endpoint_status": endpoint_status,
         "checks": checks,
@@ -449,6 +471,7 @@ def validate_hpc_setup(
             "run_remote_probe": run_remote_probe,
             "probe_timeout_seconds": probe_timeout_seconds,
             "sample_path": sample_path,
+            "endpoint": endpoint,
             "session_id": session_id,
         },
     )
@@ -488,7 +511,10 @@ def get_execution_mode() -> Dict[str, Any]:
 
     result: Dict[str, Any] = {
         "mode": config.execution_mode,
+        "endpoint_name": config.endpoint_name,
         "endpoint_id": config.endpoint_id,
+        "default_endpoint": config.default_endpoint,
+        "configured_endpoints": config.endpoint_names,
         "endpoint_status": health.get("status", "unknown"),
         "description": descriptions.get(config.execution_mode, "Unknown mode."),
         "note": (
@@ -565,6 +591,7 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
 
     # Reset singleton agent so next call picks up the new config
     _agent_module._agent_instance = None
+    _agent_module._agent_instances.clear()
 
     result: Dict[str, Any] = {
         "mode": normalized_mode,

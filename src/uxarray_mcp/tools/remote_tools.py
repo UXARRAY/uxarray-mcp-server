@@ -50,6 +50,8 @@ def _run_with_optional_hpc(
     *,
     tool_name: str,
     use_remote: bool,
+    endpoint: str | None = None,
+    path_hint: str | None = None,
     session_id: str | None,
     local_call: Callable[[], Dict[str, Any]],
     remote_call: Callable[[Any], Dict[str, Any]],
@@ -65,8 +67,8 @@ def _run_with_optional_hpc(
 
     from uxarray_mcp.remote.agent import get_agent
 
-    agent = get_agent()
-    if not agent.config.has_endpoint:
+    agent = get_agent(endpoint=endpoint, path=path_hint)
+    if not agent.config.endpoint_id:
         tracker.stage("fallback", "No endpoint configured; running locally.")
         result = local_call()
         result["_provenance"]["operation_id"] = tracker.operation_id
@@ -88,7 +90,10 @@ def _run_with_optional_hpc(
         )
         return result
 
-    tracker.stage("submitted", f"Submitting {tool_name} to the HPC endpoint.")
+    endpoint_label = agent.config.endpoint_name or agent.config.endpoint_id
+    tracker.stage(
+        "submitted", f"Submitting {tool_name} to the HPC endpoint {endpoint_label}."
+    )
     result = remote_call(agent)
     result["_provenance"]["operation_id"] = tracker.operation_id
     tracker.succeed(f"{tool_name} completed with remote execution.")
@@ -105,7 +110,10 @@ def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
 
 
 def inspect_mesh_hpc(
-    file_path: str, use_remote: bool = False, session_id: str | None = None
+    file_path: str,
+    use_remote: bool = False,
+    endpoint: str | None = None,
+    session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Inspect mesh topology with optional HPC execution.
 
@@ -139,6 +147,8 @@ def inspect_mesh_hpc(
     return _run_with_optional_hpc(
         tool_name="inspect_mesh_hpc",
         use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=file_path,
         session_id=session_id,
         local_call=lambda: inspect_mesh(file_path),
         remote_call=lambda agent: _run_sync(
@@ -148,7 +158,10 @@ def inspect_mesh_hpc(
 
 
 def calculate_area_hpc(
-    file_path: str, use_remote: bool = False, session_id: str | None = None
+    file_path: str,
+    use_remote: bool = False,
+    endpoint: str | None = None,
+    session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Calculate face areas with optional HPC execution.
 
@@ -191,6 +204,8 @@ def calculate_area_hpc(
     return _run_with_optional_hpc(
         tool_name="calculate_area_hpc",
         use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=file_path,
         session_id=session_id,
         local_call=lambda: calculate_area(file_path),
         remote_call=lambda agent: _run_sync(
@@ -204,6 +219,7 @@ def inspect_variable_hpc(
     data_path: str,
     variable_name: Optional[str] = None,
     use_remote: bool = False,
+    endpoint: str | None = None,
     session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Inspect data variables with optional HPC execution.
@@ -243,6 +259,8 @@ def inspect_variable_hpc(
     return _run_with_optional_hpc(
         tool_name="inspect_variable_hpc",
         use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=grid_path,
         session_id=session_id,
         local_call=lambda: inspect_variable(grid_path, data_path, variable_name),
         remote_call=lambda agent: _run_sync(
@@ -260,6 +278,7 @@ def calculate_zonal_mean_hpc(
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
     use_remote: bool = False,
+    endpoint: str | None = None,
     session_id: str | None = None,
 ) -> Dict[str, Any]:
     """Calculate zonal mean with optional HPC execution.
@@ -304,6 +323,8 @@ def calculate_zonal_mean_hpc(
     return _run_with_optional_hpc(
         tool_name="calculate_zonal_mean_hpc",
         use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=grid_path,
         session_id=session_id,
         local_call=lambda: calculate_zonal_mean(
             grid_path, data_path, variable_name, lat_spec, conservative
@@ -321,6 +342,7 @@ def plot_mesh_hpc(
     width: int = 800,
     height: int = 400,
     use_remote: bool = False,
+    endpoint: str | None = None,
     session_id: str | None = None,
 ) -> list[Any]:
     """Render a mesh wireframe PNG with optional HPC execution.
@@ -377,6 +399,8 @@ def plot_mesh_hpc(
     result = _run_with_optional_hpc(
         tool_name="plot_mesh_hpc",
         use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=grid_path,
         session_id=session_id,
         local_call=_local,
         remote_call=lambda agent: _run_sync(
@@ -397,6 +421,7 @@ def plot_variable_hpc(
     vmax: Optional[float] = None,
     title: Optional[str] = None,
     use_remote: bool = False,
+    endpoint: str | None = None,
     session_id: str | None = None,
 ) -> list[Any]:
     """Render a face-centered variable as a filled-polygon PNG with optional HPC execution.
@@ -466,6 +491,8 @@ def plot_variable_hpc(
     result = _run_with_optional_hpc(
         tool_name="plot_variable_hpc",
         use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=grid_path,
         session_id=session_id,
         local_call=_local,
         remote_call=lambda agent: _run_sync(
@@ -497,6 +524,7 @@ def plot_zonal_mean_hpc(
     line_color: str = "#1f77b4",
     title: Optional[str] = None,
     use_remote: bool = False,
+    endpoint: str | None = None,
     session_id: str | None = None,
 ) -> list[Any]:
     """Render a zonal mean profile PNG with optional HPC execution.
@@ -568,6 +596,8 @@ def plot_zonal_mean_hpc(
     result = _run_with_optional_hpc(
         tool_name="plot_zonal_mean_hpc",
         use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=grid_path,
         session_id=session_id,
         local_call=_local,
         remote_call=lambda agent: _run_sync(

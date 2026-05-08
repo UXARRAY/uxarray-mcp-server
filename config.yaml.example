@@ -3,9 +3,23 @@
 # config.yaml is local-only and gitignored so personal endpoint UUIDs stay out of git.
 
 hpc:
+  # Optional: define named endpoint profiles when one MCP server can submit
+  # to multiple facilities. Tools should pass endpoint: "ucar" explicitly, or
+  # use default_endpoint. Paths are validated separately and are not used to
+  # choose the execution endpoint.
+  #
+  # default_endpoint: "ucar"
+  # endpoints:
+  #   ucar:
+  #     endpoint_id: "your-ucar-endpoint-uuid"
+  #   improv:
+  #     endpoint_id: "your-improv-endpoint-uuid"
+
   globus_compute:
     # Your personal Globus Compute endpoint UUID.
     # See GETTING_STARTED.md for instructions on setting up an endpoint.
+    # This legacy single-endpoint form still works. Leave it null when using
+    # hpc.endpoints above.
     endpoint_id: null
 
   # "local" — always run tools on this machine (default)
