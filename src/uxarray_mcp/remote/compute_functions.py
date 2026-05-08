@@ -21,7 +21,7 @@ def remote_runtime_probe() -> Dict[str, Any]:
     import sys
 
     modules: Dict[str, Any] = {}
-    for name in ("uxarray", "xarray", "numpy", "yac"):
+    for name in ("uxarray", "xarray", "numpy"):
         spec = importlib.util.find_spec(name)
         info: Dict[str, Any] = {"available": spec is not None}
         if spec is not None:
@@ -32,6 +32,26 @@ def remote_runtime_probe() -> Dict[str, Any]:
             except Exception as exc:
                 info["import_error"] = f"{type(exc).__name__}: {exc}"
         modules[name] = info
+
+    yac_info: Dict[str, Any] = {}
+    try:
+        yac_spec = importlib.util.find_spec("yac")
+        yac_info["package_available"] = yac_spec is not None
+        if yac_spec is not None:
+            yac_info["package_origin"] = yac_spec.origin
+    except Exception as exc:
+        yac_info["package_available"] = False
+        yac_info["package_error"] = f"{type(exc).__name__}: {exc}"
+
+    try:
+        yac_core = importlib.import_module("yac.core")
+        yac_info["core_importable"] = True
+        yac_info["core_file"] = getattr(yac_core, "__file__", None)
+        yac_info["version"] = getattr(yac_core, "__version__", None)
+    except Exception as exc:
+        yac_info["core_importable"] = False
+        yac_info["core_import_error"] = f"{type(exc).__name__}: {exc}"
+    modules["yac"] = yac_info
 
     return {
         "hostname": socket.gethostname(),
