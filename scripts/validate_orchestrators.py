@@ -91,25 +91,39 @@ def validate_analyze_local_healpix(results: dict) -> None:
     banner("analyze_dataset — local healpix:2 (no data)")
     r = analyze_dataset("healpix:2", include_plots=True)
     ok = True
-    ok &= expect("mesh stage ran", r["mesh"] is not None,
-                 f"n_face={r['mesh']['n_face'] if r['mesh'] else None}")
+    ok &= expect(
+        "mesh stage ran",
+        r["mesh"] is not None,
+        f"n_face={r['mesh']['n_face'] if r['mesh'] else None}",
+    )
     ok &= expect("area stage ran", r["area"] is not None)
-    ok &= expect("plot stage ran", r["mesh_plot"] is not None,
-                 f"{r['mesh_plot']['image_size_bytes']} bytes" if r["mesh_plot"] else "")
+    ok &= expect(
+        "plot stage ran",
+        r["mesh_plot"] is not None,
+        f"{r['mesh_plot']['image_size_bytes']} bytes" if r["mesh_plot"] else "",
+    )
     ok &= expect("no warnings", r["warnings"] == [], str(r["warnings"]))
-    ok &= expect("recommends data_path",
-                 any("data_path" in s for s in r["recommended_next_steps"]))
+    ok &= expect(
+        "recommends data_path",
+        any("data_path" in s for s in r["recommended_next_steps"]),
+    )
     results["analyze_local_healpix"] = ok
 
 
-def validate_analyze_local_with_data(results: dict, grid_file: str, data_file: str) -> None:
+def validate_analyze_local_with_data(
+    results: dict, grid_file: str, data_file: str
+) -> None:
     banner("analyze_dataset — local synthetic UGRID + data")
     r = analyze_dataset(grid_file, data_file, include_plots=True)
     ok = True
-    ok &= expect("validation passed", r["validation"] is not None and r["validation"]["passed"])
-    ok &= expect("variable selected",
-                 r["selected_variable"] in {"temperature", "pressure"},
-                 r["selected_variable"])
+    ok &= expect(
+        "validation passed", r["validation"] is not None and r["validation"]["passed"]
+    )
+    ok &= expect(
+        "variable selected",
+        r["selected_variable"] in {"temperature", "pressure"},
+        r["selected_variable"],
+    )
     ok &= expect("zonal_mean computed", r["zonal_mean"] is not None)
     ok &= expect("variable plot rendered", r["variable_plot"] is not None)
     ok &= expect("no warnings", r["warnings"] == [], str(r["warnings"]))
@@ -120,28 +134,44 @@ def validate_agent_local_healpix(results: dict) -> None:
     banner("run_scientific_agent — local healpix:3")
     r = run_scientific_agent("healpix:3")
     ok = True
-    ok &= expect("mesh_summary present", r["mesh_summary"] is not None,
-                 f"n_face={r['mesh_summary']['n_face'] if r['mesh_summary'] else None}")
+    ok &= expect(
+        "mesh_summary present",
+        r["mesh_summary"] is not None,
+        f"n_face={r['mesh_summary']['n_face'] if r['mesh_summary'] else None}",
+    )
     ok &= expect("area_results present", r["area_results"] is not None)
-    ok &= expect("verification.passed",
-                 r["verification"]["passed"], str(r["verification"]["warnings"]))
+    ok &= expect(
+        "verification.passed",
+        r["verification"]["passed"],
+        str(r["verification"]["warnings"]),
+    )
     stages = {step.get("stage") for step in r["reasoning_trace"]}
-    ok &= expect("all 4 stages in trace", stages >= {"analyze", "plan", "execute", "verify"},
-                 sorted(stages))
+    ok &= expect(
+        "all 4 stages in trace",
+        stages >= {"analyze", "plan", "execute", "verify"},
+        sorted(stages),
+    )
     results["agent_local_healpix"] = ok
 
 
-def validate_agent_local_with_data(results: dict, grid_file: str, data_file: str) -> None:
+def validate_agent_local_with_data(
+    results: dict, grid_file: str, data_file: str
+) -> None:
     banner("run_scientific_agent — local synthetic UGRID + data")
     r = run_scientific_agent(grid_file, data_file)
     ok = True
     ok &= expect("variable_results present", r["variable_results"] is not None)
     ok &= expect("validation_summary present", r["validation_summary"] is not None)
-    ok &= expect("zonal_mean attempted",
-                 r["zonal_mean_results"] is not None,
-                 "(only if a face-centered variable was found)")
-    ok &= expect("verification.passed",
-                 r["verification"]["passed"], str(r["verification"]["warnings"]))
+    ok &= expect(
+        "zonal_mean attempted",
+        r["zonal_mean_results"] is not None,
+        "(only if a face-centered variable was found)",
+    )
+    ok &= expect(
+        "verification.passed",
+        r["verification"]["passed"],
+        str(r["verification"]["warnings"]),
+    )
     results["agent_local_with_data"] = ok
 
 
