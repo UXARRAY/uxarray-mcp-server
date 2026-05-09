@@ -50,6 +50,11 @@ under their entry.
   endpoint state (no endpoint configured, or endpoint not ready) instead
   of surfacing a misleading `FileNotFoundError` from the local fallback.
   Local paths and HEALPix specs still fall back silently. (#27)
+- `plot_mesh`, `plot_variable`, and `plot_zonal_mean` HPC wrappers now
+  accept `session_id` + `dataset_handle` and resolve grid/data paths
+  from a registered session dataset, matching the handle pattern
+  already used by `subset_bbox` / `subset_polygon`. Direct paths still
+  work unchanged. (#25)
 
 ## 0.1.0 — initial scaffold
 
