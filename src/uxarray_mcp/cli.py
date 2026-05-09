@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -103,6 +104,18 @@ def cmd_setup(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _user_write_target() -> Path:
+    """Path that mutating commands (`endpoints add/remove`) should write to.
+
+    Honors `$UXARRAY_MCP_CONFIG` so add/remove stay consistent with the
+    config the rest of the server reads. Falls back to ``USER_CONFIG_PATH``.
+    """
+    env_path = os.environ.get("UXARRAY_MCP_CONFIG")
+    if env_path:
+        return Path(env_path).expanduser()
+    return USER_CONFIG_PATH
+
+
 def cmd_endpoints_list(args: argparse.Namespace) -> int:
     cfg = load_config()
     if not cfg.endpoints and not cfg.endpoint_id:
@@ -128,7 +141,7 @@ def cmd_endpoints_list(args: argparse.Namespace) -> int:
 
 
 def cmd_endpoints_add(args: argparse.Namespace) -> int:
-    target = USER_CONFIG_PATH
+    target = _user_write_target()
     data = _read_user_config(target)
     hpc = _ensure_hpc_block(data)
     endpoints = hpc["endpoints"]
@@ -148,7 +161,7 @@ def cmd_endpoints_add(args: argparse.Namespace) -> int:
 
 
 def cmd_endpoints_remove(args: argparse.Namespace) -> int:
-    target = USER_CONFIG_PATH
+    target = _user_write_target()
     if not target.exists():
         print(f"No user config at {target}", file=sys.stderr)
         return 2

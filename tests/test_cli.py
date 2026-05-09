@@ -76,6 +76,32 @@ def test_endpoints_remove(isolated_user_config: Path):
     assert "ucar" not in data["hpc"]["endpoints"]
 
 
+def test_endpoints_add_honors_env_config_path(tmp_path, monkeypatch):
+    """`endpoints add/remove` must write to $UXARRAY_MCP_CONFIG when set."""
+    env_config = tmp_path / "env.yaml"
+    env_config.write_text(
+        "hpc:\n"
+        "  execution_mode: auto\n"
+        "  timeout_seconds: 300\n"
+        "  default_endpoint: null\n"
+        "  endpoints: {}\n"
+    )
+    decoy_user_config = tmp_path / "user_should_not_be_touched.yaml"
+    monkeypatch.setattr(cli, "USER_CONFIG_PATH", decoy_user_config)
+    monkeypatch.setenv("UXARRAY_MCP_CONFIG", str(env_config))
+
+    rc = cli.main(["endpoints", "add", "ep1", "00000000-0000-0000-0000-000000000003"])
+    assert rc == 0
+    assert not decoy_user_config.exists(), "should not have written to USER_CONFIG_PATH"
+    data = yaml.safe_load(env_config.read_text())
+    assert "ep1" in data["hpc"]["endpoints"]
+
+    rc = cli.main(["endpoints", "remove", "ep1"])
+    assert rc == 0
+    data = yaml.safe_load(env_config.read_text())
+    assert "ep1" not in data["hpc"]["endpoints"]
+
+
 def test_install_claude_print_only(capsys, isolated_user_config: Path):
     rc = cli.main(["install-claude", "--print-only", "--name", "uxarray-test"])
     assert rc == 0
