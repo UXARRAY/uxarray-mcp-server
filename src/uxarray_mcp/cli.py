@@ -26,6 +26,7 @@ import yaml
 from uxarray_mcp.remote.config import (
     USER_CONFIG_PATH,
     discover_config_path,
+    discover_config_search_paths,
     load_config,
 )
 
@@ -118,8 +119,16 @@ def _user_write_target() -> Path:
 
 def cmd_endpoints_list(args: argparse.Namespace) -> int:
     cfg = load_config()
+    loaded = discover_config_path()
     if not cfg.endpoints and not cfg.endpoint_id:
-        print("No endpoints configured.")
+        if loaded is None:
+            print("No endpoints configured. No config file was found. Searched:")
+            for p in discover_config_search_paths():
+                print(f"  - {p}")
+            print("\nWrite a starter config with:  uxarray-mcp setup")
+        else:
+            print(f"No endpoints configured in {loaded}.")
+            print("\nAdd one with:  uxarray-mcp endpoints add <name> <uuid>")
         return 0
     payload: dict[str, Any] = {
         "config_path": str(discover_config_path() or ""),

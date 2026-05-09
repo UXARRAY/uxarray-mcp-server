@@ -52,6 +52,14 @@ under their entry.
   diagrams (local stdio vs HPC dispatch).
 
 ### Fixed
+- CLI config discovery now honors `./config.yaml` in the current working
+  directory at priority above the user config, matching the behavior of
+  git/ruff/pytest. Previously an empty user config written by
+  `uxarray-mcp setup` would silently shadow the repo's `config.yaml`,
+  causing `uxarray-mcp endpoints list` to print "No endpoints configured"
+  even when the project had endpoints defined. The empty-state message
+  now also names the loaded config file (or every searched path when
+  none was found) so the discovery is no longer invisible.
 - End-to-end validation of `run_scientific_agent` and `analyze_dataset`
   on local + Improv + UCAR endpoints. New harness
   (`scripts/validate_orchestrators.py`) covers six scenarios; both
