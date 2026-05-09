@@ -302,6 +302,12 @@ def calculate_zonal_mean(
     except Exception as e:
         raise RuntimeError(f"Failed to compute zonal mean: {str(e)}")
 
+    result["recommended_next_steps"] = [
+        f'plot_zonal_mean("{grid_path}", "{data_path}", "{variable_name}")',
+        f'plot_variable("{grid_path}", "{data_path}", "{variable_name}")',
+        f'extract_cross_section(latitude=0.0, grid_path="{grid_path}", '
+        f'data_path="{data_path}", variable_name="{variable_name}")',
+    ]
     return attach_provenance(
         result,
         tool="calculate_zonal_mean",
@@ -529,6 +535,19 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
         "is_valid": overall_passed,
         "issues": issues,
     }
+
+    if overall_passed:
+        result["recommended_next_steps"] = [
+            f'inspect_variable("{grid_path}", "{data_path}")',
+            f'calculate_zonal_mean("{grid_path}", "{data_path}", "<variable_name>")',
+            f'plot_variable("{grid_path}", "{data_path}", "<variable_name>")',
+        ]
+    else:
+        result["recommended_next_steps"] = [
+            "Validation failed; review the per-variable warnings above before "
+            "running analysis.",
+            "Drop or repair affected variables, or rerun with a corrected data file.",
+        ]
 
     return attach_provenance(
         result,

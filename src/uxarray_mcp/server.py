@@ -9,6 +9,7 @@ falls back to local execution automatically when no endpoint is configured.
 from fastmcp import FastMCP
 
 from uxarray_mcp.tools import (
+    analyze_dataset,
     calculate_anomaly,
     calculate_area_hpc,
     calculate_bias,
@@ -57,6 +58,9 @@ mcp = FastMCP("uxarray-mcp-server")
 
 # Tool discovery — always call this first with a new dataset
 mcp.tool()(get_capabilities)
+
+# Deterministic one-shot analysis — full first-look pipeline in a single call
+mcp.tool()(analyze_dataset)
 
 # Autonomous scientific agent — Analyze → Plan → Execute → Verify
 mcp.tool()(run_scientific_agent)

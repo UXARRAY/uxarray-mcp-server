@@ -8,6 +8,17 @@ under their entry.
 ## Unreleased
 
 ### Added
+- `analyze_dataset`: deterministic one-shot orchestrator that runs the
+  full first-look pipeline (inspect_mesh → validate_dataset →
+  inspect_variable → calculate_area → calculate_zonal_mean → plot_mesh →
+  plot_variable) and returns a single structured result with
+  `recommended_next_steps`. Accepts direct paths or
+  `session_id` + `dataset_handle`. Forwards `use_remote`/`endpoint` to
+  every underlying stage. (#32)
+- `recommended_next_steps` field on result-bearing tools to guide
+  agent chaining: `calculate_zonal_mean`, `validate_dataset` (branched
+  on pass/fail), `subset_bbox`, `subset_polygon`,
+  `extract_cross_section`. (#30)
 - `uxarray-mcp` CLI entry point with subcommands: `serve`, `setup`,
   `endpoints add/list/remove`, `doctor`, `install-claude`.
 - Multi-endpoint config schema (`hpc.endpoints.<name>` with
