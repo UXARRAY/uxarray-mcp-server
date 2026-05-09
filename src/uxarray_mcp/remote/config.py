@@ -18,8 +18,13 @@ def discover_config_path() -> Path | None:
 
     Order:
       1. ``$UXARRAY_MCP_CONFIG`` (explicit override)
-      2. ``~/.config/uxarray-mcp/config.yaml`` (user install)
-      3. ``./config.yaml`` (repo-root, dev/clone install)
+      2. ``./config.yaml`` (current working directory — project-local)
+      3. ``~/.config/uxarray-mcp/config.yaml`` (user install)
+      4. ``<repo_root>/config.yaml`` (editable install fallback)
+
+    Project-local (cwd) wins over the user config so that running the CLI
+    from inside a checkout uses the repo's config, even when an empty user
+    config was previously written by ``uxarray-mcp setup``.
 
     Returns ``None`` when no config file is found.
     """
@@ -29,6 +34,10 @@ def discover_config_path() -> Path | None:
         if candidate.exists():
             return candidate
 
+    cwd_config = Path.cwd() / "config.yaml"
+    if cwd_config.exists():
+        return cwd_config
+
     if USER_CONFIG_PATH.exists():
         return USER_CONFIG_PATH
 
@@ -37,6 +46,23 @@ def discover_config_path() -> Path | None:
         return repo_config
 
     return None
+
+
+def discover_config_search_paths() -> list[Path]:
+    """Return the ordered list of paths discover_config_path inspects.
+
+    Useful for diagnostics — ``endpoints list`` prints this when no
+    endpoints are configured so the user can see exactly which file was
+    used or which paths were searched.
+    """
+    paths: list[Path] = []
+    env_path = os.environ.get("UXARRAY_MCP_CONFIG")
+    if env_path:
+        paths.append(Path(env_path).expanduser())
+    paths.append(Path.cwd() / "config.yaml")
+    paths.append(USER_CONFIG_PATH)
+    paths.append(Path(__file__).resolve().parent.parent.parent.parent / "config.yaml")
+    return paths
 
 
 _VALID_EXECUTION_MODES = {"local", "hpc", "auto"}
