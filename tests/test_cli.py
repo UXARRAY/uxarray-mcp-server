@@ -145,13 +145,39 @@ def test_discover_config_uses_env_var(tmp_path, monkeypatch):
     assert found == target
 
 
-def test_discover_config_user_home_beats_repo(tmp_path, monkeypatch):
+def test_discover_config_cwd_beats_user_home(tmp_path, monkeypatch):
+    """A project-local ./config.yaml takes precedence over the user config.
+
+    This prevents ``uxarray-mcp setup`` (which writes an empty user config)
+    from silently shadowing the repo's own config when the CLI is run from
+    inside a checkout.
+    """
     monkeypatch.delenv("UXARRAY_MCP_CONFIG", raising=False)
     user_cfg = tmp_path / "user.yaml"
     user_cfg.write_text("hpc: {}\n")
     monkeypatch.setattr(config_module, "USER_CONFIG_PATH", user_cfg)
-    found = config_module.discover_config_path()
-    assert found == user_cfg
+
+    cwd_dir = tmp_path / "project"
+    cwd_dir.mkdir()
+    cwd_cfg = cwd_dir / "config.yaml"
+    cwd_cfg.write_text("hpc: {execution_mode: auto}\n")
+    monkeypatch.chdir(cwd_dir)
+
+    assert config_module.discover_config_path() == cwd_cfg
+
+
+def test_discover_config_falls_back_to_user_home(tmp_path, monkeypatch):
+    """When no ./config.yaml exists, fall back to the user config."""
+    monkeypatch.delenv("UXARRAY_MCP_CONFIG", raising=False)
+    user_cfg = tmp_path / "user.yaml"
+    user_cfg.write_text("hpc: {}\n")
+    monkeypatch.setattr(config_module, "USER_CONFIG_PATH", user_cfg)
+
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    monkeypatch.chdir(empty_dir)
+
+    assert config_module.discover_config_path() == user_cfg
 
 
 def test_discover_config_no_match_returns_none(tmp_path, monkeypatch):
