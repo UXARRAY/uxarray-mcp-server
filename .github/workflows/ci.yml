@@ -17,10 +17,15 @@ jobs:
     - uses: pre-commit/action@v3.0.1
 
   test-core:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python-version: "3.13"
 
     steps:
     - uses: actions/checkout@v4
@@ -40,6 +45,51 @@ jobs:
     - name: Run core tests
       run: |
         uv run pytest tests/ -v --ignore=tests/test_remote_agent.py
+
+  cli-smoke:
+    # Smoke-tests the installed `uxarray-mcp` CLI against the user-home config
+    # discovery path. Catches packaging / entry-point regressions that pytest
+    # against the source tree would not see.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install package
+      run: |
+        uv sync --dev
+
+    - name: CLI help surfaces
+      run: |
+        uv run uxarray-mcp --help
+        uv run uxarray-mcp serve --help
+        uv run uxarray-mcp setup --help
+        uv run uxarray-mcp endpoints --help
+        uv run uxarray-mcp endpoints list --help
+        uv run uxarray-mcp endpoints add --help
+        uv run uxarray-mcp doctor --help
+        uv run uxarray-mcp install-claude --help
+
+    - name: CLI list/setup roundtrip
+      run: |
+        uv run uxarray-mcp setup
+        uv run uxarray-mcp endpoints add ci-stub 00000000-0000-0000-0000-000000000000 --path-prefix /tmp/
+        uv run uxarray-mcp endpoints list
+
+    - name: CLI doctor (no remote probe)
+      # `doctor` exits non-zero whenever any check fails, including the
+      # "endpoint not reachable" case we expect in CI (the stub endpoint
+      # UUID is unregistered). Treat the command as a smoke test of the
+      # entry point and JSON serialization, not the health verdict.
+      run: |
+        uv run uxarray-mcp doctor --skip-remote-probe || true
 
   test-hpc:
     runs-on: ubuntu-latest

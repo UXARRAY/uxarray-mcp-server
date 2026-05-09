@@ -7,22 +7,49 @@ AI clients such as Claude. It supports:
 - optional remote execution on HPC systems through Globus Compute
 - diagnostics and provenance for scientific workflows
 
-## Install
+## How it runs
 
-The repo is private; install from a clone (recommended) or via
-``uv tool install`` from a private git URL.
+The server runs as a subprocess of the MCP client (Claude Code, Claude Desktop,
+or any FastMCP transport) and dispatches tool calls either locally or to a
+configured Globus Compute endpoint on an HPC cluster. Same MCP tool, same
+schema — `use_remote: bool` on every tool decides which path runs.
+
+**Local mode** — analysis on your machine, files on your disk:
+
+```
+ ┌────────────────┐         ┌─────────────────────────────┐
+ │  Claude Code   │  stdio  │  uv run python -m           │      reads
+ │  / Desktop     │ ◀─────▶ │  uxarray_mcp                │ ───▶  local
+ │                │  pipe   │  (subprocess on your box)   │       mesh files
+ └────────────────┘         └─────────────────────────────┘
+```
+
+**HPC mode** — analysis on facility hardware, files stay on facility storage:
+
+```
+ ┌────────────────┐  stdio  ┌─────────────────────────┐  Globus  ┌─────────────────────────┐
+ │  Claude Code   │ ◀─────▶ │  uxarray_mcp on laptop  │ ◀──────▶ │  Worker on HPC endpoint │      reads
+ │  / Desktop     │  pipe   │  (dispatches when       │  Compute │  (uxarray reads file    │ ───▶ facility
+ │                │         │   use_remote=True)      │  RPC     │   from facility GPFS)   │      mesh files
+ └────────────────┘         └─────────────────────────┘          └─────────────────────────┘      (never copied)
+```
+
+The dispatcher falls back to local execution if a remote call is requested
+but the endpoint is missing or unhealthy.
+
+## Install
 
 ```bash
 # Developer / contributor path
-git clone git@github.com:UXARRAY/uxarray-mcp-server.git
+git clone https://github.com/UXARRAY/uxarray-mcp-server.git
 cd uxarray-mcp-server
 uv sync                 # core local install
 uv sync --extra hpc     # add Globus Compute deps
 ```
 
 ```bash
-# Internal distribution path (no clone)
-uv tool install "git+ssh://git@github.com/UXARRAY/uxarray-mcp-server.git"
+# User install (no clone)
+uv tool install "git+https://github.com/UXARRAY/uxarray-mcp-server.git"
 uxarray-mcp setup
 uxarray-mcp endpoints add improv <your-endpoint-uuid>
 uxarray-mcp install-claude --print-only   # prints the Claude Desktop block
