@@ -199,6 +199,16 @@ def subset_bbox(
         "variable_summary": variable_summary,
         "result_handle": result_handle,
     }
+    next_steps = [
+        f'plot_mesh(grid_path="{resolved_grid}")',
+        f'export_to_netcdf("<output.nc>", result_handle="{result_handle}")',
+    ]
+    if resolved_data is not None:
+        next_steps.insert(
+            0,
+            f'plot_variable("{resolved_grid}", "{resolved_data}", "<variable_name>")',
+        )
+    result["recommended_next_steps"] = next_steps
     tracker.succeed("Bounding-box subset complete.")
     result = attach_provenance(
         result,
@@ -293,6 +303,16 @@ def subset_polygon(
         "variable_summary": variable_summary,
         "result_handle": result_handle,
     }
+    next_steps = [
+        f'plot_mesh(grid_path="{resolved_grid}")',
+        f'export_to_netcdf("<output.nc>", result_handle="{result_handle}")',
+    ]
+    if resolved_data is not None:
+        next_steps.insert(
+            0,
+            f'plot_variable("{resolved_grid}", "{resolved_data}", "<variable_name>")',
+        )
+    result["recommended_next_steps"] = next_steps
     result = attach_provenance(
         result,
         tool="subset_polygon",
@@ -379,6 +399,16 @@ def extract_cross_section(
         "variable_summary": variable_summary,
         "result_handle": result_handle,
     }
+    next_steps = [
+        f'plot_mesh(grid_path="{resolved_grid}")',
+        f'export_to_netcdf("<output.nc>", result_handle="{result_handle}")',
+    ]
+    if resolved_data is not None:
+        next_steps.insert(
+            0,
+            f'calculate_zonal_mean("{resolved_grid}", "{resolved_data}", "<variable_name>")',
+        )
+    result["recommended_next_steps"] = next_steps
     result = attach_provenance(
         result,
         tool="extract_cross_section",

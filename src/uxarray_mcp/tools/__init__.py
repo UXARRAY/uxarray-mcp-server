@@ -35,6 +35,7 @@ from .inspection import (
     inspect_variable,
     validate_dataset,
 )
+from .orchestration import analyze_dataset
 from .plotting import plot_mesh, plot_variable, plot_zonal_mean
 from .remote_tools import (
     calculate_area_hpc,
@@ -62,6 +63,7 @@ from .stateful import (
 __all__ = [
     "get_capabilities",
     "list_datasets",
+    "analyze_dataset",
     "run_scientific_agent",
     "run_workflow",
     "resume_workflow",
