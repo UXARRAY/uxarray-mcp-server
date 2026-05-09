@@ -279,7 +279,7 @@ def analyze_dataset(
             f'data_path="{resolved_data}", variable_name="{selected_variable}")'
         )
         next_steps.append(
-            f'subset_bbox(lon_bounds=[-180, 180], lat_bounds=[-90, 90], '
+            f"subset_bbox(lon_bounds=[-180, 180], lat_bounds=[-90, 90], "
             f'grid_path="{resolved_grid}", data_path="{resolved_data}", '
             f'variable_name="{selected_variable}") — focus on a region'
         )
