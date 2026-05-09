@@ -426,3 +426,110 @@ class TestHpcPlotWrappers:
         metadata = json.loads(result[1].text)
         assert metadata["latitudes"] == [-90.0, 0.0, 90.0]
         assert "png_b64" not in metadata
+
+
+class TestHpcPlotWrappersDatasetHandle:
+    """Issue #25: HPC plot wrappers must accept session_id + dataset_handle and
+    resolve the grid/data paths from the session before dispatching."""
+
+    @staticmethod
+    def _stub_run_result(extra: dict | None = None) -> dict:
+        return {
+            "png_b64": base64.b64encode(b"\x89PNG_fake").decode("utf-8"),
+            "image_size_bytes": 9,
+            "grid_info": {"n_face": 1},
+            "_provenance": {"execution_venue": "local", "warnings": []},
+            **(extra or {}),
+        }
+
+    @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
+    def test_plot_mesh_hpc_resolves_dataset_handle(
+        self, mock_run, synthetic_mesh_with_data
+    ):
+        from uxarray_mcp.tools import create_session, register_dataset
+
+        grid_file, _ = synthetic_mesh_with_data
+        session = create_session("plot-mesh-hpc-handle")
+        registered = register_dataset(
+            session_id=session["session_id"],
+            grid_path=grid_file,
+            name="grid-only",
+        )
+
+        mock_run.return_value = self._stub_run_result()
+
+        plot_mesh_hpc(
+            session_id=session["session_id"],
+            dataset_handle=registered["dataset_handle"],
+        )
+
+        kwargs = mock_run.call_args.kwargs
+        assert kwargs["path_hint"] == grid_file
+
+    @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
+    def test_plot_variable_hpc_resolves_dataset_handle(
+        self, mock_run, synthetic_mesh_with_data
+    ):
+        from uxarray_mcp.tools import create_session, register_dataset
+
+        grid_file, data_file = synthetic_mesh_with_data
+        session = create_session("plot-variable-hpc-handle")
+        registered = register_dataset(
+            session_id=session["session_id"],
+            grid_path=grid_file,
+            data_path=data_file,
+            name="grid-and-data",
+        )
+
+        mock_run.return_value = self._stub_run_result({"variable_name": "temperature"})
+
+        plot_variable_hpc(
+            variable_name="temperature",
+            session_id=session["session_id"],
+            dataset_handle=registered["dataset_handle"],
+        )
+
+        kwargs = mock_run.call_args.kwargs
+        assert kwargs["path_hint"] == grid_file
+
+    @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
+    def test_plot_zonal_mean_hpc_resolves_dataset_handle(
+        self, mock_run, synthetic_mesh_with_data
+    ):
+        from uxarray_mcp.tools import create_session, register_dataset
+
+        grid_file, data_file = synthetic_mesh_with_data
+        session = create_session("plot-zonal-hpc-handle")
+        registered = register_dataset(
+            session_id=session["session_id"],
+            grid_path=grid_file,
+            data_path=data_file,
+            name="zonal-handle",
+        )
+
+        mock_run.return_value = self._stub_run_result(
+            {
+                "variable_name": "temperature",
+                "latitudes": [-90.0, 0.0, 90.0],
+                "zonal_mean_values": [270.0, 300.0, 270.0],
+            }
+        )
+
+        plot_zonal_mean_hpc(
+            variable_name="temperature",
+            session_id=session["session_id"],
+            dataset_handle=registered["dataset_handle"],
+        )
+
+        kwargs = mock_run.call_args.kwargs
+        assert kwargs["path_hint"] == grid_file
+
+    def test_plot_mesh_hpc_handle_without_session_raises(self):
+        """dataset_handle without session_id is a clear ValueError."""
+        with pytest.raises(ValueError, match="session_id is required"):
+            plot_mesh_hpc(dataset_handle="some-handle")
+
+    def test_plot_mesh_hpc_no_path_no_handle_raises(self):
+        """At least one of grid_path or dataset_handle must be provided."""
+        with pytest.raises(ValueError, match="grid_path is required"):
+            plot_mesh_hpc()
