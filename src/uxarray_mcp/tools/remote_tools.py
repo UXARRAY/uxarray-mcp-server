@@ -377,12 +377,13 @@ def calculate_zonal_mean_hpc(
 
 
 def plot_mesh_hpc(
-    grid_path: str,
+    grid_path: str | None = None,
     width: int = 800,
     height: int = 400,
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
+    dataset_handle: str | None = None,
 ) -> list[Any]:
     """Render a mesh wireframe PNG with optional HPC execution.
 
@@ -392,15 +393,19 @@ def plot_mesh_hpc(
 
     Parameters
     ----------
-    grid_path : str
+    grid_path : str | None
         Path to mesh file. Can be a local path or an HPC filesystem path
-        when use_remote=True.
+        when use_remote=True. Optional when ``session_id`` and
+        ``dataset_handle`` are provided.
     width : int
         Image width in pixels (default 800).
     height : int
         Image height in pixels (default 400).
     use_remote : bool
         If True and HPC is configured, render on the remote endpoint.
+    session_id, dataset_handle : str | None
+        When both are provided, the grid path is looked up from the
+        registered session dataset instead of ``grid_path``.
 
     Returns
     -------
@@ -415,13 +420,15 @@ def plot_mesh_hpc(
     >>> result = plot_mesh_hpc("/hpc/data/grid.nc", use_remote=True)
     >>> open("mesh.png", "wb").write(base64.b64decode(result["png_b64"]))
     """
-    from .plotting import plot_mesh
+    from .plotting import _resolve_plot_paths, plot_mesh
+
+    resolved_grid, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
 
     def _local() -> Dict[str, Any]:
         import base64
         import json
 
-        items = plot_mesh(grid_path, width=width, height=height)
+        items = plot_mesh(resolved_grid, width=width, height=height)
         # plot_mesh returns [ImageContent, TextContent]; extract png_b64 + metadata
         img = items[0]
         meta = json.loads(items[1].text)
@@ -439,19 +446,19 @@ def plot_mesh_hpc(
         tool_name="plot_mesh_hpc",
         use_remote=use_remote,
         endpoint=endpoint,
-        path_hint=grid_path,
+        path_hint=resolved_grid,
         session_id=session_id,
         local_call=_local,
         remote_call=lambda agent: _run_sync(
-            lambda: agent.plot_mesh_remote(grid_path, width, height, use_remote)
+            lambda: agent.plot_mesh_remote(resolved_grid, width, height, use_remote)
         ),
     )
     return _plot_result_to_mcp_contents(result)
 
 
 def plot_variable_hpc(
-    grid_path: str,
-    data_path: str,
+    grid_path: str | None = None,
+    data_path: str | None = None,
     variable_name: Optional[str] = None,
     width: int = 800,
     height: int = 400,
@@ -462,15 +469,18 @@ def plot_variable_hpc(
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
+    dataset_handle: str | None = None,
 ) -> list[Any]:
     """Render a face-centered variable as a filled-polygon PNG with optional HPC execution.
 
     Parameters
     ----------
-    grid_path : str
-        Path to mesh grid file (local or HPC filesystem).
-    data_path : str
-        Path to data file (local or HPC filesystem).
+    grid_path : str | None
+        Path to mesh grid file (local or HPC filesystem). Optional when
+        ``session_id`` and ``dataset_handle`` are provided.
+    data_path : str | None
+        Path to data file (local or HPC filesystem). Optional when
+        ``session_id`` and ``dataset_handle`` are provided.
     variable_name : str | None
         Variable to plot. If None, the first face-centered variable is used.
     width : int
@@ -487,6 +497,10 @@ def plot_variable_hpc(
         Custom plot title.
     use_remote : bool
         If True and HPC is configured, render on the remote endpoint.
+    session_id, dataset_handle : str | None
+        When both are provided, the grid and data paths are looked up
+        from the registered session dataset instead of ``grid_path`` /
+        ``data_path``.
 
     Returns
     -------
@@ -497,15 +511,19 @@ def plot_variable_hpc(
         - grid_info: {n_face, n_node, n_edge}
         - execution_venue: "local" or "hpc:<endpoint_id>"
     """
-    from .plotting import plot_variable
+    from .plotting import _resolve_plot_paths, plot_variable
+
+    resolved_grid, resolved_data = _resolve_plot_paths(
+        grid_path, data_path, session_id, dataset_handle
+    )
 
     def _local() -> Dict[str, Any]:
         import base64
         import json
 
         items = plot_variable(
-            grid_path,
-            data_path,
+            resolved_grid,
+            resolved_data,
             variable_name,
             width=width,
             height=height,
@@ -531,13 +549,13 @@ def plot_variable_hpc(
         tool_name="plot_variable_hpc",
         use_remote=use_remote,
         endpoint=endpoint,
-        path_hint=grid_path,
+        path_hint=resolved_grid,
         session_id=session_id,
         local_call=_local,
         remote_call=lambda agent: _run_sync(
             lambda: agent.plot_variable_remote(
-                grid_path,
-                data_path,
+                resolved_grid,
+                resolved_data,
                 variable_name,
                 width,
                 height,
@@ -553,9 +571,9 @@ def plot_variable_hpc(
 
 
 def plot_zonal_mean_hpc(
-    grid_path: str,
-    data_path: str,
-    variable_name: str,
+    grid_path: str | None = None,
+    data_path: str | None = None,
+    variable_name: str | None = None,
     width: int = 800,
     height: int = 400,
     lat_spec: Optional[tuple | float | List] = None,
@@ -565,15 +583,18 @@ def plot_zonal_mean_hpc(
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
+    dataset_handle: str | None = None,
 ) -> list[Any]:
     """Render a zonal mean profile PNG with optional HPC execution.
 
     Parameters
     ----------
-    grid_path : str
-        Path to mesh grid file (local or HPC filesystem).
-    data_path : str
-        Path to data file (local or HPC filesystem).
+    grid_path : str | None
+        Path to mesh grid file (local or HPC filesystem). Optional when
+        ``session_id`` and ``dataset_handle`` are provided.
+    data_path : str | None
+        Path to data file (local or HPC filesystem). Optional when
+        ``session_id`` and ``dataset_handle`` are provided.
     variable_name : str
         Face-centered variable to compute and plot.
     width : int
@@ -590,6 +611,10 @@ def plot_zonal_mean_hpc(
         Custom plot title.
     use_remote : bool
         If True and HPC is configured, render on the remote endpoint.
+    session_id, dataset_handle : str | None
+        When both are provided, the grid and data paths are looked up
+        from the registered session dataset instead of ``grid_path`` /
+        ``data_path``.
 
     Returns
     -------
@@ -601,15 +626,19 @@ def plot_zonal_mean_hpc(
         - zonal_mean_values: List of zonal mean values
         - execution_venue: "local" or "hpc:<endpoint_id>"
     """
-    from .plotting import plot_zonal_mean
+    from .plotting import _resolve_plot_paths, plot_zonal_mean
+
+    resolved_grid, resolved_data = _resolve_plot_paths(
+        grid_path, data_path, session_id, dataset_handle
+    )
 
     def _local() -> Dict[str, Any]:
         import base64
         import json
 
         items = plot_zonal_mean(
-            grid_path,
-            data_path,
+            resolved_grid,
+            resolved_data,
             variable_name,
             width=width,
             height=height,
@@ -636,13 +665,13 @@ def plot_zonal_mean_hpc(
         tool_name="plot_zonal_mean_hpc",
         use_remote=use_remote,
         endpoint=endpoint,
-        path_hint=grid_path,
+        path_hint=resolved_grid,
         session_id=session_id,
         local_call=_local,
         remote_call=lambda agent: _run_sync(
             lambda: agent.plot_zonal_mean_remote(
-                grid_path,
-                data_path,
+                resolved_grid,
+                resolved_data,
                 variable_name,
                 width,
                 height,
