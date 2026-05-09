@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from mcp.types import ImageContent, TextContent
@@ -46,6 +47,26 @@ def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
         return asyncio.run(async_call())
 
 
+def _path_is_locally_reachable(path_hint: str | None) -> bool:
+    """True when local fallback can plausibly handle ``path_hint``.
+
+    Returns True for None (tools without a path, like HEALPix specs handled
+    inside the tool body), pseudo-paths (``healpix:<zoom>``), and any string
+    that exists on the local filesystem. Returns False when the path looks
+    like a real filesystem path that does not exist locally — that is the
+    case where falling back to a local read would surface a misleading
+    ``FileNotFoundError`` instead of the actual endpoint-state problem.
+    """
+    if path_hint is None:
+        return True
+    if path_hint.startswith("healpix:"):
+        return True
+    try:
+        return Path(path_hint).exists()
+    except OSError:
+        return False
+
+
 def _run_with_optional_hpc(
     *,
     tool_name: str,
@@ -69,6 +90,15 @@ def _run_with_optional_hpc(
 
     agent = get_agent(endpoint=endpoint, path=path_hint)
     if not agent.config.endpoint_id:
+        if not _path_is_locally_reachable(path_hint):
+            msg = (
+                f"{tool_name}: use_remote=True but no HPC endpoint is configured "
+                f"and the path {path_hint!r} does not exist locally. "
+                "Configure an endpoint (`uxarray-mcp endpoints add ...`) or pass "
+                "a local path."
+            )
+            tracker.fail(msg)
+            raise RuntimeError(msg)
         tracker.stage("fallback", "No endpoint configured; running locally.")
         result = local_call()
         result["_provenance"]["operation_id"] = tracker.operation_id
@@ -79,6 +109,15 @@ def _run_with_optional_hpc(
 
     ready, reason = _endpoint_is_ready(agent)
     if not ready:
+        if not _path_is_locally_reachable(path_hint):
+            msg = (
+                f"{tool_name}: HPC endpoint not ready ({reason}) and the path "
+                f"{path_hint!r} does not exist locally — local fallback cannot "
+                "read it. Check endpoint health (`uxarray-mcp doctor`) or stage "
+                "the file locally."
+            )
+            tracker.fail(msg)
+            raise RuntimeError(msg)
         tracker.stage("fallback", "Endpoint not ready; running locally.")
         result = local_call()
         result["_provenance"]["warnings"].append(
