@@ -54,11 +54,11 @@ def remote_build_yac(
     venv_bin = os.path.dirname(venv_python)
     script = f"""
 set -euxo pipefail
-export PATH={shlex.quote(venv_bin)}:{shlex.quote(mpi_root + '/bin')}:$PATH
-export LD_LIBRARY_PATH={shlex.quote(mpi_root + '/lib')}:{shlex.quote(gcc_lib)}:${{LD_LIBRARY_PATH:-}}
+export PATH={shlex.quote(venv_bin)}:{shlex.quote(mpi_root + "/bin")}:$PATH
+export LD_LIBRARY_PATH={shlex.quote(mpi_root + "/lib")}:{shlex.quote(gcc_lib)}:${{LD_LIBRARY_PATH:-}}
 export PREFIX={shlex.quote(prefix)}
-export MPICC={shlex.quote(mpi_root + '/bin/mpicc')}
-export MPIF90={shlex.quote(mpi_root + '/bin/mpif90')}
+export MPICC={shlex.quote(mpi_root + "/bin/mpicc")}
+export MPIF90={shlex.quote(mpi_root + "/bin/mpif90")}
 export FCFLAGS="-fallow-argument-mismatch -O2"
 which python && python --version
 which $MPICC && $MPICC --version | head -1
@@ -146,11 +146,17 @@ def main() -> int:
     p.add_argument("--endpoint", default="improv")
     p.add_argument("--build-root", default="/home/jain/build/yac")
     p.add_argument("--prefix", default="/home/jain/yac")
-    p.add_argument("--venv-python", default="/home/jain/venvs/globus-compute/bin/python")
-    p.add_argument("--mpi-root",
-                   default="/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/openmpi-5.0.1-g3zfkn6")
-    p.add_argument("--gcc-lib",
-                   default="/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-x86_64/gcc-8.5.0/gcc-13.2.0-iyqxotb/lib64")
+    p.add_argument(
+        "--venv-python", default="/home/jain/venvs/globus-compute/bin/python"
+    )
+    p.add_argument(
+        "--mpi-root",
+        default="/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/openmpi-5.0.1-g3zfkn6",
+    )
+    p.add_argument(
+        "--gcc-lib",
+        default="/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-x86_64/gcc-8.5.0/gcc-13.2.0-iyqxotb/lib64",
+    )
     p.add_argument("--yac-version", default="v3.14.0_p1")
     p.add_argument("--yaxt-version", default="v0.11.5.1")
     p.add_argument("--make-jobs", type=int, default=8)

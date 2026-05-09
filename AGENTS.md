@@ -25,9 +25,13 @@ Documentation: `docs/` (Sphinx, built to ReadTheDocs).
   and sent to an HPC worker via Globus Compute. Never put MCP, provenance, or
   I/O logic in `domain/`.
 
-- **Conditional HPC tool registration** — HPC tools (`*_hpc`) are only
-  registered with the FastMCP server when `config.yaml` has a non-null
-  `endpoint_id`. This keeps the tool list clean for local-only users.
+- **Single tool surface, ``use_remote`` flag** — there is no separate
+  ``*_hpc`` tool name on the MCP surface. The dispatcher in
+  ``tools/remote_tools.py`` handles both local and remote execution, and the
+  same tool registration is used regardless of whether an endpoint is
+  configured. When ``use_remote=True`` and no endpoint is available, the
+  dispatcher falls back to local execution and surfaces the reason via
+  ``_provenance.warnings``.
 
 - **Provenance on everything** — every tool result must pass through
   `attach_provenance()`. No tool should return a dict without `_provenance`.
@@ -86,11 +90,14 @@ tests/
   test_remote_agent.py      # Academy agent tests (requires hpc extra)
   test_server.py            # Tool registration verification
 docs/                       # Sphinx documentation (MyST Markdown + RST)
+  cli.py                    # ``uxarray-mcp`` entry point (serve, setup, doctor, endpoints, install-claude)
 scripts/
-  hpc_doctor.py             # CLI diagnostic tool
+  hpc_doctor.py             # CLI diagnostic tool (also exposed as ``uxarray-mcp doctor``)
   improv_endpoint.sh        # Argonne Improv endpoint setup
+  hpc_build_yac.py          # Build YAC + YAXT on a Globus Compute worker
+  yac_smoke_test.py         # Verify worker-side YAC import + basic surface
   agentic_hpc_loop.py       # Example HPC workflow script
-config.yaml.example         # Template — copy to config.yaml (gitignored)
+config.yaml.example         # Template — see CLI ``uxarray-mcp setup``
 ```
 
 ## Tech stack
@@ -150,18 +157,18 @@ When NOT to modify existing tests:
 
 ## HPC configuration
 
-Copy `config.yaml.example` to `config.yaml` (gitignored) and set:
+Use the CLI:
 
-```yaml
-hpc:
-  globus_compute:
-    endpoint_id: "your-uuid-here"
-  execution_mode: "auto"   # local | hpc | auto
-  timeout_seconds: 300
+```bash
+uxarray-mcp setup
+uxarray-mcp endpoints add improv <your-endpoint-uuid> --path-prefix /lus/
 ```
 
-The Improv endpoint UUID used during development is
-`caf37dc0-759f-4e48-9e0a-04f2cdbd23d2`. Test files live at:
+This writes ``~/.config/uxarray-mcp/config.yaml``. For dev clones, a
+``./config.yaml`` at the repo root is also discovered (gitignored). See
+``config.yaml.example`` for the canonical multi-endpoint schema.
+
+Reference dev test paths on Improv:
 
 ```
 /home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc

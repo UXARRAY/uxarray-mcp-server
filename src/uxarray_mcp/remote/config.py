@@ -2,12 +2,42 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 from uuid import UUID
 
 import yaml
+
+USER_CONFIG_PATH = Path.home() / ".config" / "uxarray-mcp" / "config.yaml"
+
+
+def discover_config_path() -> Path | None:
+    """Return the first existing config file in the discovery order.
+
+    Order:
+      1. ``$UXARRAY_MCP_CONFIG`` (explicit override)
+      2. ``~/.config/uxarray-mcp/config.yaml`` (user install)
+      3. ``./config.yaml`` (repo-root, dev/clone install)
+
+    Returns ``None`` when no config file is found.
+    """
+    env_path = os.environ.get("UXARRAY_MCP_CONFIG")
+    if env_path:
+        candidate = Path(env_path).expanduser()
+        if candidate.exists():
+            return candidate
+
+    if USER_CONFIG_PATH.exists():
+        return USER_CONFIG_PATH
+
+    repo_config = Path(__file__).resolve().parent.parent.parent.parent / "config.yaml"
+    if repo_config.exists():
+        return repo_config
+
+    return None
+
 
 _VALID_EXECUTION_MODES = {"local", "hpc", "auto"}
 _EXECUTION_MODE_ALIASES = {"remote": "hpc"}
@@ -219,9 +249,9 @@ def load_config(config_path: Optional[Path] = None) -> HPCConfig:
     'local'
     """
     if config_path is None:
-        config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
+        config_path = discover_config_path()
 
-    if not config_path.exists():
+    if config_path is None or not config_path.exists():
         return HPCConfig()
 
     with open(config_path, "r", encoding="utf-8") as f:
