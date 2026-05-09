@@ -130,9 +130,7 @@ def test_discover_config_user_home_beats_repo(tmp_path, monkeypatch):
 
 def test_discover_config_no_match_returns_none(tmp_path, monkeypatch):
     monkeypatch.delenv("UXARRAY_MCP_CONFIG", raising=False)
-    monkeypatch.setattr(
-        config_module, "USER_CONFIG_PATH", tmp_path / "missing.yaml"
-    )
+    monkeypatch.setattr(config_module, "USER_CONFIG_PATH", tmp_path / "missing.yaml")
     # Point load_config at a definitely-missing repo path.
     monkeypatch.chdir(tmp_path)
     cfg = config_module.load_config(config_path=tmp_path / "no-such-config.yaml")
