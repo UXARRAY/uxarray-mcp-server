@@ -15,8 +15,8 @@ from uxarray_mcp.remote.health import check_endpoint_health
 from uxarray_mcp.tools.inspection import validate_dataset
 from uxarray_mcp.tools.remote_tools import (
     _endpoint_is_ready,
-    calculate_area_hpc,
-    inspect_mesh_hpc,
+    calculate_area,
+    inspect_mesh,
 )
 
 globus_available = importlib.util.find_spec("globus_compute_sdk") is not None
@@ -127,12 +127,12 @@ class TestEndpointIsReady:
 
 
 # -----------------------------------------------------------------------------
-# Unit Tests (Mocked) — inspect_mesh_hpc routing and fallback
+# Unit Tests (Mocked) — inspect_mesh routing and fallback
 # -----------------------------------------------------------------------------
 
 
 class TestInspectMeshHpcUnit:
-    """Unit tests for inspect_mesh_hpc routing and fallback logic."""
+    """Unit tests for inspect_mesh routing and fallback logic."""
 
     def test_no_endpoint_falls_back_to_local(self, synthetic_mesh_file):
         """Falls back to local when use_remote=True but no endpoint is configured."""
@@ -141,7 +141,7 @@ class TestInspectMeshHpcUnit:
             mock_agent.config.has_endpoint = False
             mock_get_agent.return_value = mock_agent
 
-            result = inspect_mesh_hpc(synthetic_mesh_file, use_remote=True)
+            result = inspect_mesh(synthetic_mesh_file, use_remote=True)
 
         assert "n_face" in result
         assert "_provenance" in result
@@ -159,15 +159,15 @@ class TestInspectMeshHpcUnit:
             mock_agent.config.has_endpoint = True
             mock_get_agent.return_value = mock_agent
 
-            result = inspect_mesh_hpc(synthetic_mesh_file, use_remote=True)
+            result = inspect_mesh(synthetic_mesh_file, use_remote=True)
 
         assert "n_face" in result
         warnings = result["_provenance"]["warnings"]
         assert any("HPC endpoint not ready" in w for w in warnings)
 
     def test_provenance_always_attached(self):
-        """Every inspect_mesh_hpc result carries a _provenance block."""
-        result = inspect_mesh_hpc("healpix:2", use_remote=False)
+        """Every inspect_mesh result carries a _provenance block."""
+        result = inspect_mesh("healpix:2", use_remote=False)
         assert "_provenance" in result
         prov = result["_provenance"]
         assert "tool" in prov
@@ -216,7 +216,7 @@ class TestHpcFallbackProvenance:
             mock_agent.config.has_endpoint = True
             mock_get_agent.return_value = mock_agent
 
-            result = calculate_area_hpc(synthetic_mesh_file, use_remote=True)
+            result = calculate_area(synthetic_mesh_file, use_remote=True)
 
         assert result["_provenance"]["execution_venue"] == "local"
 
@@ -233,7 +233,7 @@ class TestHpcFallbackProvenance:
             mock_agent.config.has_endpoint = True
             mock_get_agent.return_value = mock_agent
 
-            result = calculate_area_hpc(synthetic_mesh_file, use_remote=True)
+            result = calculate_area(synthetic_mesh_file, use_remote=True)
 
         warnings = result["_provenance"]["warnings"]
         assert any("HPC endpoint not ready" in w for w in warnings)
@@ -260,7 +260,7 @@ class TestRemoteOnlyPathRaisesClearError:
             mock_get_agent.return_value = mock_agent
 
             with pytest.raises(RuntimeError, match="no HPC endpoint is configured"):
-                inspect_mesh_hpc(self.REMOTE_ONLY_PATH, use_remote=True)
+                inspect_mesh(self.REMOTE_ONLY_PATH, use_remote=True)
 
     def test_endpoint_not_ready_remote_only_path_raises(self):
         """Endpoint unhealthy + remote-only path → RuntimeError naming the reason."""
@@ -276,7 +276,7 @@ class TestRemoteOnlyPathRaisesClearError:
             mock_get_agent.return_value = mock_agent
 
             with pytest.raises(RuntimeError, match="HPC endpoint not ready"):
-                inspect_mesh_hpc(self.REMOTE_ONLY_PATH, use_remote=True)
+                inspect_mesh(self.REMOTE_ONLY_PATH, use_remote=True)
 
     def test_no_endpoint_local_path_still_falls_back(self, synthetic_mesh_file):
         """Existing convenience: a path that exists locally still falls back."""
@@ -285,7 +285,7 @@ class TestRemoteOnlyPathRaisesClearError:
             mock_agent.config.endpoint_id = None
             mock_get_agent.return_value = mock_agent
 
-            result = inspect_mesh_hpc(synthetic_mesh_file, use_remote=True)
+            result = inspect_mesh(synthetic_mesh_file, use_remote=True)
 
         assert "n_face" in result
         assert result["_provenance"]["execution_venue"] == "local"
@@ -297,7 +297,7 @@ class TestRemoteOnlyPathRaisesClearError:
             mock_agent.config.endpoint_id = None
             mock_get_agent.return_value = mock_agent
 
-            result = inspect_mesh_hpc("healpix:2", use_remote=True)
+            result = inspect_mesh("healpix:2", use_remote=True)
 
         assert result["n_face"] == 192
 
@@ -307,9 +307,9 @@ class TestRemoteOnlyPathRaisesClearError:
 # -----------------------------------------------------------------------------
 
 
-def test_inspect_mesh_hpc_healpix():
-    """Integration test: inspect_mesh_hpc runs locally on a HEALPix mesh."""
-    result = inspect_mesh_hpc("healpix:2", use_remote=False)
+def test_inspect_mesh_healpix():
+    """Integration test: inspect_mesh runs locally on a HEALPix mesh."""
+    result = inspect_mesh("healpix:2", use_remote=False)
     assert result["n_face"] == 192
     assert result["n_node"] > 0
     assert "_provenance" in result

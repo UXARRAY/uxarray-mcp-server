@@ -138,7 +138,6 @@ def get_capabilities(
             if location == "faces":
                 applicable_mcp += [
                     "calculate_zonal_mean",
-                    "calculate_zonal_mean_hpc",
                     "subset_bbox",
                     "subset_polygon",
                     "extract_cross_section",
@@ -476,104 +475,27 @@ def get_capabilities(
     ]
 
     config = load_config()
-    endpoint_hint = (
-        ', endpoint="..."'
-        if len(config.endpoint_names) > 1
-        else (
-            f', endpoint="{config.endpoint_names[0]}"'
-            if len(config.endpoint_names) == 1
-            else ""
-        )
-    )
-
     if config.has_endpoint:
-        mcp_tools += [
-            {
-                "name": "inspect_mesh_hpc",
-                "applicable": True,
-                "reason": (
-                    "Available — same as inspect_mesh with optional remote execution "
-                    "on a configured Globus Compute endpoint. Pass endpoint='name' "
-                    "when several endpoint profiles are configured."
-                ),
-                "call_example": (
-                    f"inspect_mesh_hpc({gp}, use_remote=True{endpoint_hint})"
-                ),
-            },
-            {
-                "name": "calculate_area_hpc",
-                "applicable": has_faces,
-                "reason": (
-                    "Available — same as calculate_area but can offload to a configured Globus Compute endpoint."
-                    if has_faces
-                    else "Not applicable — no faces found."
-                ),
-                "call_example": (
-                    f"calculate_area_hpc({gp}, use_remote=True{endpoint_hint})"
-                ),
-            },
-            {
-                "name": "inspect_variable_hpc",
-                "applicable": data_path is not None,
-                "reason": (
-                    "Available — same as inspect_variable with optional remote execution."
-                    if data_path
-                    else "Requires a data file."
-                ),
-                "call_example": (
-                    f"inspect_variable_hpc({gp}{dp}, use_remote=True{endpoint_hint})"
-                ),
-            },
-            {
-                "name": "calculate_zonal_mean_hpc",
-                "applicable": has_face_centered_vars,
-                "reason": (
-                    f"Available — face-centered variables: {face_centered_var_names}."
-                    if has_face_centered_vars
-                    else "Not applicable — no face-centered variables found."
-                ),
-                "call_example": (
-                    f'calculate_zonal_mean_hpc({gp}{dp}, variable_name="...", '
-                    f"use_remote=True{endpoint_hint})"
-                ),
-            },
-            {
-                "name": "plot_mesh_hpc",
-                "applicable": has_faces,
-                "reason": (
-                    "Available — renders a mesh wireframe with optional remote execution."
-                    if has_faces
-                    else "Not applicable — no faces found to visualize as a mesh."
-                ),
-                "call_example": (
-                    f"plot_mesh_hpc({gp}, use_remote=True{endpoint_hint})"
-                ),
-            },
-            {
-                "name": "plot_variable_hpc",
-                "applicable": has_face_centered_vars,
-                "reason": (
-                    f"Available — face-centered variables: {face_centered_var_names}."
-                    if has_face_centered_vars
-                    else "Not applicable — no face-centered variables found for polygon plotting."
-                ),
-                "call_example": (
-                    f'plot_variable_hpc({gp}{dp}, variable_name="...", use_remote=True{endpoint_hint})'
-                ),
-            },
-            {
-                "name": "plot_zonal_mean_hpc",
-                "applicable": has_face_centered_vars,
-                "reason": (
-                    f"Available — face-centered variables: {face_centered_var_names}."
-                    if has_face_centered_vars
-                    else "Not applicable — no face-centered variables found for zonal plotting."
-                ),
-                "call_example": (
-                    f'plot_zonal_mean_hpc({gp}{dp}, variable_name="...", use_remote=True{endpoint_hint})'
-                ),
-            },
-        ]
+        endpoint_hint = (
+            ', endpoint="..."'
+            if len(config.endpoint_names) > 1
+            else f', endpoint="{config.endpoint_names[0]}"'
+        )
+        remote_note = (
+            f" Pass use_remote=True{endpoint_hint} to offload to the configured "
+            "Globus Compute endpoint."
+        )
+        for tool in mcp_tools:
+            if tool["name"] in {
+                "inspect_mesh",
+                "inspect_variable",
+                "calculate_area",
+                "calculate_zonal_mean",
+                "plot_mesh",
+                "plot_variable",
+                "plot_zonal_mean",
+            }:
+                tool["reason"] = str(tool["reason"]) + remote_note
 
     # --- Native UXarray capabilities ---
     uxarray_capabilities: Dict[str, List[str]] = {

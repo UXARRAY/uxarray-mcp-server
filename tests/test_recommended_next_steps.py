@@ -4,14 +4,11 @@ Every result-bearing tool should suggest follow-up tool calls so an agent
 can chain a workflow without already knowing the tool vocabulary.
 """
 
+from uxarray_mcp.tools import calculate_zonal_mean, validate_dataset
 from uxarray_mcp.tools.advanced import (
     extract_cross_section,
     subset_bbox,
     subset_polygon,
-)
-from uxarray_mcp.tools.inspection import (
-    calculate_zonal_mean,
-    validate_dataset,
 )
 
 

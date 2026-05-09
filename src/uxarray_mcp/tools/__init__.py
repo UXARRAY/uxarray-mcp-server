@@ -24,27 +24,22 @@ from .execution_control import (
     set_execution_mode,
     validate_hpc_setup,
 )
+from .inspection import validate_dataset
+from .orchestration import analyze_dataset
 
-# Local-only implementations are still importable for internal callers
-# (scientific_agent, tests). The dispatcher versions in remote_tools.py are
-# the user-facing entry points and accept use_remote/endpoint/session_id.
-from .inspection import (
+# Public tool surface for inspection and plotting. Each function is a
+# dispatcher that runs locally by default and routes to a Globus Compute
+# endpoint when ``use_remote=True``. Internal callers that need the pure
+# local implementation can import the underscored helpers from
+# ``.inspection`` / ``.plotting`` directly.
+from .remote_tools import (
     calculate_area,
     calculate_zonal_mean,
     inspect_mesh,
     inspect_variable,
-    validate_dataset,
-)
-from .orchestration import analyze_dataset
-from .plotting import plot_mesh, plot_variable, plot_zonal_mean
-from .remote_tools import (
-    calculate_area_hpc,
-    calculate_zonal_mean_hpc,
-    inspect_mesh_hpc,
-    inspect_variable_hpc,
-    plot_mesh_hpc,
-    plot_variable_hpc,
-    plot_zonal_mean_hpc,
+    plot_mesh,
+    plot_variable,
+    plot_zonal_mean,
 )
 from .scientific_agent import run_scientific_agent
 from .stateful import (
@@ -75,7 +70,6 @@ __all__ = [
     "get_result_handle",
     "get_operation_status",
     "list_operations",
-    # Local implementations (used by scientific_agent and tests)
     "inspect_mesh",
     "inspect_variable",
     "calculate_area",
@@ -84,15 +78,6 @@ __all__ = [
     "plot_mesh",
     "plot_variable",
     "plot_zonal_mean",
-    # Dispatcher versions (registered as MCP tools without _hpc suffix)
-    "inspect_mesh_hpc",
-    "calculate_area_hpc",
-    "inspect_variable_hpc",
-    "calculate_zonal_mean_hpc",
-    "plot_mesh_hpc",
-    "plot_variable_hpc",
-    "plot_zonal_mean_hpc",
-    # Analysis extensions
     "subset_bbox",
     "subset_polygon",
     "extract_cross_section",

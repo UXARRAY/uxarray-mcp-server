@@ -148,7 +148,7 @@ def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
     ]
 
 
-def inspect_mesh_hpc(
+def inspect_mesh(
     file_path: str,
     use_remote: bool = False,
     endpoint: str | None = None,
@@ -175,28 +175,28 @@ def inspect_mesh_hpc(
 
     Examples
     --------
-    >>> inspect_mesh_hpc("mesh.nc", use_remote=False)
+    >>> inspect_mesh("mesh.nc", use_remote=False)
     {"n_face": 2562, "n_node": 5762, ...}
 
-    >>> inspect_mesh_hpc("/hpc/data/mesh.nc", use_remote=True)
+    >>> inspect_mesh("/hpc/data/mesh.nc", use_remote=True)
     {"n_face": 2562, ...}
     """
-    from .inspection import inspect_mesh
+    from .inspection import _inspect_mesh_local
 
     return _run_with_optional_hpc(
-        tool_name="inspect_mesh_hpc",
+        tool_name="inspect_mesh",
         use_remote=use_remote,
         endpoint=endpoint,
         path_hint=file_path,
         session_id=session_id,
-        local_call=lambda: inspect_mesh(file_path),
+        local_call=lambda: _inspect_mesh_local(file_path),
         remote_call=lambda agent: _run_sync(
             lambda: agent.inspect_mesh_remote(file_path, use_remote)
         ),
     )
 
 
-def calculate_area_hpc(
+def calculate_area(
     file_path: str,
     use_remote: bool = False,
     endpoint: str | None = None,
@@ -225,35 +225,35 @@ def calculate_area_hpc(
 
     Examples
     --------
-    >>> calculate_area_hpc("mesh.nc", use_remote=False)
+    >>> calculate_area("mesh.nc", use_remote=False)
     {
         "total_area": 5.10064e14,
         "mean_area": 1.246e7,
         ...
     }
 
-    >>> calculate_area_hpc("/hpc/data/mesh.nc", use_remote=True)
+    >>> calculate_area("/hpc/data/mesh.nc", use_remote=True)
     {
         "total_area": 5.10064e14,
         ...
     }
     """
-    from .inspection import calculate_area
+    from .inspection import _calculate_area_local
 
     return _run_with_optional_hpc(
-        tool_name="calculate_area_hpc",
+        tool_name="calculate_area",
         use_remote=use_remote,
         endpoint=endpoint,
         path_hint=file_path,
         session_id=session_id,
-        local_call=lambda: calculate_area(file_path),
+        local_call=lambda: _calculate_area_local(file_path),
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_area_remote(file_path, use_remote)
         ),
     )
 
 
-def inspect_variable_hpc(
+def inspect_variable(
     grid_path: str,
     data_path: str,
     variable_name: Optional[str] = None,
@@ -283,7 +283,7 @@ def inspect_variable_hpc(
 
     Examples
     --------
-    >>> inspect_variable_hpc("grid.nc", "data.nc", "temperature")
+    >>> inspect_variable("grid.nc", "data.nc", "temperature")
     {
         "variables": [{
             "name": "temperature",
@@ -293,15 +293,15 @@ def inspect_variable_hpc(
         "grid_info": {...}
     }
     """
-    from .inspection import inspect_variable
+    from .inspection import _inspect_variable_local
 
     return _run_with_optional_hpc(
-        tool_name="inspect_variable_hpc",
+        tool_name="inspect_variable",
         use_remote=use_remote,
         endpoint=endpoint,
         path_hint=grid_path,
         session_id=session_id,
-        local_call=lambda: inspect_variable(grid_path, data_path, variable_name),
+        local_call=lambda: _inspect_variable_local(grid_path, data_path, variable_name),
         remote_call=lambda agent: _run_sync(
             lambda: agent.inspect_variable_remote(
                 grid_path, data_path, variable_name, use_remote
@@ -310,7 +310,7 @@ def inspect_variable_hpc(
     )
 
 
-def calculate_zonal_mean_hpc(
+def calculate_zonal_mean(
     grid_path: str,
     data_path: str,
     variable_name: str,
@@ -349,7 +349,7 @@ def calculate_zonal_mean_hpc(
 
     Examples
     --------
-    >>> calculate_zonal_mean_hpc("grid.nc", "data.nc", "temperature")
+    >>> calculate_zonal_mean("grid.nc", "data.nc", "temperature")
     {
         "variable_name": "temperature",
         "latitudes": [-90, -80, ...],
@@ -357,15 +357,15 @@ def calculate_zonal_mean_hpc(
         ...
     }
     """
-    from .inspection import calculate_zonal_mean
+    from .inspection import _calculate_zonal_mean_local
 
     return _run_with_optional_hpc(
-        tool_name="calculate_zonal_mean_hpc",
+        tool_name="calculate_zonal_mean",
         use_remote=use_remote,
         endpoint=endpoint,
         path_hint=grid_path,
         session_id=session_id,
-        local_call=lambda: calculate_zonal_mean(
+        local_call=lambda: _calculate_zonal_mean_local(
             grid_path, data_path, variable_name, lat_spec, conservative
         ),
         remote_call=lambda agent: _run_sync(
@@ -376,7 +376,7 @@ def calculate_zonal_mean_hpc(
     )
 
 
-def plot_mesh_hpc(
+def plot_mesh(
     grid_path: str | None = None,
     width: int = 800,
     height: int = 400,
@@ -417,10 +417,10 @@ def plot_mesh_hpc(
 
     Examples
     --------
-    >>> result = plot_mesh_hpc("/hpc/data/grid.nc", use_remote=True)
+    >>> result = plot_mesh("/hpc/data/grid.nc", use_remote=True)
     >>> open("mesh.png", "wb").write(base64.b64decode(result["png_b64"]))
     """
-    from .plotting import _resolve_plot_paths, plot_mesh
+    from .plotting import _plot_mesh_local, _resolve_plot_paths
 
     resolved_grid, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
 
@@ -428,8 +428,8 @@ def plot_mesh_hpc(
         import base64
         import json
 
-        items = plot_mesh(resolved_grid, width=width, height=height)
-        # plot_mesh returns [ImageContent, TextContent]; extract png_b64 + metadata
+        items = _plot_mesh_local(resolved_grid, width=width, height=height)
+        # _plot_mesh_local returns [ImageContent, TextContent]; extract png_b64 + metadata
         img = items[0]
         meta = json.loads(items[1].text)
         return {
@@ -443,7 +443,7 @@ def plot_mesh_hpc(
         }
 
     result = _run_with_optional_hpc(
-        tool_name="plot_mesh_hpc",
+        tool_name="plot_mesh",
         use_remote=use_remote,
         endpoint=endpoint,
         path_hint=resolved_grid,
@@ -456,7 +456,7 @@ def plot_mesh_hpc(
     return _plot_result_to_mcp_contents(result)
 
 
-def plot_variable_hpc(
+def plot_variable(
     grid_path: str | None = None,
     data_path: str | None = None,
     variable_name: Optional[str] = None,
@@ -511,7 +511,7 @@ def plot_variable_hpc(
         - grid_info: {n_face, n_node, n_edge}
         - execution_venue: "local" or "hpc:<endpoint_id>"
     """
-    from .plotting import _resolve_plot_paths, plot_variable
+    from .plotting import _plot_variable_local, _resolve_plot_paths
 
     resolved_grid, resolved_data = _resolve_plot_paths(
         grid_path, data_path, session_id, dataset_handle
@@ -521,7 +521,7 @@ def plot_variable_hpc(
         import base64
         import json
 
-        items = plot_variable(
+        items = _plot_variable_local(
             resolved_grid,
             resolved_data,
             variable_name,
@@ -546,7 +546,7 @@ def plot_variable_hpc(
         }
 
     result = _run_with_optional_hpc(
-        tool_name="plot_variable_hpc",
+        tool_name="plot_variable",
         use_remote=use_remote,
         endpoint=endpoint,
         path_hint=resolved_grid,
@@ -570,7 +570,7 @@ def plot_variable_hpc(
     return _plot_result_to_mcp_contents(result)
 
 
-def plot_zonal_mean_hpc(
+def plot_zonal_mean(
     grid_path: str | None = None,
     data_path: str | None = None,
     variable_name: str | None = None,
@@ -626,7 +626,7 @@ def plot_zonal_mean_hpc(
         - zonal_mean_values: List of zonal mean values
         - execution_venue: "local" or "hpc:<endpoint_id>"
     """
-    from .plotting import _resolve_plot_paths, plot_zonal_mean
+    from .plotting import _plot_zonal_mean_local, _resolve_plot_paths
 
     resolved_grid, resolved_data = _resolve_plot_paths(
         grid_path, data_path, session_id, dataset_handle
@@ -636,7 +636,7 @@ def plot_zonal_mean_hpc(
         import base64
         import json
 
-        items = plot_zonal_mean(
+        items = _plot_zonal_mean_local(
             resolved_grid,
             resolved_data,
             variable_name,
@@ -662,7 +662,7 @@ def plot_zonal_mean_hpc(
         }
 
     result = _run_with_optional_hpc(
-        tool_name="plot_zonal_mean_hpc",
+        tool_name="plot_zonal_mean",
         use_remote=use_remote,
         endpoint=endpoint,
         path_hint=resolved_grid,

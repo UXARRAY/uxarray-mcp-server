@@ -17,7 +17,7 @@ from uxarray_mcp.domain import (
 from uxarray_mcp.provenance import attach_provenance
 
 
-def inspect_mesh(file_path: str) -> Dict[str, Any]:
+def _inspect_mesh_local(file_path: str) -> Dict[str, Any]:
     """
     Inspect an unstructured mesh file and return basic topology information.
 
@@ -101,7 +101,7 @@ def inspect_mesh(file_path: str) -> Dict[str, Any]:
     )
 
 
-def inspect_variable(
+def _inspect_variable_local(
     grid_path: str, data_path: str, variable_name: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -183,7 +183,7 @@ def inspect_variable(
     )
 
 
-def calculate_area(file_path: str) -> Dict[str, Any]:
+def _calculate_area_local(file_path: str) -> Dict[str, Any]:
     """
     Calculate face areas for an unstructured mesh.
 
@@ -242,7 +242,7 @@ def calculate_area(file_path: str) -> Dict[str, Any]:
     )
 
 
-def calculate_zonal_mean(
+def _calculate_zonal_mean_local(
     grid_path: str,
     data_path: str,
     variable_name: str,

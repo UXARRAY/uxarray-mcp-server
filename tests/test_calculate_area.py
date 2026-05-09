@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from uxarray_mcp.tools.inspection import calculate_area
+from uxarray_mcp.tools import calculate_area
 
 # -----------------------------------------------------------------------------
 # Unit Tests (Mocked)

@@ -151,7 +151,7 @@ class TestRunScientificAgent:
 class TestHpcPathRouting:
     """Tests for HPC path detection and remote routing in Stage 1."""
 
-    @patch("uxarray_mcp.tools.remote_tools.inspect_mesh_hpc")
+    @patch("uxarray_mcp.tools.remote_tools.inspect_mesh")
     def test_hpc_path_calls_remote_inspect(self, mock_inspect):
         """HPC paths should route to remote inspection, not local."""
         mock_inspect.return_value = {
@@ -160,7 +160,7 @@ class TestHpcPathRouting:
             "n_edge": 300,
             "source": "/home/user/mesh.nc",
         }
-        with patch("uxarray_mcp.tools.remote_tools.calculate_area_hpc") as mock_area:
+        with patch("uxarray_mcp.tools.remote_tools.calculate_area") as mock_area:
             mock_area.return_value = {
                 "total_area": 5.1e14,
                 "mean_area": 1.0e7,
@@ -178,7 +178,7 @@ class TestHpcPathRouting:
     def test_hpc_path_failure_returns_error(self):
         """If HPC inspection fails, return structured error, don't crash."""
         with patch(
-            "uxarray_mcp.tools.remote_tools.inspect_mesh_hpc",
+            "uxarray_mcp.tools.remote_tools.inspect_mesh",
             side_effect=RuntimeError("Endpoint unreachable"),
         ):
             result = run_scientific_agent("/home/user/mesh.nc")
@@ -200,9 +200,22 @@ class TestHpcErrorHandling:
 
     def test_hpc_area_failure_falls_back_to_local(self):
         """If HPC area calculation fails, fall back to local."""
+        local_area_result = {
+            "total_area": 5.1e14,
+            "mean_area": 1.0e7,
+            "min_area": 1.0e6,
+            "max_area": 2.0e7,
+            "n_face": 100,
+        }
+
+        def fake_calculate_area(file_path, use_remote=False, **kwargs):
+            if use_remote:
+                raise RuntimeError("Globus timeout")
+            return local_area_result
+
         with (
             patch(
-                "uxarray_mcp.tools.remote_tools.inspect_mesh_hpc",
+                "uxarray_mcp.tools.remote_tools.inspect_mesh",
                 return_value={
                     "n_face": 100,
                     "n_node": 200,
@@ -211,18 +224,8 @@ class TestHpcErrorHandling:
                 },
             ),
             patch(
-                "uxarray_mcp.tools.remote_tools.calculate_area_hpc",
-                side_effect=RuntimeError("Globus timeout"),
-            ),
-            patch(
-                "uxarray_mcp.tools.inspection.calculate_area",
-                return_value={
-                    "total_area": 5.1e14,
-                    "mean_area": 1.0e7,
-                    "min_area": 1.0e6,
-                    "max_area": 2.0e7,
-                    "n_face": 100,
-                },
+                "uxarray_mcp.tools.remote_tools.calculate_area",
+                side_effect=fake_calculate_area,
             ),
         ):
             result = run_scientific_agent("/home/user/mesh.nc")

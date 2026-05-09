@@ -159,12 +159,12 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
         probe_path_access,
         validate_hpc_setup,
     )
-    from uxarray_mcp.tools.inspection import (
+    from uxarray_mcp.tools.inspection import validate_dataset
+    from uxarray_mcp.tools.remote_tools import (
         calculate_area,
         calculate_zonal_mean,
         inspect_mesh,
         inspect_variable,
-        validate_dataset,
     )
 
     workflow = get_workflow(workflow_id)

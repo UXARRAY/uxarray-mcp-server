@@ -69,18 +69,12 @@ def run_scientific_agent(
             ...
         }
     """
-    from uxarray_mcp.tools.inspection import (
+    from uxarray_mcp.tools.inspection import validate_dataset
+    from uxarray_mcp.tools.remote_tools import (
         calculate_area,
         calculate_zonal_mean,
         inspect_mesh,
         inspect_variable,
-        validate_dataset,
-    )
-    from uxarray_mcp.tools.remote_tools import (
-        calculate_area_hpc,
-        calculate_zonal_mean_hpc,
-        inspect_mesh_hpc,
-        inspect_variable_hpc,
     )
 
     reasoning_trace: list[dict[str, Any]] = []
@@ -92,11 +86,11 @@ def run_scientific_agent(
         reasoning_trace.append(
             {
                 "stage": "analyze",
-                "action": f"HPC path detected -> inspect_mesh_hpc({file_path!r})",
+                "action": f"HPC path detected -> inspect_mesh({file_path!r})",
             }
         )
         try:
-            mesh_summary = inspect_mesh_hpc(file_path, use_remote=True)
+            mesh_summary = inspect_mesh(file_path, use_remote=True)
         except Exception as exc:
             return {
                 "file_path": file_path,
@@ -133,7 +127,7 @@ def run_scientific_agent(
             {"stage": "analyze", "action": f"inspect_variable({data_path!r})"}
         )
         if hpc_path or _is_hpc_path(data_path):
-            variable_results = inspect_variable_hpc(
+            variable_results = inspect_variable(
                 file_path, data_path, variable_name, use_remote=True
             )
         else:
@@ -223,7 +217,7 @@ def run_scientific_agent(
     if use_remote:
         reasoning_trace.append({"stage": "execute", "venue": "hpc (Globus Compute)"})
         try:
-            area_results = calculate_area_hpc(file_path, use_remote=True)
+            area_results = calculate_area(file_path, use_remote=True)
         except Exception as exc:
             reasoning_trace.append(
                 {
@@ -245,7 +239,7 @@ def run_scientific_agent(
         )
         if use_remote:
             try:
-                zonal_mean_results = calculate_zonal_mean_hpc(
+                zonal_mean_results = calculate_zonal_mean(
                     file_path, data_path, target_var, use_remote=True
                 )
             except Exception as exc:

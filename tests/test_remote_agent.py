@@ -223,36 +223,34 @@ class TestUXarrayComputeAgent:
 class TestRemoteTools:
     """Tests for MCP remote tools."""
 
-    def test_calculate_area_hpc_local(self):
-        """Test calculate_area_hpc with local execution."""
-        from uxarray_mcp.tools import calculate_area_hpc
+    def test_calculate_area_local(self):
+        """Test calculate_area with local execution."""
+        from uxarray_mcp.tools import calculate_area
 
-        result = calculate_area_hpc("healpix:2", use_remote=False)
+        result = calculate_area("healpix:2", use_remote=False)
 
         assert "total_area" in result
         assert "n_face" in result
         assert result["n_face"] == 192
 
-    def test_inspect_variable_hpc_local(self, synthetic_mesh_with_data):
-        """Test inspect_variable_hpc with local execution."""
-        from uxarray_mcp.tools import inspect_variable_hpc
+    def test_inspect_variable_local(self, synthetic_mesh_with_data):
+        """Test inspect_variable with local execution."""
+        from uxarray_mcp.tools import inspect_variable
 
         grid_file, data_file = synthetic_mesh_with_data
 
-        result = inspect_variable_hpc(
-            grid_file, data_file, "temperature", use_remote=False
-        )
+        result = inspect_variable(grid_file, data_file, "temperature", use_remote=False)
 
         assert "variables" in result
         assert len(result["variables"]) == 1
 
-    def test_calculate_zonal_mean_hpc_local(self, synthetic_mesh_with_data):
-        """Test calculate_zonal_mean_hpc with local execution."""
-        from uxarray_mcp.tools import calculate_zonal_mean_hpc
+    def test_calculate_zonal_mean_local(self, synthetic_mesh_with_data):
+        """Test calculate_zonal_mean with local execution."""
+        from uxarray_mcp.tools import calculate_zonal_mean
 
         grid_file, data_file = synthetic_mesh_with_data
 
-        result = calculate_zonal_mean_hpc(
+        result = calculate_zonal_mean(
             grid_file, data_file, "temperature", use_remote=False
         )
 
@@ -260,11 +258,11 @@ class TestRemoteTools:
         assert result["variable_name"] == "temperature"
 
     @pytest.mark.asyncio
-    async def test_calculate_area_hpc_local_inside_running_loop(self):
+    async def test_calculate_area_local_inside_running_loop(self):
         """Test wrapper returns result dict even when an event loop is running."""
-        from uxarray_mcp.tools import calculate_area_hpc
+        from uxarray_mcp.tools import calculate_area
 
-        result = calculate_area_hpc("healpix:2", use_remote=False)
+        result = calculate_area("healpix:2", use_remote=False)
 
         assert isinstance(result, dict)
         assert result["n_face"] == 192

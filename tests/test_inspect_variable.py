@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from uxarray_mcp.tools.inspection import inspect_variable
+from uxarray_mcp.tools import inspect_variable
 
 # -----------------------------------------------------------------------------
 # Unit Tests (Mocked)
