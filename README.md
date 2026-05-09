@@ -9,17 +9,38 @@ AI clients such as Claude. It supports:
 
 ## Install
 
-Core local setup:
+The repo is private; install from a clone (recommended) or via
+``uv tool install`` from a private git URL.
 
 ```bash
-uv sync
+# Developer / contributor path
+git clone git@github.com:UXARRAY/uxarray-mcp-server.git
+cd uxarray-mcp-server
+uv sync                 # core local install
+uv sync --extra hpc     # add Globus Compute deps
 ```
-
-With HPC support:
 
 ```bash
-uv sync --extra hpc
+# Internal distribution path (no clone)
+uv tool install "git+ssh://git@github.com/UXARRAY/uxarray-mcp-server.git"
+uxarray-mcp setup
+uxarray-mcp endpoints add improv <your-endpoint-uuid>
+uxarray-mcp install-claude --print-only   # prints the Claude Desktop block
 ```
+
+The ``uxarray-mcp`` CLI exposes:
+
+| subcommand          | what it does                                             |
+| ------------------- | -------------------------------------------------------- |
+| ``serve``           | run the MCP server on stdio (Claude / FastMCP transport) |
+| ``setup``           | write a starter config to ``~/.config/uxarray-mcp/``     |
+| ``endpoints add``   | register a named Globus Compute endpoint                 |
+| ``endpoints list``  | show configured endpoints + discovery path               |
+| ``doctor``          | validate auth, endpoint health, optional remote probes   |
+| ``install-claude``  | print or merge the Claude Desktop ``mcpServers`` block   |
+
+Config is discovered in this order: ``$UXARRAY_MCP_CONFIG`` →
+``~/.config/uxarray-mcp/config.yaml`` → ``./config.yaml`` (repo root).
 
 ## Most Users Should Read These in Order
 
@@ -64,12 +85,12 @@ HPC diagnostics:
 - `validate_hpc_setup`
 - `probe_path_access`
 
-Optional remote wrappers (registered only when an endpoint is configured):
-
-- `inspect_mesh_hpc`
-- `inspect_variable_hpc`
-- `calculate_area_hpc`
-- `calculate_zonal_mean_hpc`
+All inspection, computation, and plotting tools accept ``use_remote: bool``
+and ``endpoint: str | None``. When ``use_remote=True`` the dispatcher submits
+to the configured (or named) Globus Compute endpoint and falls back to local
+execution if the endpoint is missing or unhealthy. There are no separate
+``*_hpc`` tool names on the MCP surface — the same tool runs locally or
+remotely based on the flag.
 
 Full parameter and return details live in [docs/tools.md](docs/tools.md).
 
@@ -98,18 +119,33 @@ up. Start with [docs/globus-compute.md](docs/globus-compute.md) and use
 
 ## Configuration
 
-Copy `config.yaml.example` to `config.yaml` and set your endpoint UUID when you
-are ready to use HPC:
+Use the CLI for the common case:
+
+```bash
+uxarray-mcp setup
+uxarray-mcp endpoints add improv <your-endpoint-uuid> --path-prefix /lus/ --set-default
+```
+
+This writes ``~/.config/uxarray-mcp/config.yaml`` with the canonical
+multi-endpoint schema. For dev clones, ``./config.yaml`` at the repo root
+still works (and is gitignored). The full schema:
 
 ```yaml
 hpc:
-  globus_compute:
-    endpoint_id: "your-endpoint-uuid"
+  default_endpoint: "ucar"
+  endpoints:
+    ucar:
+      endpoint_id: "your-ucar-endpoint-uuid"
+      path_prefixes: ["/glade/"]
+    improv:
+      endpoint_id: "your-improv-endpoint-uuid"
+      path_prefixes: ["/gpfs/fs1/", "/home/jain/"]
   execution_mode: "auto"
   timeout_seconds: 300
 ```
 
-If `endpoint_id` is `null`, the server runs locally only.
+Remote tools accept `endpoint="ucar"` or `endpoint="improv"`; when omitted,
+the server routes by path prefix before falling back to `default_endpoint`.
 
 ## Development Checks
 

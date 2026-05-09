@@ -209,3 +209,12 @@ config.yaml
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local scratch — generated artifacts, debug probes
+tmp/
+
+# Companion paper/poster (separate git repo at outputs/)
+outputs/
+
+# Prototype convergence agent (lives outside the MCP server scope)
+scripts/convergence_agent/

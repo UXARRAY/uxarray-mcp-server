@@ -1,16 +1,43 @@
 # UXarray MCP Server Configuration
-# Copy this file to config.yaml and fill in your own values.
-# config.yaml is local-only and gitignored so personal endpoint UUIDs stay out of git.
+#
+# Discovery order (first match wins):
+#   1. $UXARRAY_MCP_CONFIG  (explicit override)
+#   2. ~/.config/uxarray-mcp/config.yaml  (user install — preferred)
+#   3. ./config.yaml  (repo-root, dev/clone install)
+#
+# Use `uxarray-mcp setup` and `uxarray-mcp endpoints add <name> <uuid>` to
+# manage the user-home config interactively. config.yaml at the repo root is
+# gitignored so personal endpoint UUIDs stay out of git.
 
 hpc:
-  globus_compute:
-    # Your personal Globus Compute endpoint UUID.
-    # See GETTING_STARTED.md for instructions on setting up an endpoint.
-    endpoint_id: null
-
-  # "local" — always run tools on this machine (default)
-  # "auto"  — use HPC when endpoint_id is set, otherwise run locally
+  # "local" — always run tools on this machine
+  # "auto"  — use HPC when an endpoint is configured, otherwise fall back to local
   # "hpc"   — always require HPC (fail if no endpoint configured)
-  execution_mode: "local"
+  execution_mode: "auto"
 
   timeout_seconds: 300
+
+  # ---- Canonical multi-endpoint schema ----
+  # Define one or more named endpoints. Tools accept ``endpoint: "<name>"`` to
+  # target a specific cluster; otherwise ``default_endpoint`` is used.
+  default_endpoint: "improv"
+  endpoints:
+    improv:
+      endpoint_id: "00000000-0000-0000-0000-000000000000"
+      # Optional: filesystem prefixes this endpoint owns. Used as a hint when
+      # routing path-aware tools.
+      path_prefixes:
+        - "/home/jain/"
+        - "/lus/"
+      timeout_seconds: 600
+    ucar:
+      endpoint_id: "00000000-0000-0000-0000-000000000000"
+      path_prefixes:
+        - "/glade/"
+
+  # ---- Legacy single-endpoint form (still supported) ----
+  # Keep ``hpc.endpoints`` empty and set this if you only ever submit to one
+  # endpoint. ``uxarray-mcp endpoints add`` will migrate you to the canonical
+  # form automatically.
+  globus_compute:
+    endpoint_id: null

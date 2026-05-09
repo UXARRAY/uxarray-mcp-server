@@ -26,7 +26,7 @@ def check_endpoint_health(config: Any) -> dict[str, Any]:
     >>> check_endpoint_health(config)
     {"status": "healthy", "endpoint_id": "14e272c4-..."}
     """
-    if not config.has_endpoint:
+    if not getattr(config, "endpoint_id", None):
         return {"status": "no_endpoint", "message": "No endpoint configured"}
 
     try:

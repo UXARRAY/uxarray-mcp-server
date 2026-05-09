@@ -59,7 +59,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         just the module reference, so the HPC endpoint does not need
         uxarray_mcp installed — only uxarray and its dependencies.
         """
-        if self._executor is None and self.config.has_endpoint:
+        if self._executor is None and self.config.endpoint_id:
             from globus_compute_sdk import Executor
             from globus_compute_sdk.serialize import (
                 AllCodeStrategies,
@@ -90,7 +90,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         dict
             Mesh topology info (n_face, n_node, n_edge, source)
         """
-        if use_remote and self.config.has_endpoint:
+        if use_remote and self.config.endpoint_id:
             return await self._run_on_hpc(remote_inspect_mesh, file_path)
         else:
             return self._run_local_inspect_mesh(file_path)
@@ -117,7 +117,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         --------
         >>> result = await agent.calculate_area_remote("mesh.nc", use_remote=False)
         """
-        if use_remote and self.config.has_endpoint:
+        if use_remote and self.config.endpoint_id:
             return await self._run_on_hpc(remote_calculate_area, file_path)
         else:
             return self._run_local_calculate_area(file_path)
@@ -148,7 +148,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         dict
             Variable metadata
         """
-        if use_remote and self.config.has_endpoint:
+        if use_remote and self.config.endpoint_id:
             return await self._run_on_hpc(
                 remote_inspect_variable, grid_path, data_path, variable_name
             )
@@ -187,7 +187,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         dict
             Zonal mean results
         """
-        if use_remote and self.config.has_endpoint:
+        if use_remote and self.config.endpoint_id:
             return await self._run_on_hpc(
                 remote_calculate_zonal_mean,
                 grid_path,
@@ -206,7 +206,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         self, file_path: str, inspect_netcdf: bool = True, use_remote: bool = False
     ) -> Dict[str, Any]:
         """Probe whether a remote worker can read the exact target path."""
-        if use_remote and self.config.has_endpoint:
+        if use_remote and self.config.endpoint_id:
             return await self._run_on_hpc(remote_probe_path, file_path, inspect_netcdf)
         else:
             return remote_probe_path(file_path, inspect_netcdf)
@@ -220,7 +220,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         use_remote: bool = False,
     ) -> Dict[str, Any]:
         """Render mesh wireframe PNG on HPC and return base64 bytes."""
-        if use_remote and self.config.has_endpoint:
+        if use_remote and self.config.endpoint_id:
             return await self._run_on_hpc(remote_plot_mesh, grid_path, width, height)
         else:
             return remote_plot_mesh(grid_path, width, height)
@@ -240,7 +240,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         use_remote: bool = False,
     ) -> Dict[str, Any]:
         """Render face-centered variable PNG on HPC and return base64 bytes."""
-        if use_remote and self.config.has_endpoint:
+        if use_remote and self.config.endpoint_id:
             return await self._run_on_hpc(
                 remote_plot_variable,
                 grid_path,
@@ -281,7 +281,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         use_remote: bool = False,
     ) -> Dict[str, Any]:
         """Render zonal mean profile PNG on HPC and return base64 bytes."""
-        if use_remote and self.config.has_endpoint:
+        if use_remote and self.config.endpoint_id:
             return await self._run_on_hpc(
                 remote_plot_zonal_mean,
                 grid_path,
@@ -383,9 +383,12 @@ class UXarrayComputeAgent(_AcademyAgent):
 
 
 _agent_instance = None
+_agent_instances: dict[str, UXarrayComputeAgent] = {}
 
 
-def get_agent() -> UXarrayComputeAgent:
+def get_agent(
+    endpoint: str | None = None, path: str | None = None
+) -> UXarrayComputeAgent:
     """Get or create singleton agent instance.
 
     Returns
@@ -399,9 +402,22 @@ def get_agent() -> UXarrayComputeAgent:
     >>> result = await agent.calculate_area_remote("mesh.nc")
     """
     global _agent_instance
-    if _agent_instance is None:
-        from .config import load_config
+    from .config import load_config
 
-        config = load_config()
-        _agent_instance = UXarrayComputeAgent(config)
-    return _agent_instance
+    base_config = load_config()
+    config = base_config.for_endpoint(endpoint=endpoint, path=path)
+
+    if endpoint is None and path is None:
+        if _agent_instance is None:
+            _agent_instance = UXarrayComputeAgent(config)
+        return _agent_instance
+
+    key = (
+        f"{config.endpoint_name or 'default'}:"
+        f"{config.endpoint_id or 'local'}:"
+        f"{config.execution_mode}:"
+        f"{config.timeout_seconds}"
+    )
+    if key not in _agent_instances:
+        _agent_instances[key] = UXarrayComputeAgent(config)
+    return _agent_instances[key]
