@@ -39,20 +39,17 @@ but the endpoint is missing or unhealthy.
 
 ## Install
 
-The repo is private; install from a clone (recommended) or via
-``uv tool install`` from a private git URL.
-
 ```bash
 # Developer / contributor path
-git clone git@github.com:UXARRAY/uxarray-mcp-server.git
+git clone https://github.com/UXARRAY/uxarray-mcp-server.git
 cd uxarray-mcp-server
 uv sync                 # core local install
 uv sync --extra hpc     # add Globus Compute deps
 ```
 
 ```bash
-# Internal distribution path (no clone)
-uv tool install "git+ssh://git@github.com/UXARRAY/uxarray-mcp-server.git"
+# User install (no clone)
+uv tool install "git+https://github.com/UXARRAY/uxarray-mcp-server.git"
 uxarray-mcp setup
 uxarray-mcp endpoints add improv <your-endpoint-uuid>
 uxarray-mcp install-claude --print-only   # prints the Claude Desktop block

@@ -13,10 +13,13 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: Apache Software License",
 ]
 authors = [
-    { name = "Dayan Abdulla", email = "dayanabdulla000@gmail.com" }
+    { name = "Rajeev Jain", email = "rajeeja@gmail.com" },
+    { name = "Dayan Abdulla", email = "dayanabdulla000@gmail.com" },
 ]
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.14.4",
