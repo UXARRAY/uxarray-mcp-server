@@ -70,6 +70,46 @@ hpc:
   timeout_seconds: 300
 ```
 
+For deployments that need more than one facility, define named endpoint
+profiles instead of a single `globus_compute.endpoint_id`. Tools should pass
+`endpoint="ucar"` explicitly, or use `default_endpoint`. File paths are
+validated separately and are not used to choose the execution endpoint.
+
+```yaml
+hpc:
+  default_endpoint: "ucar"
+  endpoints:
+    ucar:
+      endpoint_id: "your-ucar-endpoint-uuid"
+    improv:
+      endpoint_id: "your-improv-endpoint-uuid"
+  execution_mode: "auto"
+  timeout_seconds: 300
+```
+
+Examples:
+
+```python
+inspect_mesh_hpc(
+    "/glade/u/home/rajeevj/uxarray/test/meshfiles/mpas/QU/mesh.QU.1920km.151026.nc",
+    use_remote=True,
+    endpoint="ucar",
+)
+```
+
+```python
+inspect_mesh_hpc(
+    "/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc",
+    use_remote=True,
+    endpoint="improv",
+)
+```
+
+When `endpoint` is omitted, `default_endpoint` is used first, then the legacy
+single endpoint. Unknown endpoint names fail before any Globus Compute submission
+so a typo like `endpoint="ucra"` is not treated as a facility name. Raw Globus
+Compute UUIDs can still be passed explicitly for one-off diagnostics.
+
 Authenticate the local client once:
 
 ```bash

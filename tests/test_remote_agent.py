@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from uxarray_mcp.remote.agent import UXarrayComputeAgent
-from uxarray_mcp.remote.config import HPCConfig, load_config
+from uxarray_mcp.remote.config import EndpointProfile, HPCConfig, load_config
 
 try:
     import academy  # noqa: F401
@@ -57,6 +57,78 @@ class TestHPCConfig:
         assert config.endpoint_id is None
         assert config.execution_mode == "local"
         assert config.timeout_seconds == 300
+
+    def test_config_load_named_endpoints(self, tmp_path):
+        """Named endpoint profiles are loaded and selected explicitly."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            """
+hpc:
+  default_endpoint: ucar
+  endpoints:
+    ucar:
+      endpoint_id: ucar-uuid
+    improv:
+      endpoint_id: improv-uuid
+  execution_mode: auto
+  timeout_seconds: 300
+""",
+            encoding="utf-8",
+        )
+
+        config = load_config(config_file)
+
+        assert config.endpoint_id == "ucar-uuid"
+        assert config.endpoint_name == "ucar"
+        assert config.endpoint_names == ["improv", "ucar"]
+        assert (
+            config.resolve_endpoint(path="/some/other/facility/test.nc").name == "ucar"
+        )
+        assert config.for_endpoint(endpoint="improv").endpoint_id == "improv-uuid"
+
+    def test_config_unknown_endpoint_raises(self):
+        """Unknown endpoint names fail before submitting to the wrong facility."""
+        config = HPCConfig(
+            endpoints={"ucar": EndpointProfile(name="ucar", endpoint_id="ucar-uuid")}
+        )
+
+        with pytest.raises(ValueError, match="Unknown endpoint"):
+            config.for_endpoint(endpoint="improv")
+
+    def test_raw_uuid_endpoint_is_allowed(self):
+        """Explicit Globus endpoint UUIDs remain supported for one-off diagnostics."""
+        endpoint_id = "11111111-2222-3333-4444-555555555555"
+        config = HPCConfig()
+
+        selected = config.for_endpoint(endpoint=endpoint_id)
+
+        assert selected.endpoint_id == endpoint_id
+        assert selected.endpoint_name == endpoint_id
+
+    def test_named_agent_does_not_replace_default_singleton(self, monkeypatch):
+        """Endpoint-specific agents do not poison the default agent cache."""
+        from uxarray_mcp.remote import agent as agent_module
+
+        config = HPCConfig(
+            endpoint_id="ucar-uuid",
+            execution_mode="hpc",
+            endpoints={
+                "ucar": EndpointProfile(name="ucar", endpoint_id="ucar-uuid"),
+                "improv": EndpointProfile(name="improv", endpoint_id="improv-uuid"),
+            },
+            default_endpoint="ucar",
+            endpoint_name="ucar",
+        )
+        monkeypatch.setattr("uxarray_mcp.remote.config.load_config", lambda: config)
+        monkeypatch.setattr(agent_module, "_agent_instance", None)
+        agent_module._agent_instances.clear()
+
+        named_agent = agent_module.get_agent(endpoint="improv")
+        default_agent = agent_module.get_agent()
+
+        assert named_agent.config.endpoint_id == "improv-uuid"
+        assert default_agent.config.endpoint_id == "ucar-uuid"
+        assert default_agent is not named_agent
 
 
 @skip_no_academy

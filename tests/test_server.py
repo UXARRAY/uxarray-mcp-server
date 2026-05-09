@@ -1,6 +1,7 @@
+import inspect
+
 import pytest
 
-from uxarray_mcp.remote.config import load_config
 from uxarray_mcp.server import mcp
 
 
@@ -55,16 +56,31 @@ async def test_inspect_mesh_tool_registered():
     }
     assert expected_tools.issubset(set(tools.keys()))
 
-    hpc_tools = {
-        "inspect_mesh_hpc",
-        "calculate_area_hpc",
-        "inspect_variable_hpc",
-        "calculate_zonal_mean_hpc",
-        "plot_mesh_hpc",
-        "plot_variable_hpc",
-        "plot_zonal_mean_hpc",
+
+@pytest.mark.asyncio
+async def test_no_hpc_suffixed_tool_names():
+    """The MCP surface should not expose ``*_hpc`` duplicates anymore."""
+    tools = await mcp.get_tools()
+    suffixed = [name for name in tools if name.endswith("_hpc")]
+    assert suffixed == [], f"Unexpected _hpc-suffixed tools: {suffixed}"
+
+
+@pytest.mark.asyncio
+async def test_dispatched_tools_accept_use_remote():
+    """Tools that wrap the dispatcher must expose use_remote/endpoint kwargs."""
+    tools = await mcp.get_tools()
+    dispatched = {
+        "inspect_mesh",
+        "inspect_variable",
+        "calculate_area",
+        "calculate_zonal_mean",
+        "plot_mesh",
+        "plot_variable",
+        "plot_zonal_mean",
     }
-    if load_config().has_endpoint:
-        assert hpc_tools.issubset(set(tools.keys()))
-    else:
-        assert hpc_tools.isdisjoint(set(tools.keys()))
+    for name in dispatched:
+        tool = tools[name]
+        sig = inspect.signature(tool.fn)
+        assert "use_remote" in sig.parameters, name
+        assert "endpoint" in sig.parameters, name
+        assert "session_id" in sig.parameters, name

@@ -38,7 +38,7 @@ docs = [
 ]
 
 [project.scripts]
-uxarray-mcp = "uxarray_mcp.__main__:main"
+uxarray-mcp = "uxarray_mcp.cli:main"
 
 [project.urls]
 Documentation = "https://github.com/UXARRAY/uxarray-mcp-server"

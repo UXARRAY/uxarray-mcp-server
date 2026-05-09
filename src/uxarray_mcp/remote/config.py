@@ -2,13 +2,63 @@
 
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+from uuid import UUID
 
 import yaml
 
+USER_CONFIG_PATH = Path.home() / ".config" / "uxarray-mcp" / "config.yaml"
+
+
+def discover_config_path() -> Path | None:
+    """Return the first existing config file in the discovery order.
+
+    Order:
+      1. ``$UXARRAY_MCP_CONFIG`` (explicit override)
+      2. ``~/.config/uxarray-mcp/config.yaml`` (user install)
+      3. ``./config.yaml`` (repo-root, dev/clone install)
+
+    Returns ``None`` when no config file is found.
+    """
+    env_path = os.environ.get("UXARRAY_MCP_CONFIG")
+    if env_path:
+        candidate = Path(env_path).expanduser()
+        if candidate.exists():
+            return candidate
+
+    if USER_CONFIG_PATH.exists():
+        return USER_CONFIG_PATH
+
+    repo_config = Path(__file__).resolve().parent.parent.parent.parent / "config.yaml"
+    if repo_config.exists():
+        return repo_config
+
+    return None
+
+
 _VALID_EXECUTION_MODES = {"local", "hpc", "auto"}
 _EXECUTION_MODE_ALIASES = {"remote": "hpc"}
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
+@dataclass(frozen=True)
+class EndpointProfile:
+    """Named Globus Compute endpoint profile."""
+
+    name: str
+    endpoint_id: str
+    path_prefixes: tuple[str, ...] = ()
+    timeout_seconds: int | None = None
 
 
 def normalize_execution_mode(execution_mode: str) -> str:
@@ -50,7 +100,13 @@ class HPCConfig:
         endpoint_id: Optional[str] = None,
         execution_mode: str = "local",
         timeout_seconds: int = 300,
+        endpoints: dict[str, EndpointProfile] | None = None,
+        default_endpoint: str | None = None,
+        endpoint_name: str | None = None,
     ):
+        self.endpoints = endpoints or {}
+        self.default_endpoint = default_endpoint
+        self.endpoint_name = endpoint_name
         self.endpoint_id = endpoint_id
         self.execution_mode = normalize_execution_mode(execution_mode)
         self.timeout_seconds = timeout_seconds
@@ -58,7 +114,7 @@ class HPCConfig:
     @property
     def has_endpoint(self) -> bool:
         """Check if Globus Compute endpoint is configured."""
-        return self.endpoint_id is not None
+        return self.endpoint_id is not None or bool(self.endpoints)
 
     @property
     def should_use_remote(self) -> bool:
@@ -71,6 +127,106 @@ class HPCConfig:
             return self.has_endpoint
         else:
             return False
+
+    @property
+    def endpoint_names(self) -> list[str]:
+        """Return configured endpoint profile names."""
+        return sorted(self.endpoints)
+
+    def resolve_endpoint(
+        self, endpoint: str | None = None, path: str | None = None
+    ) -> EndpointProfile | None:
+        """Resolve an explicit endpoint name, default endpoint, or raw UUID."""
+        if endpoint:
+            if endpoint in self.endpoints:
+                return self.endpoints[endpoint]
+            if endpoint == self.endpoint_id:
+                return EndpointProfile(
+                    name=self.endpoint_name or endpoint,
+                    endpoint_id=endpoint,
+                    timeout_seconds=self.timeout_seconds,
+                )
+            if _is_uuid(endpoint):
+                return EndpointProfile(
+                    name=endpoint,
+                    endpoint_id=endpoint,
+                    timeout_seconds=self.timeout_seconds,
+                )
+            configured = ", ".join(self.endpoint_names) or "none"
+            raise ValueError(
+                f"Unknown endpoint {endpoint!r}. "
+                f"Configured endpoint names: {configured}. "
+                "Pass a configured endpoint name or a Globus Compute endpoint UUID."
+            )
+
+        if self.default_endpoint and self.default_endpoint in self.endpoints:
+            return self.endpoints[self.default_endpoint]
+
+        if self.endpoint_id is not None:
+            return EndpointProfile(
+                name=self.endpoint_name or "default",
+                endpoint_id=self.endpoint_id,
+                timeout_seconds=self.timeout_seconds,
+            )
+
+        if len(self.endpoints) == 1:
+            return next(iter(self.endpoints.values()))
+
+        return None
+
+    def for_endpoint(
+        self, endpoint: str | None = None, path: str | None = None
+    ) -> "HPCConfig":
+        """Return a copy configured for the selected endpoint profile."""
+        profile = self.resolve_endpoint(endpoint=endpoint, path=path)
+        if profile is None:
+            return HPCConfig(
+                endpoint_id=None,
+                execution_mode=self.execution_mode,
+                timeout_seconds=self.timeout_seconds,
+                endpoints=self.endpoints,
+                default_endpoint=self.default_endpoint,
+            )
+
+        return HPCConfig(
+            endpoint_id=profile.endpoint_id,
+            execution_mode=self.execution_mode,
+            timeout_seconds=profile.timeout_seconds or self.timeout_seconds,
+            endpoints=self.endpoints,
+            default_endpoint=self.default_endpoint,
+            endpoint_name=profile.name,
+        )
+
+
+def _coerce_prefixes(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, list):
+        return tuple(str(item) for item in value if item)
+    return ()
+
+
+def _parse_endpoint_profiles(raw_endpoints: Any) -> dict[str, EndpointProfile]:
+    if not isinstance(raw_endpoints, dict):
+        return {}
+
+    profiles: dict[str, EndpointProfile] = {}
+    for name, raw_profile in raw_endpoints.items():
+        if not isinstance(raw_profile, dict):
+            continue
+        endpoint_id = raw_profile.get("endpoint_id")
+        if not endpoint_id:
+            continue
+        timeout = raw_profile.get("timeout_seconds")
+        profiles[str(name)] = EndpointProfile(
+            name=str(name),
+            endpoint_id=str(endpoint_id),
+            path_prefixes=_coerce_prefixes(raw_profile.get("path_prefixes")),
+            timeout_seconds=int(timeout) if timeout is not None else None,
+        )
+    return profiles
 
 
 def load_config(config_path: Optional[Path] = None) -> HPCConfig:
@@ -93,9 +249,9 @@ def load_config(config_path: Optional[Path] = None) -> HPCConfig:
     'local'
     """
     if config_path is None:
-        config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
+        config_path = discover_config_path()
 
-    if not config_path.exists():
+    if config_path is None or not config_path.exists():
         return HPCConfig()
 
     with open(config_path, "r", encoding="utf-8") as f:
@@ -112,8 +268,29 @@ def load_config(config_path: Optional[Path] = None) -> HPCConfig:
     if not isinstance(globus_config, dict):
         globus_config = {}
 
+    endpoints = _parse_endpoint_profiles(hpc_config.get("endpoints"))
+    if not endpoints:
+        endpoints = _parse_endpoint_profiles(globus_config.get("endpoints"))
+
+    default_endpoint = hpc_config.get("default_endpoint") or globus_config.get(
+        "default_endpoint"
+    )
+    endpoint_id = globus_config.get("endpoint_id")
+
+    if endpoint_id is None and default_endpoint in endpoints:
+        endpoint_id = endpoints[default_endpoint].endpoint_id
+    endpoint_name = (
+        default_endpoint
+        if default_endpoint in endpoints
+        and endpoint_id == endpoints[default_endpoint].endpoint_id
+        else None
+    )
+
     return HPCConfig(
-        endpoint_id=globus_config.get("endpoint_id"),
+        endpoint_id=endpoint_id,
         execution_mode=hpc_config.get("execution_mode", "local"),
         timeout_seconds=hpc_config.get("timeout_seconds", 300),
+        endpoints=endpoints,
+        default_endpoint=default_endpoint,
+        endpoint_name=endpoint_name,
     )

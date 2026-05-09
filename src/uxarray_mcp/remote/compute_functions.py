@@ -11,25 +11,69 @@ from typing import Any, Dict, Optional
 
 
 def remote_runtime_probe() -> Dict[str, Any]:
-    """Return lightweight runtime diagnostics from the remote worker.
-
-    This intentionally does not touch UXarray or the filesystem. The goal is to
-    prove that a submitted task can reach a real worker and report back enough
-    environment detail to diagnose scheduler/bootstrap issues.
-    """
+    """Return lightweight runtime diagnostics from the remote worker."""
     import getpass
+    import importlib.util
     import os
     import platform
     import shutil
     import socket
+    import sys
+
+    modules: Dict[str, Any] = {}
+    for name in ("uxarray", "xarray", "numpy"):
+        spec = importlib.util.find_spec(name)
+        info: Dict[str, Any] = {"available": spec is not None}
+        if spec is not None:
+            try:
+                module = __import__(name)
+                info["version"] = getattr(module, "__version__", None)
+                info["file"] = getattr(module, "__file__", None)
+            except Exception as exc:
+                info["import_error"] = f"{type(exc).__name__}: {exc}"
+        modules[name] = info
+
+    yac_info: Dict[str, Any] = {}
+    try:
+        yac_spec = importlib.util.find_spec("yac")
+        yac_info["package_available"] = yac_spec is not None
+        if yac_spec is not None:
+            yac_info["package_origin"] = yac_spec.origin
+    except Exception as exc:
+        yac_info["package_available"] = False
+        yac_info["package_error"] = f"{type(exc).__name__}: {exc}"
+
+    try:
+        yac_core = importlib.import_module("yac.core")
+        yac_info["core_importable"] = True
+        yac_info["core_file"] = getattr(yac_core, "__file__", None)
+        yac_info["version"] = getattr(yac_core, "__version__", None)
+    except Exception as exc:
+        yac_info["core_importable"] = False
+        yac_info["core_import_error"] = f"{type(exc).__name__}: {exc}"
+
+    try:
+        from uxarray.remap.yac import _import_yac
+
+        yc = _import_yac()
+        yac_info["uxarray_helper_ok"] = True
+        yac_info["uxarray_helper_module"] = getattr(yc, "__name__", None)
+        yac_info["uxarray_helper_file"] = getattr(yc, "__file__", None)
+        yac_info["has_basicgrid"] = hasattr(yc, "BasicGrid")
+    except Exception as exc:
+        yac_info["uxarray_helper_ok"] = False
+        yac_info["uxarray_helper_error"] = f"{type(exc).__name__}: {exc}"
+    modules["yac"] = yac_info
 
     return {
         "hostname": socket.gethostname(),
         "user": getpass.getuser(),
         "cwd": os.getcwd(),
+        "python_executable": sys.executable,
         "python_version": platform.python_version(),
         "qsub_path": shutil.which("qsub"),
         "path_head": os.environ.get("PATH", "").split(":")[:5],
+        "modules": modules,
     }
 
 
@@ -774,3 +818,143 @@ def remote_subset_bbox_plot(
         "png_b64": base64.b64encode(png_bytes).decode(),
         "image_size_bytes": len(png_bytes),
     }
+
+
+def remote_yac_remap_smoke() -> Dict[str, Any]:
+    """Smoke-test YAC's availability on the remote worker.
+
+    Loads YAC via uxarray's canonical helper (works around the broken upstream
+    ``yac/__init__.py`` that does ``from ._yac import *``), reports the YAC
+    surface, and runs a minimal nearest-neighbour remap from one HEALPix grid
+    to another using uxarray's YAC-backed remap path.  Returns a dict that
+    includes both the static surface check and, if a remap was attempted, its
+    shape and timing.
+
+    The function is self-contained and serialised via AllCodeStrategies so the
+    Python 3.13/3.11 mismatch between local SDK and worker doesn't bite.
+    """
+    import importlib.metadata
+    import time
+    import traceback
+
+    out: Dict[str, Any] = {}
+
+    def _surface(mod):
+        return {
+            name: hasattr(mod, name)
+            for name in (
+                "BasicGrid",
+                "InterpField",
+                "InterpolationStack",
+                "compute_weights",
+                "Reg2dGrid",
+            )
+        }
+
+    yc = None
+    try:
+        from uxarray.remap.yac import _import_yac
+
+        yc = _import_yac()
+        out["yac_helper_ok"] = True
+        out["yac_loader"] = "uxarray.remap.yac._import_yac"
+        out["yac_module"] = getattr(yc, "__name__", None)
+        out["yac_file"] = getattr(yc, "__file__", None)
+        out["surface"] = _surface(yc)
+    except Exception as exc:
+        out["yac_helper_ok"] = False
+        out["yac_helper_error"] = f"{type(exc).__name__}: {exc}"
+
+        # Fallback: load core.so directly via ExtensionFileLoader, bypassing
+        # YAC's broken __init__.py. Lets us report surface even when the
+        # site uxarray is unavailable or itself broken.
+        try:
+            import importlib.machinery as _m
+            import importlib.util as _u
+            import os as _os
+            import sys as _sys
+            import sysconfig as _sc
+            import types as _t
+            from pathlib import Path as _P
+
+            search_roots = [_sc.get_paths()["purelib"]]
+            search_roots.extend(p for p in _sys.path if p)
+            for env_var in ("YAC_PREFIX", "YAC_ROOT"):
+                if _os.environ.get(env_var):
+                    search_roots.append(_os.environ[env_var])
+            home = _os.path.expanduser("~")
+            search_roots.append(_os.path.join(home, "yac"))
+            search_roots.append("/opt/yac")
+
+            so_candidates: list[str] = []
+            for root in search_roots:
+                rp = _P(root)
+                if not rp.exists():
+                    continue
+                so_candidates.extend(str(p) for p in rp.rglob("yac/core.cpython-*.so"))
+            so_candidates = list(dict.fromkeys(so_candidates))  # dedupe
+            if not so_candidates:
+                raise FileNotFoundError(f"No yac/core*.so found in: {search_roots[:6]}")
+            so = so_candidates[0]
+            out["yac_search_hits"] = so_candidates[:5]
+
+            pkg = _t.ModuleType("yacshim")
+            pkg.__path__ = []
+            _sys.modules["yacshim"] = pkg
+            loader = _m.ExtensionFileLoader("yacshim.core", so)
+            spec = _u.spec_from_loader("yacshim.core", loader)
+            assert spec is not None and spec.loader is not None
+            yc = _u.module_from_spec(spec)
+            spec.loader.exec_module(yc)
+            out["yac_loader"] = "direct_so"
+            out["yac_file"] = so
+            out["surface"] = _surface(yc)
+        except Exception as exc2:
+            out["yac_direct_load_ok"] = False
+            out["yac_direct_load_error"] = f"{type(exc2).__name__}: {exc2}"
+            out["yac_direct_load_traceback"] = traceback.format_exc()
+            return out
+
+    try:
+        out["uxarray_version"] = importlib.metadata.version("uxarray")
+    except Exception:
+        out["uxarray_version"] = "unknown"
+
+    try:
+        import numpy as np
+        import uxarray as ux
+        import xarray as xr
+
+        src = ux.Grid.from_healpix(zoom=2)
+        dst = ux.Grid.from_healpix(zoom=3)
+        out["src_n_face"] = int(src.n_face)
+        out["dst_n_face"] = int(dst.n_face)
+
+        rng = np.random.default_rng(0)
+        face_data = rng.standard_normal(int(src.n_face))
+        uxda = ux.UxDataArray(
+            xr.DataArray(face_data, dims=("n_face",), name="field"),
+            uxgrid=src,
+        )
+
+        t0 = time.perf_counter()
+        try:
+            remapped = uxda.remap.nearest_neighbor(
+                destination_grid=dst, remap_to="face centers"
+            )
+            out["remap_method"] = "nearest_neighbor"
+            out["remap_ok"] = True
+            out["remap_seconds"] = time.perf_counter() - t0
+            out["remap_dst_shape"] = list(remapped.shape)
+            out["remap_dst_mean"] = float(np.asarray(remapped).mean())
+        except Exception as exc:
+            out["remap_method"] = "nearest_neighbor"
+            out["remap_ok"] = False
+            out["remap_error"] = f"{type(exc).__name__}: {exc}"
+            out["remap_traceback"] = traceback.format_exc()
+    except Exception as exc:
+        out["remap_setup_ok"] = False
+        out["remap_setup_error"] = f"{type(exc).__name__}: {exc}"
+        out["remap_setup_traceback"] = traceback.format_exc()
+
+    return out
