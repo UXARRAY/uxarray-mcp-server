@@ -44,6 +44,12 @@ under their entry.
 - HPC plotting discovery and fast-fail behavior (PR #36 follow-up).
 - Session-aware plotting for handle-based dataset references.
 - Remote catalog scanning surfaces accurate path metadata.
+- `_run_with_optional_hpc` no longer falls back to a local file read when
+  `use_remote=True` is requested for a path that does not exist on the
+  client. The dispatcher now raises a clear `RuntimeError` naming the
+  endpoint state (no endpoint configured, or endpoint not ready) instead
+  of surfacing a misleading `FileNotFoundError` from the local fallback.
+  Local paths and HEALPix specs still fall back silently. (#27)
 
 ## 0.1.0 — initial scaffold
 

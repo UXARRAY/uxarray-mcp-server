@@ -240,6 +240,69 @@ class TestHpcFallbackProvenance:
 
 
 # -----------------------------------------------------------------------------
+# Unit Tests (Mocked) — Issue #27: clear error for HPC-only paths
+# -----------------------------------------------------------------------------
+
+
+class TestRemoteOnlyPathRaisesClearError:
+    """When use_remote=True and the path is not reachable locally, the
+    dispatcher must raise a clear endpoint-state error instead of falling
+    through to a local read that raises a misleading FileNotFoundError.
+    """
+
+    REMOTE_ONLY_PATH = "/lus/grand/projects/does-not-exist-locally/grid.nc"
+
+    def test_no_endpoint_remote_only_path_raises(self):
+        """No endpoint + remote-only path → RuntimeError, not FileNotFoundError."""
+        with patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent:
+            mock_agent = MagicMock()
+            mock_agent.config.endpoint_id = None
+            mock_get_agent.return_value = mock_agent
+
+            with pytest.raises(RuntimeError, match="no HPC endpoint is configured"):
+                inspect_mesh_hpc(self.REMOTE_ONLY_PATH, use_remote=True)
+
+    def test_endpoint_not_ready_remote_only_path_raises(self):
+        """Endpoint unhealthy + remote-only path → RuntimeError naming the reason."""
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent,
+            patch(
+                "uxarray_mcp.tools.remote_tools._endpoint_is_ready",
+                return_value=(False, "endpoint status='stopped': "),
+            ),
+        ):
+            mock_agent = MagicMock()
+            mock_agent.config.endpoint_id = "fake-uuid"
+            mock_get_agent.return_value = mock_agent
+
+            with pytest.raises(RuntimeError, match="HPC endpoint not ready"):
+                inspect_mesh_hpc(self.REMOTE_ONLY_PATH, use_remote=True)
+
+    def test_no_endpoint_local_path_still_falls_back(self, synthetic_mesh_file):
+        """Existing convenience: a path that exists locally still falls back."""
+        with patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent:
+            mock_agent = MagicMock()
+            mock_agent.config.endpoint_id = None
+            mock_get_agent.return_value = mock_agent
+
+            result = inspect_mesh_hpc(synthetic_mesh_file, use_remote=True)
+
+        assert "n_face" in result
+        assert result["_provenance"]["execution_venue"] == "local"
+
+    def test_no_endpoint_healpix_spec_still_falls_back(self):
+        """HEALPix pseudo-paths must keep working when no endpoint is configured."""
+        with patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent:
+            mock_agent = MagicMock()
+            mock_agent.config.endpoint_id = None
+            mock_get_agent.return_value = mock_agent
+
+            result = inspect_mesh_hpc("healpix:2", use_remote=True)
+
+        assert result["n_face"] == 192
+
+
+# -----------------------------------------------------------------------------
 # Integration Tests (Real Data)
 # -----------------------------------------------------------------------------
 
