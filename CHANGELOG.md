@@ -52,6 +52,11 @@ under their entry.
   diagrams (local stdio vs HPC dispatch).
 
 ### Fixed
+- End-to-end validation of `run_scientific_agent` and `analyze_dataset`
+  on local + Improv + UCAR endpoints. New harness
+  (`scripts/validate_orchestrators.py`) covers six scenarios; both
+  orchestrators complete all stages cleanly and round-trip on both
+  remote endpoints. (#28)
 - HPC plotting discovery and fast-fail behavior (PR #36 follow-up).
 - Session-aware plotting for handle-based dataset references.
 - Remote catalog scanning surfaces accurate path metadata.
