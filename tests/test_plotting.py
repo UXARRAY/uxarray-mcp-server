@@ -9,12 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from uxarray_mcp.domain.plotting import render_zonal_mean
-from uxarray_mcp.tools.plotting import plot_mesh, plot_variable, plot_zonal_mean
-from uxarray_mcp.tools.remote_tools import (
-    plot_mesh_hpc,
-    plot_variable_hpc,
-    plot_zonal_mean_hpc,
-)
+from uxarray_mcp.tools import plot_mesh, plot_variable, plot_zonal_mean
 
 # -----------------------------------------------------------------------------
 # Domain Layer Tests (render functions)
@@ -374,7 +369,7 @@ class TestHpcPlotWrappers:
     """HPC plot wrappers should preserve the inline plot UX."""
 
     @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
-    def test_plot_mesh_hpc_returns_image_content(self, mock_run):
+    def test_plot_mesh_returns_image_content(self, mock_run):
         mock_run.return_value = {
             "png_b64": base64.b64encode(b"\x89PNG_fake").decode("utf-8"),
             "image_size_bytes": 9,
@@ -382,7 +377,7 @@ class TestHpcPlotWrappers:
             "_provenance": {"execution_venue": "local", "warnings": []},
         }
 
-        result = plot_mesh_hpc("healpix:2")
+        result = plot_mesh("healpix:2")
 
         assert len(result) == 2
         assert result[0].type == "image"
@@ -391,7 +386,7 @@ class TestHpcPlotWrappers:
         assert "png_b64" not in metadata
 
     @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
-    def test_plot_variable_hpc_returns_image_content(self, mock_run):
+    def test_plot_variable_returns_image_content(self, mock_run):
         mock_run.return_value = {
             "png_b64": base64.b64encode(b"\x89PNG_fake").decode("utf-8"),
             "image_size_bytes": 9,
@@ -400,7 +395,7 @@ class TestHpcPlotWrappers:
             "_provenance": {"execution_venue": "local", "warnings": []},
         }
 
-        result = plot_variable_hpc("grid.nc", "data.nc", "temperature")
+        result = plot_variable("grid.nc", "data.nc", "temperature")
 
         assert len(result) == 2
         assert result[0].type == "image"
@@ -409,7 +404,7 @@ class TestHpcPlotWrappers:
         assert "png_b64" not in metadata
 
     @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
-    def test_plot_zonal_mean_hpc_returns_image_content(self, mock_run):
+    def test_plot_zonal_mean_returns_image_content(self, mock_run):
         mock_run.return_value = {
             "png_b64": base64.b64encode(b"\x89PNG_fake").decode("utf-8"),
             "image_size_bytes": 9,
@@ -419,7 +414,7 @@ class TestHpcPlotWrappers:
             "_provenance": {"execution_venue": "local", "warnings": []},
         }
 
-        result = plot_zonal_mean_hpc("grid.nc", "data.nc", "temperature")
+        result = plot_zonal_mean("grid.nc", "data.nc", "temperature")
 
         assert len(result) == 2
         assert result[0].type == "image"
@@ -443,7 +438,7 @@ class TestHpcPlotWrappersDatasetHandle:
         }
 
     @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
-    def test_plot_mesh_hpc_resolves_dataset_handle(
+    def test_plot_mesh_resolves_dataset_handle(
         self, mock_run, synthetic_mesh_with_data
     ):
         from uxarray_mcp.tools import create_session, register_dataset
@@ -458,7 +453,7 @@ class TestHpcPlotWrappersDatasetHandle:
 
         mock_run.return_value = self._stub_run_result()
 
-        plot_mesh_hpc(
+        plot_mesh(
             session_id=session["session_id"],
             dataset_handle=registered["dataset_handle"],
         )
@@ -467,7 +462,7 @@ class TestHpcPlotWrappersDatasetHandle:
         assert kwargs["path_hint"] == grid_file
 
     @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
-    def test_plot_variable_hpc_resolves_dataset_handle(
+    def test_plot_variable_resolves_dataset_handle(
         self, mock_run, synthetic_mesh_with_data
     ):
         from uxarray_mcp.tools import create_session, register_dataset
@@ -483,7 +478,7 @@ class TestHpcPlotWrappersDatasetHandle:
 
         mock_run.return_value = self._stub_run_result({"variable_name": "temperature"})
 
-        plot_variable_hpc(
+        plot_variable(
             variable_name="temperature",
             session_id=session["session_id"],
             dataset_handle=registered["dataset_handle"],
@@ -493,7 +488,7 @@ class TestHpcPlotWrappersDatasetHandle:
         assert kwargs["path_hint"] == grid_file
 
     @patch("uxarray_mcp.tools.remote_tools._run_with_optional_hpc")
-    def test_plot_zonal_mean_hpc_resolves_dataset_handle(
+    def test_plot_zonal_mean_resolves_dataset_handle(
         self, mock_run, synthetic_mesh_with_data
     ):
         from uxarray_mcp.tools import create_session, register_dataset
@@ -515,7 +510,7 @@ class TestHpcPlotWrappersDatasetHandle:
             }
         )
 
-        plot_zonal_mean_hpc(
+        plot_zonal_mean(
             variable_name="temperature",
             session_id=session["session_id"],
             dataset_handle=registered["dataset_handle"],
@@ -524,12 +519,12 @@ class TestHpcPlotWrappersDatasetHandle:
         kwargs = mock_run.call_args.kwargs
         assert kwargs["path_hint"] == grid_file
 
-    def test_plot_mesh_hpc_handle_without_session_raises(self):
+    def test_plot_mesh_handle_without_session_raises(self):
         """dataset_handle without session_id is a clear ValueError."""
         with pytest.raises(ValueError, match="session_id is required"):
-            plot_mesh_hpc(dataset_handle="some-handle")
+            plot_mesh(dataset_handle="some-handle")
 
-    def test_plot_mesh_hpc_no_path_no_handle_raises(self):
+    def test_plot_mesh_no_path_no_handle_raises(self):
         """At least one of grid_path or dataset_handle must be provided."""
         with pytest.raises(ValueError, match="grid_path is required"):
-            plot_mesh_hpc()
+            plot_mesh()

@@ -38,7 +38,7 @@ def _resolve_plot_paths(
     return grid_path, data_path
 
 
-def plot_mesh(
+def _plot_mesh_local(
     grid_path: Optional[str] = None,
     width: int = 800,
     height: int = 400,
@@ -119,7 +119,7 @@ def plot_mesh(
     ]
 
 
-def plot_variable(
+def _plot_variable_local(
     grid_path: Optional[str] = None,
     data_path: Optional[str] = None,
     variable_name: Optional[str] = None,
@@ -278,7 +278,7 @@ def plot_variable(
     ]
 
 
-def plot_zonal_mean(
+def _plot_zonal_mean_local(
     grid_path: Optional[str] = None,
     data_path: Optional[str] = None,
     variable_name: Optional[str] = None,

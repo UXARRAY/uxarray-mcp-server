@@ -91,9 +91,9 @@ def analyze_dataset(
         When both are provided, the grid/data paths are resolved from the
         registered session dataset.
     use_remote : bool
-        Forwarded to each underlying ``*_hpc`` dispatcher.
+        Forwarded to each underlying tool dispatcher.
     endpoint : str | None
-        Forwarded to each underlying ``*_hpc`` dispatcher.
+        Forwarded to each underlying tool dispatcher.
     include_plots : bool
         When False, the two plot stages are skipped (useful for headless
         callers that just want statistics).
@@ -118,15 +118,14 @@ def analyze_dataset(
           agent to act on after seeing this result
         - ``_provenance``: standard provenance block
     """
-    from .inspection import inspect_mesh
     from .plotting import _resolve_plot_paths
     from .remote_tools import (
-        calculate_area_hpc,
-        calculate_zonal_mean_hpc,
-        inspect_mesh_hpc,
-        inspect_variable_hpc,
-        plot_mesh_hpc,
-        plot_variable_hpc,
+        calculate_area,
+        calculate_zonal_mean,
+        inspect_mesh,
+        inspect_variable,
+        plot_mesh,
+        plot_variable,
     )
 
     resolved_grid, resolved_data = _resolve_plot_paths(
@@ -139,7 +138,7 @@ def analyze_dataset(
     # ── Stage 1: inspect mesh ────────────────────────────────────────────────
     mesh = _safe_call(
         "inspect_mesh",
-        lambda: inspect_mesh_hpc(
+        lambda: inspect_mesh(
             resolved_grid,
             use_remote=use_remote,
             endpoint=endpoint,
@@ -171,7 +170,7 @@ def analyze_dataset(
 
         variables = _safe_call(
             "inspect_variable",
-            lambda: inspect_variable_hpc(
+            lambda: inspect_variable(
                 resolved_grid,
                 resolved_data,
                 variable_name,
@@ -192,7 +191,7 @@ def analyze_dataset(
     # ── Stage 4: face areas ──────────────────────────────────────────────────
     area = _safe_call(
         "calculate_area",
-        lambda: calculate_area_hpc(
+        lambda: calculate_area(
             resolved_grid,
             use_remote=use_remote,
             endpoint=endpoint,
@@ -208,7 +207,7 @@ def analyze_dataset(
     if resolved_data is not None and selected_variable is not None:
         zonal_mean = _safe_call(
             "calculate_zonal_mean",
-            lambda: calculate_zonal_mean_hpc(
+            lambda: calculate_zonal_mean(
                 resolved_grid,
                 resolved_data,
                 selected_variable,
@@ -228,7 +227,7 @@ def analyze_dataset(
     if include_plots:
         plot_items = _safe_call(
             "plot_mesh",
-            lambda: plot_mesh_hpc(
+            lambda: plot_mesh(
                 grid_path=resolved_grid,
                 use_remote=use_remote,
                 endpoint=endpoint,
@@ -243,7 +242,7 @@ def analyze_dataset(
         if resolved_data is not None and selected_variable is not None:
             var_plot_items = _safe_call(
                 "plot_variable",
-                lambda: plot_variable_hpc(
+                lambda: plot_variable(
                     grid_path=resolved_grid,
                     data_path=resolved_data,
                     variable_name=selected_variable,

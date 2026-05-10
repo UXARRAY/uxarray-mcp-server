@@ -2,8 +2,9 @@
 
 The MCP-registered tool names are kept short and stable. Tools that can run
 on either the local machine or a configured Globus Compute endpoint expose a
-``use_remote`` flag — there is no separate ``*_hpc`` variant. The dispatcher
-falls back to local execution automatically when no endpoint is configured.
+``use_remote`` flag — there is a single canonical name per tool (no
+``*_hpc`` suffix). The dispatcher falls back to local execution
+automatically when no endpoint is configured.
 """
 
 from fastmcp import FastMCP
@@ -11,14 +12,14 @@ from fastmcp import FastMCP
 from uxarray_mcp.tools import (
     analyze_dataset,
     calculate_anomaly,
-    calculate_area_hpc,
+    calculate_area,
     calculate_bias,
     calculate_ensemble_mean,
     calculate_ensemble_spread,
     calculate_pattern_correlation,
     calculate_rmse,
     calculate_temporal_mean,
-    calculate_zonal_mean_hpc,
+    calculate_zonal_mean,
     compare_fields,
     create_session,
     export_to_csv,
@@ -30,13 +31,13 @@ from uxarray_mcp.tools import (
     get_result_handle,
     get_session_state,
     get_workflow_status,
-    inspect_mesh_hpc,
-    inspect_variable_hpc,
+    inspect_mesh,
+    inspect_variable,
     list_datasets,
     list_operations,
-    plot_mesh_hpc,
-    plot_variable_hpc,
-    plot_zonal_mean_hpc,
+    plot_mesh,
+    plot_variable,
+    plot_zonal_mean,
     probe_path_access,
     register_dataset,
     regrid_dataset,
@@ -75,20 +76,19 @@ mcp.tool()(get_result_handle)
 mcp.tool()(get_operation_status)
 mcp.tool()(list_operations)
 
-# Core inspection + computation tools — single registration with use_remote flag.
-# The dispatcher in remote_tools.py handles local vs HPC execution and falls
-# back to local automatically when no endpoint is configured.
-mcp.tool(name="inspect_mesh")(inspect_mesh_hpc)
-mcp.tool(name="inspect_variable")(inspect_variable_hpc)
-mcp.tool(name="calculate_area")(calculate_area_hpc)
-mcp.tool(name="calculate_zonal_mean")(calculate_zonal_mean_hpc)
+# Core inspection + computation tools. Each accepts ``use_remote`` /
+# ``endpoint`` and falls back to local execution when no endpoint is configured.
+mcp.tool()(inspect_mesh)
+mcp.tool()(inspect_variable)
+mcp.tool()(calculate_area)
+mcp.tool()(calculate_zonal_mean)
 mcp.tool()(validate_dataset)
 mcp.tool()(list_datasets)
 
 # Visualization tools — same dispatcher pattern.
-mcp.tool(name="plot_mesh")(plot_mesh_hpc)
-mcp.tool(name="plot_variable")(plot_variable_hpc)
-mcp.tool(name="plot_zonal_mean")(plot_zonal_mean_hpc)
+mcp.tool()(plot_mesh)
+mcp.tool()(plot_variable)
+mcp.tool()(plot_zonal_mean)
 
 # Analysis extensions
 mcp.tool()(subset_bbox)

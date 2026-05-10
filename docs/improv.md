@@ -151,7 +151,7 @@ The MPAS sample files that worked were:
 Local command:
 
 ```bash
-uv run python -c "from uxarray_mcp.tools.remote_tools import inspect_mesh_hpc, inspect_variable_hpc; import pprint; grid='/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc'; data='/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_data_subset.nc'; print('=== inspect_mesh_hpc ==='); pprint.pp(inspect_mesh_hpc(grid, use_remote=True)); print(); print('=== inspect_variable_hpc ==='); pprint.pp(inspect_variable_hpc(grid, data, use_remote=True))"
+uv run python -c "from uxarray_mcp.tools.remote_tools import inspect_mesh, inspect_variable; import pprint; grid='/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc'; data='/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_data_subset.nc'; print('=== inspect_mesh ==='); pprint.pp(inspect_mesh(grid, use_remote=True)); print(); print('=== inspect_variable ==='); pprint.pp(inspect_variable(grid, data, use_remote=True))"
 ```
 
 Remote UXarray inspection returned:
