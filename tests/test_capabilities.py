@@ -157,35 +157,41 @@ class TestGetCapabilitiesGridOnly:
         assert tools["inspect_mesh"]["applicable"] is True
         assert tools["calculate_area"]["applicable"] is True
 
-    def test_hpc_tools_hidden_without_endpoint(self):
-        """HPC tools are omitted when no endpoint is configured."""
+    def test_remote_hint_omitted_without_endpoint(self):
+        """Remote-execution hint is omitted when no endpoint is configured."""
         with patch("uxarray_mcp.tools.capabilities.load_config") as mock_load_config:
             mock_load_config.return_value.has_endpoint = False
+            mock_load_config.return_value.endpoint_names = []
             result = get_capabilities("healpix:2")
 
-        tool_names = {t["name"] for t in result["mcp_server_tools"]}
-        assert "inspect_mesh_hpc" not in tool_names
-        assert "calculate_area_hpc" not in tool_names
-        assert "inspect_variable_hpc" not in tool_names
-        assert "calculate_zonal_mean_hpc" not in tool_names
-        assert "plot_mesh_hpc" not in tool_names
-        assert "plot_variable_hpc" not in tool_names
-        assert "plot_zonal_mean_hpc" not in tool_names
+        tools = {t["name"]: t for t in result["mcp_server_tools"]}
+        for name in (
+            "inspect_mesh",
+            "calculate_area",
+            "plot_mesh",
+        ):
+            assert name in tools
+            assert "use_remote" not in tools[name]["reason"]
 
-    def test_hpc_tools_shown_with_endpoint(self):
-        """HPC tools are surfaced when an endpoint is configured."""
+    def test_remote_hint_shown_with_endpoint(self):
+        """Remote-execution hint is appended to dispatcher tools when configured."""
         with patch("uxarray_mcp.tools.capabilities.load_config") as mock_load_config:
             mock_load_config.return_value.has_endpoint = True
+            mock_load_config.return_value.endpoint_names = ["improv"]
             result = get_capabilities("healpix:2")
 
-        tool_names = {t["name"] for t in result["mcp_server_tools"]}
-        assert "inspect_mesh_hpc" in tool_names
-        assert "calculate_area_hpc" in tool_names
-        assert "inspect_variable_hpc" in tool_names
-        assert "calculate_zonal_mean_hpc" in tool_names
-        assert "plot_mesh_hpc" in tool_names
-        assert "plot_variable_hpc" in tool_names
-        assert "plot_zonal_mean_hpc" in tool_names
+        tools = {t["name"]: t for t in result["mcp_server_tools"]}
+        for name in (
+            "inspect_mesh",
+            "inspect_variable",
+            "calculate_area",
+            "calculate_zonal_mean",
+            "plot_mesh",
+            "plot_variable",
+            "plot_zonal_mean",
+        ):
+            assert name in tools
+            assert "use_remote=True" in tools[name]["reason"]
 
 
 class TestGetCapabilitiesWithData:

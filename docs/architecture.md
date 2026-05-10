@@ -48,7 +48,7 @@ The UXarray MCP Server is organized into three layers:
 
 ### Remote execution
 
-1. The MCP client calls a tool such as `inspect_mesh_hpc(..., use_remote=True)`.
+1. The MCP client calls a tool such as `inspect_mesh(..., use_remote=True)`.
 2. The HPC wrapper checks endpoint readiness and configuration.
 3. The remote agent submits a self-contained function from `remote/compute_functions.py` through Globus Compute.
 4. The endpoint receives that function and runs it in the remote worker environment.

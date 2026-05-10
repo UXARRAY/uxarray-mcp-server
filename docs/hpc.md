@@ -90,7 +90,7 @@ hpc:
 Examples:
 
 ```python
-inspect_mesh_hpc(
+inspect_mesh(
     "/glade/u/home/rajeevj/uxarray/test/meshfiles/mpas/QU/mesh.QU.1920km.151026.nc",
     use_remote=True,
     endpoint="ucar",
@@ -98,7 +98,7 @@ inspect_mesh_hpc(
 ```
 
 ```python
-inspect_mesh_hpc(
+inspect_mesh(
     "/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc",
     use_remote=True,
     endpoint="improv",
@@ -194,7 +194,7 @@ globus-compute-endpoint start uxarray-endpoint
 
 ## What to Run First
 
-From your local machine, do not start with `inspect_mesh_hpc`.
+From your local machine, do not start with `inspect_mesh`.
 
 Run:
 
@@ -231,8 +231,8 @@ These checks validate, in order:
 Once the remote runtime and file path are proven, then use:
 
 ```text
-Use inspect_mesh_hpc on /path/to/grid.nc with use_remote=True
-Use inspect_variable_hpc on /path/to/grid.nc and /path/to/data.nc with use_remote=True
+Use inspect_mesh on /path/to/grid.nc with use_remote=True
+Use inspect_variable on /path/to/grid.nc and /path/to/data.nc with use_remote=True
 ```
 
 ## Switching Back to PBS or SLURM

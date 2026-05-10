@@ -91,7 +91,7 @@ def test_analyze_dataset_failure_in_one_stage_does_not_abort(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("simulated area failure")
 
-    monkeypatch.setattr(remote_tools, "calculate_area_hpc", boom)
+    monkeypatch.setattr(remote_tools, "calculate_area", boom)
 
     result = analyze_dataset("healpix:2", include_plots=False)
 

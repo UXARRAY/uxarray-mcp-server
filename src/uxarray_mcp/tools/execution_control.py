@@ -144,7 +144,7 @@ def probe_path_access(
 ) -> Dict[str, Any]:
     """Probe whether a path is reachable and readable.
 
-    Use this before `inspect_mesh_hpc` or `inspect_variable_hpc` when bringing up
+    Use this before `inspect_mesh` or `inspect_variable` when bringing up
     a new cluster. It answers the simpler question first: can the endpoint read
     the exact target path at all?
     """

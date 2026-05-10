@@ -372,22 +372,24 @@ Compute and render a zonal-mean profile as latitude versus value.
 
 **JSON metadata returns:** `image_size_bytes`, `variable_name`, `latitudes`, `zonal_mean_values`, `_provenance`
 
-## HPC Tools
+## Remote (HPC) Execution
 
-These tools are only registered when an HPC endpoint is configured. They have the same interface as their core counterparts, plus a `use_remote` flag.
-
-### `inspect_mesh_hpc`
-### `calculate_area_hpc`
-### `inspect_variable_hpc`
-### `calculate_zonal_mean_hpc`
-
-Each accepts the same parameters as the core version, plus:
+The core inspection, computation, and plotting tools accept an optional
+`use_remote` flag — there are no separate `*_hpc` tool names. When `True`,
+the dispatcher offloads the call to a configured Globus Compute endpoint;
+when `False` (the default) or when no endpoint is configured, it runs
+locally.
 
 | Name | Type | Description |
 |------|------|-------------|
-| `use_remote` | `bool` | Set to `True` to execute on HPC via Globus Compute (default: `False`) |
+| `use_remote` | `bool` | Execute on a configured Globus Compute endpoint (default: `False`) |
+| `endpoint` | `str` (optional) | Named endpoint to target when several are configured |
 
-Each HPC call runs a pre-flight health check before submitting to avoid hanging on a down endpoint. Falls back to local execution if the endpoint is unreachable.
+Tools that support `use_remote`: `inspect_mesh`, `inspect_variable`,
+`calculate_area`, `calculate_zonal_mean`, `plot_mesh`, `plot_variable`,
+`plot_zonal_mean`. Each remote call runs a pre-flight health check before
+submitting to avoid hanging on a down endpoint, and falls back to local
+execution if the endpoint is unreachable.
 
 ---
 
