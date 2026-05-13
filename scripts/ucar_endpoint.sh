@@ -1,32 +1,30 @@
 #!/usr/bin/env bash
-# Run on Improv (ANL) to configure or start the Globus Compute endpoint.
+# Run on Casper (NCAR) to configure or start the ucar-uxarray-yac Globus Compute endpoint.
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
 # USER CONFIG — change these to match your account before running
 # ---------------------------------------------------------------------------
-USERNAME="jain"   # your Improv username
+USERNAME="rajeevj"   # your NCAR username
 # ---------------------------------------------------------------------------
 
-ENDPOINT_NAME="${ENDPOINT_NAME:-improv-uxarray}"
-VENV="$HOME/venvs/globus-compute"
-MCP_SERVER_DIR="/home/$USERNAME/uxarray-mcp-server"
+ENDPOINT_NAME="${ENDPOINT_NAME:-ucar-uxarray-yac}"
+CONDA_ENV="/glade/work/$USERNAME/conda-envs/uxarray_dev"
+YAC_ACTIVATE="$HOME/opt/yac-core-v3.14.0_p1/activate-yac.sh"
+MCP_SERVER_DIR="/glade/u/home/$USERNAME/uxarray-mcp-server"
+UXARRAY_DIR="/glade/u/home/$USERNAME/uxarray"
 TMUX_SESSION="uxarray-endpoint"
 
 usage() {
   cat <<'EOF'
-Usage (run on an Improv login node):
-  improv_endpoint.sh configure <mode> [args]   Write endpoint config files
-  improv_endpoint.sh start                     Activate venv + start endpoint in tmux
-  improv_endpoint.sh restart                   Stop running endpoint, then start fresh
-  improv_endpoint.sh status                    Show endpoint list
-
-Configure modes:
-  single-host [endpoint-name]       LocalProvider template (first-pass validation)
-  pbs-debug   <project> [ep-name]   PBSPro debug-queue template
+Usage (run on a Casper login node):
+  ucar_endpoint.sh configure    Write endpoint config files (once per install)
+  ucar_endpoint.sh start        Load env + start endpoint in tmux
+  ucar_endpoint.sh restart      Stop running endpoint, then start fresh
+  ucar_endpoint.sh status       Show endpoint list
 
 Environment overrides:
-  ENDPOINT_NAME   Globus Compute endpoint profile name (default: improv-uxarray)
+  ENDPOINT_NAME   Globus Compute endpoint profile name (default: ucar-uxarray-yac)
 EOF
 }
 
@@ -34,17 +32,33 @@ EOF
 # Helpers
 # ---------------------------------------------------------------------------
 
-_activate_env() {
-  source "$VENV/bin/activate"
+_load_modules() {
+  if ! command -v module &>/dev/null 2>&1; then
+    for _init in \
+      /usr/share/lmod/lmod/init/bash \
+      /etc/profile.d/lmod.sh \
+      /glade/u/apps/opt/lmod/init/bash; do
+      [[ -f "$_init" ]] && source "$_init" && break
+    done
+  fi
+
+  module purge
+  module load ncarenv/24.12
+  module load gcc/12.4.0
+  module load openmpi/5.0.6
+  module load conda
 }
 
-_check_endpoint_dir() {
-  local ep_dir="$HOME/.globus_compute/$ENDPOINT_NAME"
-  if [[ ! -d "$ep_dir" ]]; then
-    echo "Endpoint profile not found: $ep_dir"
-    echo "Run: globus-compute-endpoint configure $ENDPOINT_NAME"
-    exit 1
-  fi
+_activate_env() {
+  # shellcheck disable=SC1091
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "$CONDA_ENV"
+  source "$YAC_ACTIVATE"
+}
+
+_check_yac() {
+  python -c 'import yac; import yac.core; print("  YAC OK:", yac.core.__file__)' \
+    || { echo "ERROR: yac.core import failed — check YAC build at $YAC_ACTIVATE"; exit 1; }
 }
 
 # ---------------------------------------------------------------------------
@@ -52,37 +66,14 @@ _check_endpoint_dir() {
 # ---------------------------------------------------------------------------
 
 _configure() {
-  local mode="${1:-}"
-  local project="${2:-}"
-  local ep_name="${2:-$ENDPOINT_NAME}"  # single-host uses arg2 as ep name
-
-  if [[ -z "$mode" ]]; then
-    usage; exit 1
-  fi
-
-  # pbs-debug uses arg2 as project, arg3 as optional ep name
-  if [[ "$mode" == "pbs-debug" ]]; then
-    ep_name="${3:-$ENDPOINT_NAME}"
-  fi
-
-  ENDPOINT_NAME="$ep_name"
   local ep_dir="$HOME/.globus_compute/$ENDPOINT_NAME"
 
   if [[ ! -d "$ep_dir" ]]; then
-    echo "Endpoint profile not found: $ep_dir"
-    echo "Run: globus-compute-endpoint configure $ENDPOINT_NAME"
-    exit 1
+    echo "Creating endpoint profile: $ENDPOINT_NAME"
+    globus-compute-endpoint configure "$ENDPOINT_NAME"
   fi
 
-  mkdir -p "$VENV/bin"
-
-  cat > "$ep_dir/user_environment.yaml" <<EOF
-PATH: "/opt/pbs/bin:$VENV/bin:/usr/bin:/bin"
-EOF
-
-  case "$mode" in
-    single-host)
-      cat > "$ep_dir/user_config_template.yaml.j2" <<'EOF'
+  cat > "$ep_dir/user_config_template.yaml.j2" <<EOF
 endpoint_setup: ""
 
 engine:
@@ -94,62 +85,25 @@ engine:
     max_blocks: 1
     init_blocks: 1
     worker_init: |
-      source ~/venvs/globus-compute/bin/activate
+      source "\$(conda info --base)/etc/profile.d/conda.sh"
+      conda activate $CONDA_ENV
+      source $YAC_ACTIVATE
+      export PYTHONPATH="$MCP_SERVER_DIR/src:$UXARRAY_DIR:\${PYTHONPATH:-}"
+      cd $MCP_SERVER_DIR
 
 idle_heartbeats_soft: 10
 idle_heartbeats_hard: 5760
 EOF
-      ;;
 
-    pbs-debug)
-      if [[ -z "$project" ]]; then
-        usage; exit 1
-      fi
-      ln -sf /opt/pbs/bin/qsub  "$VENV/bin/qsub"
-      ln -sf /opt/pbs/bin/qstat "$VENV/bin/qstat"
-      ln -sf /opt/pbs/bin/qdel  "$VENV/bin/qdel"
-      cat > "$ep_dir/user_config_template.yaml.j2" <<EOF
-endpoint_setup: |
-  export PATH=/opt/pbs/bin:\$PATH
-
-engine:
-  type: GlobusComputeEngine
-  max_workers_per_node: 1
-
-  address:
-    type: address_by_interface
-    ifname: ib0
-
-  provider:
-    type: PBSProProvider
-    account: $project
-    queue: debug
-    worker_init: |
-      source ~/venvs/globus-compute/bin/activate
-    nodes_per_block: 1
-    init_blocks: 0
-    min_blocks: 0
-    max_blocks: 1
-    walltime: 00:30:00
-
-    launcher:
-      type: MpiExecLauncher
-
-idle_heartbeats_soft: 10
-idle_heartbeats_hard: 5760
+  cat > "$ep_dir/user_environment.yaml" <<EOF
+PATH: "$CONDA_ENV/bin:/usr/bin:/bin"
 EOF
-      ;;
-
-    *)
-      usage; exit 1
-      ;;
-  esac
 
   echo "Wrote:"
-  echo "  $ep_dir/user_environment.yaml"
   echo "  $ep_dir/user_config_template.yaml.j2"
+  echo "  $ep_dir/user_environment.yaml"
   echo
-  echo "Next: improv_endpoint.sh start"
+  echo "Next: ucar_endpoint.sh start"
 }
 
 # ---------------------------------------------------------------------------
@@ -157,9 +111,12 @@ EOF
 # ---------------------------------------------------------------------------
 
 _do_start() {
-  _check_endpoint_dir
-  echo "==> Activating venv: $VENV"
+  echo "==> Loading modules..."
+  _load_modules
+  echo "==> Activating conda env: $CONDA_ENV"
   _activate_env
+  echo "==> Checking YAC..."
+  _check_yac
   echo "==> Starting endpoint: $ENDPOINT_NAME"
   cd "$MCP_SERVER_DIR"
   globus-compute-endpoint start "$ENDPOINT_NAME"
@@ -172,6 +129,7 @@ _do_start() {
 _start() {
   if [[ -z "${TMUX:-}" ]]; then
     echo "Launching tmux session '$TMUX_SESSION'..."
+    # -A: attach if session exists, create otherwise; keep shell alive after endpoint exits
     exec tmux new-session -A -s "$TMUX_SESSION" \
       "bash -l \"$0\" _do_start; exec bash -l"
   else
@@ -184,7 +142,7 @@ _start() {
 # ---------------------------------------------------------------------------
 
 _restart() {
-  _check_endpoint_dir
+  _load_modules
   _activate_env
   echo "==> Stopping endpoint: $ENDPOINT_NAME"
   globus-compute-endpoint stop "$ENDPOINT_NAME" 2>/dev/null || true
@@ -198,6 +156,7 @@ _restart() {
 # ---------------------------------------------------------------------------
 
 _status() {
+  _load_modules
   _activate_env
   globus-compute-endpoint list
 }
@@ -207,7 +166,7 @@ _status() {
 # ---------------------------------------------------------------------------
 
 case "${1:-}" in
-  configure) shift; _configure "$@" ;;
+  configure) _configure ;;
   start)     _start ;;
   _do_start) _do_start ;;  # internal: invoked by tmux
   restart)   _restart ;;
