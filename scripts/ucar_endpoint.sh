@@ -57,8 +57,13 @@ _activate_env() {
 }
 
 _check_yac() {
-  python -c 'import yac; import yac.core; print("  YAC OK:", yac.core.__file__)' \
-    || { echo "ERROR: yac.core import failed — check YAC build at $YAC_ACTIVATE"; exit 1; }
+  if python -c 'import yac; import yac.core; print("  YAC OK:", yac.core.__file__)' 2>/dev/null; then
+    return 0
+  fi
+  echo "WARNING: yac.core not importable — YAC remapping will be unavailable."
+  echo "  Run: find \$HOME/opt/yac-core-v3.14.0_p1 -name '_yac*.so'"
+  echo "  If missing, rebuild YAC with: --enable-python-bindings PYTHON=\$(which python)"
+  echo "  Continuing — all non-YAC tools will work normally."
 }
 
 # ---------------------------------------------------------------------------
