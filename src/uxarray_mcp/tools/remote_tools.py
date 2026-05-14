@@ -466,6 +466,7 @@ def plot_variable(
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     title: Optional[str] = None,
+    time_index: int = 0,
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
@@ -495,6 +496,10 @@ def plot_variable(
         Colormap maximum. Defaults to data maximum.
     title : str | None
         Custom plot title.
+    time_index : int
+        Which time step to plot when the variable has a Time dimension
+        (default 0, i.e. the first step). Size-1 time dimensions are
+        always squeezed automatically regardless of this value.
     use_remote : bool
         If True and HPC is configured, render on the remote endpoint.
     session_id, dataset_handle : str | None
@@ -531,6 +536,7 @@ def plot_variable(
             vmin=vmin,
             vmax=vmax,
             title=title,
+            time_index=time_index,
         )
         img = items[0]
         meta = json.loads(items[1].text)
@@ -563,6 +569,7 @@ def plot_variable(
                 vmin,
                 vmax,
                 title,
+                time_index,
                 use_remote,
             )
         ),
