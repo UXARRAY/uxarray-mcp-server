@@ -129,6 +129,7 @@ def _plot_variable_local(
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     title: Optional[str] = None,
+    time_index: int = 0,
     session_id: Optional[str] = None,
     dataset_handle: Optional[str] = None,
 ) -> list[Any]:
@@ -230,7 +231,14 @@ def _plot_variable_local(
         )
 
     png_bytes = render_variable(
-        uxda, width=width, height=height, cmap=cmap, vmin=vmin, vmax=vmax, title=title
+        uxda,
+        width=width,
+        height=height,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        title=title,
+        time_index=time_index,
     )
     b64 = base64.b64encode(png_bytes).decode("utf-8")
 

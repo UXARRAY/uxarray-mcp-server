@@ -64,6 +64,17 @@ def render_mesh(
     return png_bytes
 
 
+_FACE_DIMS = {"n_face", "nCells"}
+
+
+def _reduce_to_face(uxda: Any, time_index: int = 0) -> Any:
+    """Squeeze or isel any non-face extra dims so uxda is 1-D face-centered."""
+    extra = [d for d in uxda.dims if d not in _FACE_DIMS]
+    if not extra:
+        return uxda
+    return uxda.isel(**{d: 0 if uxda.sizes[d] == 1 else time_index for d in extra})
+
+
 def render_variable(
     uxda: Any,
     width: int = 800,
@@ -72,6 +83,7 @@ def render_variable(
     vmin: float | None = None,
     vmax: float | None = None,
     title: str | None = None,
+    time_index: int = 0,
 ) -> bytes:
     """Render a face-centered variable as a filled polygon plot to PNG bytes.
 
@@ -111,6 +123,7 @@ def render_variable(
     elif vmax is not None:
         kwargs["clim"] = (uxda.values.min(), vmax)
 
+    uxda = _reduce_to_face(uxda, time_index)
     element = uxda.plot.polygons(**kwargs)
 
     renderer = hv.Store.renderers["matplotlib"]
