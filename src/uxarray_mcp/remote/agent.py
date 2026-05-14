@@ -237,6 +237,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         vmin: Optional[float] = None,
         vmax: Optional[float] = None,
         title: Optional[str] = None,
+        time_index: int = 0,
         use_remote: bool = False,
     ) -> Dict[str, Any]:
         """Render face-centered variable PNG on HPC and return base64 bytes."""
@@ -252,6 +253,7 @@ class UXarrayComputeAgent(_AcademyAgent):
                 vmin,
                 vmax,
                 title,
+                time_index,
             )
         else:
             return remote_plot_variable(
@@ -264,6 +266,7 @@ class UXarrayComputeAgent(_AcademyAgent):
                 vmin,
                 vmax,
                 title,
+                time_index,
             )
 
     @action

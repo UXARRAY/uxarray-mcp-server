@@ -377,6 +377,7 @@ def remote_plot_variable(
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     title: Optional[str] = None,
+    time_index: int = 0,
 ) -> Dict[str, Any]:
     """Render a face-centered variable plot on the remote HPC node and return base64 PNG.
 
@@ -440,6 +441,12 @@ def remote_plot_variable(
     uxda = uxds[variable_name]
     if not any(d in face_dims for d in uxda.dims):
         raise ValueError(f"Variable '{variable_name}' is not face-centered.")
+
+    extra_dims = [d for d in uxda.dims if d not in face_dims]
+    if extra_dims:
+        uxda = uxda.isel(
+            **{d: 0 if uxda.sizes[d] == 1 else time_index for d in extra_dims}
+        )
 
     import holoviews as hv
 
