@@ -22,6 +22,7 @@ from uxarray_mcp.tools import (
     calculate_zonal_mean,
     compare_fields,
     create_session,
+    endpoint_status,
     export_to_csv,
     export_to_netcdf,
     extract_cross_section,
@@ -110,6 +111,7 @@ mcp.tool()(write_result)
 
 # Execution mode + diagnostics
 mcp.tool()(get_execution_mode)
+mcp.tool()(endpoint_status)
 mcp.tool()(probe_path_access)
 mcp.tool()(set_execution_mode)
 mcp.tool()(validate_hpc_setup)

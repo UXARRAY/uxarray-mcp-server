@@ -328,7 +328,9 @@ def validate_hpc_setup(
 
     try:
         tracker.stage("auth", "Querying endpoint status through the local SDK.")
-        client = Client()
+        from uxarray_mcp.remote import health as _health
+
+        client = _health._get_client()
         raw_endpoint_status = client.get_endpoint_status(config.endpoint_id)
         endpoint_payload = (
             raw_endpoint_status
@@ -530,6 +532,70 @@ def get_execution_mode() -> Dict[str, Any]:
     )
 
 
+def endpoint_status(
+    endpoint: str | None = None,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Fast, cached status check for one or all configured HPC endpoints.
+
+    Unlike :func:`validate_hpc_setup`, this tool does not submit a remote
+    probe task — it just asks the local Globus Compute SDK whether each
+    endpoint manager is reachable. Results are cached in-process for a few
+    seconds so back-to-back calls (for example, polling on every chat turn)
+    are effectively free.
+
+    Parameters
+    ----------
+    endpoint : str | None
+        If provided, only this configured endpoint is checked. If ``None``,
+        every endpoint in ``config.yaml`` is checked.
+    force : bool, default False
+        Bypass the in-process cache and re-query the SDK for every endpoint.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+        - ``endpoints``: list of per-endpoint status rows
+          (``name``, ``endpoint_id``, ``status``, ``cached``,
+          ``cache_age_seconds``, and ``error`` when applicable)
+        - ``mode``: current execution mode
+        - ``default_endpoint``: name of the default endpoint, if any
+
+    Examples
+    --------
+    >>> endpoint_status()
+    {"endpoints": [{"name": "improv", "status": "offline", ...},
+                   {"name": "ucar", "status": "online", ...}], ...}
+    """
+    from uxarray_mcp.remote.config import load_config
+    from uxarray_mcp.remote.health import (
+        check_all_endpoints_health,
+        check_endpoint_health,
+    )
+
+    base_config = load_config(_CONFIG_PATH)
+
+    if endpoint is not None:
+        scoped = base_config.for_endpoint(endpoint=endpoint)
+        row = check_endpoint_health(scoped, force=force)
+        endpoints_payload = [{"name": scoped.endpoint_name or endpoint, **row}]
+    else:
+        endpoints_payload = check_all_endpoints_health(base_config, force=force)
+
+    result: Dict[str, Any] = {
+        "endpoints": endpoints_payload,
+        "mode": base_config.execution_mode,
+        "default_endpoint": base_config.default_endpoint,
+    }
+
+    return attach_provenance(
+        result,
+        tool="endpoint_status",
+        inputs={"endpoint": endpoint, "force": force},
+    )
+
+
 def set_execution_mode(mode: str) -> Dict[str, Any]:
     """Switch execution mode at runtime and persist it to config.yaml.
 
@@ -592,6 +658,11 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
     # Reset singleton agent so next call picks up the new config
     _agent_module._agent_instance = None
     _agent_module._agent_instances.clear()
+
+    # Drop cached endpoint health so the next status check re-queries the SDK
+    from uxarray_mcp.remote.health import invalidate_cache as _invalidate_health
+
+    _invalidate_health()
 
     result: Dict[str, Any] = {
         "mode": normalized_mode,
