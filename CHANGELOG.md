@@ -5,7 +5,7 @@ project follows [Semantic Versioning](https://semver.org/) once `1.0.0`
 is released; pre-1.0 minor bumps may include breaking changes documented
 under their entry.
 
-## Unreleased
+## 0.1.0 — 2026-05-29
 
 ### Added
 - `analyze_dataset`: deterministic one-shot orchestrator that runs the
@@ -79,9 +79,3 @@ under their entry.
   from a registered session dataset, matching the handle pattern
   already used by `subset_bbox` / `subset_polygon`. Direct paths still
   work unchanged. (#25)
-
-## 0.1.0 — initial scaffold
-
-Initial repository skeleton with core inspection and area tools.
-Predates the multi-endpoint, CLI, and unified-tool work and was never
-tagged or released; superseded by the unreleased entries above.

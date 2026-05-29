@@ -1,13 +1,26 @@
 """Tests for execution mode naming and persistence."""
 
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 import yaml
 
+from uxarray_mcp.remote import health
 from uxarray_mcp.remote.config import HPCConfig, load_config
 from uxarray_mcp.tools import execution_control
+
+
+@pytest.fixture(autouse=True)
+def _reset_health_cache():
+    """Drop the process-wide health cache + cached Client between tests."""
+    health.invalidate_cache()
+    health._CLIENT = None
+    yield
+    health.invalidate_cache()
+    health._CLIENT = None
 
 
 def test_hpc_mode_is_persisted(monkeypatch):
@@ -104,6 +117,7 @@ def test_validate_hpc_setup_surfaces_remote_probe_failure(monkeypatch, tmp_path)
 
     mock_client = MagicMock()
     mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
     mock_future = MagicMock()
     mock_future.result.side_effect = RuntimeError("/bin/sh: qsub: command not found")
     mock_executor = MagicMock()
@@ -137,6 +151,7 @@ def test_validate_hpc_setup_surfaces_systemexit_guidance(monkeypatch, tmp_path):
 
     mock_client = MagicMock()
     mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
     mock_future = MagicMock()
     mock_future.result.side_effect = RuntimeError(
         "Failed to start worker: (SystemExit) 73"
@@ -168,6 +183,7 @@ def test_validate_hpc_setup_can_probe_sample_path(monkeypatch, tmp_path):
 
     mock_client = MagicMock()
     mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
 
     mock_runtime_future = MagicMock()
     mock_runtime_future.result.return_value = {
@@ -224,6 +240,7 @@ hpc:
 
     mock_client = MagicMock()
     mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
     mock_client_cls = MagicMock(return_value=mock_client)
 
     with patch.object(
@@ -262,6 +279,7 @@ hpc:
 
     mock_client = MagicMock()
     mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
     mock_client_cls = MagicMock(return_value=mock_client)
 
     with patch.object(
@@ -292,3 +310,183 @@ def test_probe_path_access_local(tmp_path):
     assert result["exists"] is True
     assert result["readable"] is True
     assert result["_provenance"]["execution_venue"] == "local"
+
+
+def _stub_config(endpoint_id="endpoint-uuid", endpoint_name="default"):
+    cfg = MagicMock()
+    cfg.endpoint_id = endpoint_id
+    cfg.endpoint_name = endpoint_name
+    return cfg
+
+
+def test_health_check_caches_status_within_ttl():
+    """Back-to-back health checks reuse the cached payload."""
+    mock_client = MagicMock()
+    mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
+    cfg = _stub_config("ep-1", "ucar")
+
+    first = health.check_endpoint_health(cfg)
+    second = health.check_endpoint_health(cfg)
+
+    assert first["status"] == "online"
+    assert first["cached"] is False
+    assert second["cached"] is True
+    assert "cache_age_seconds" in second
+    mock_client.get_endpoint_status.assert_called_once_with("ep-1")
+
+
+def test_health_check_force_bypasses_cache():
+    """force=True re-queries the SDK even with a valid cached entry."""
+    mock_client = MagicMock()
+    mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
+    cfg = _stub_config("ep-2")
+
+    health.check_endpoint_health(cfg)
+    health.check_endpoint_health(cfg, force=True)
+
+    assert mock_client.get_endpoint_status.call_count == 2
+
+
+def test_unhealthy_status_uses_shorter_ttl():
+    """A failing endpoint is re-checked sooner than a healthy one."""
+    mock_client = MagicMock()
+    mock_client.get_endpoint_status.side_effect = RuntimeError("boom")
+    health._CLIENT = mock_client
+    cfg = _stub_config("ep-3")
+
+    first = health.check_endpoint_health(cfg)
+    assert first["status"] == "unreachable"
+    assert first["cached"] is False
+
+    # Pretend the cache entry is older than the unhealthy TTL.
+    ts, payload = health._HEALTH_CACHE["ep-3"]
+    health._HEALTH_CACHE["ep-3"] = (
+        ts - (health.HEALTH_TTL_UNHEALTHY_SECONDS + 0.5),
+        payload,
+    )
+
+    second = health.check_endpoint_health(cfg)
+    assert second["cached"] is False
+    assert mock_client.get_endpoint_status.call_count == 2
+
+
+def test_invalidate_cache_drops_entry():
+    """invalidate_cache forces the next check to query the SDK again."""
+    mock_client = MagicMock()
+    mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
+    cfg = _stub_config("ep-4")
+
+    health.check_endpoint_health(cfg)
+    health.invalidate_cache("ep-4")
+    health.check_endpoint_health(cfg)
+
+    assert mock_client.get_endpoint_status.call_count == 2
+
+
+def test_check_all_endpoints_health_iterates_named_endpoints(monkeypatch, tmp_path):
+    """check_all_endpoints_health returns one row per configured endpoint."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+hpc:
+  default_endpoint: ucar
+  endpoints:
+    ucar:
+      endpoint_id: ucar-uuid
+    improv:
+      endpoint_id: improv-uuid
+  execution_mode: auto
+""",
+        encoding="utf-8",
+    )
+    config = load_config(config_path)
+
+    mock_client = MagicMock()
+    mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
+
+    rows = health.check_all_endpoints_health(config)
+    names = {row["name"] for row in rows}
+    assert names == {"ucar", "improv"}
+    assert all(row["status"] == "online" for row in rows)
+
+
+def test_endpoint_status_tool_returns_cached_summary(monkeypatch, tmp_path):
+    """The endpoint_status tool reports every configured endpoint."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+hpc:
+  default_endpoint: ucar
+  endpoints:
+    ucar:
+      endpoint_id: ucar-uuid
+    improv:
+      endpoint_id: improv-uuid
+  execution_mode: auto
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(execution_control, "_CONFIG_PATH", config_path)
+
+    mock_client = MagicMock()
+    mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
+
+    result = execution_control.endpoint_status()
+    names = {row["name"] for row in result["endpoints"]}
+
+    assert names == {"ucar", "improv"}
+    assert result["default_endpoint"] == "ucar"
+    assert result["mode"] == "auto"
+    assert "_provenance" in result
+
+
+def test_endpoint_status_named_endpoint_only(monkeypatch, tmp_path):
+    """Passing endpoint='name' scopes the check to that endpoint."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+hpc:
+  default_endpoint: ucar
+  endpoints:
+    ucar:
+      endpoint_id: ucar-uuid
+    improv:
+      endpoint_id: improv-uuid
+  execution_mode: auto
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(execution_control, "_CONFIG_PATH", config_path)
+
+    mock_client = MagicMock()
+    mock_client.get_endpoint_status.return_value = {"status": "online"}
+    health._CLIENT = mock_client
+
+    result = execution_control.endpoint_status(endpoint="improv")
+    assert len(result["endpoints"]) == 1
+    assert result["endpoints"][0]["name"] == "improv"
+    mock_client.get_endpoint_status.assert_called_once_with("improv-uuid")
+
+
+def test_set_execution_mode_invalidates_health_cache(monkeypatch, tmp_path):
+    """Switching modes drops the cached endpoint status."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "hpc:\n  globus_compute:\n    endpoint_id: test-uuid\n  execution_mode: auto\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(execution_control, "_CONFIG_PATH", config_path)
+
+    health._HEALTH_CACHE["test-uuid"] = (
+        time.monotonic(),
+        {"status": "online", "endpoint_id": "test-uuid"},
+    )
+
+    execution_control.set_execution_mode("local")
+
+    assert "test-uuid" not in health._HEALTH_CACHE

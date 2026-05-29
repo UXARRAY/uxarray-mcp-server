@@ -218,3 +218,13 @@ outputs/
 
 # Prototype convergence agent (lives outside the MCP server scope)
 scripts/convergence_agent/
+
+# Claude Code local configuration (IDE settings, permissions — machine-specific)
+.claude/
+
+# macOS metadata
+.DS_Store
+
+# Generated plots / scratch scripts dropped at repo root
+*.png
+save_plots.py
