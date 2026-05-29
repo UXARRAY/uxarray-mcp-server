@@ -55,6 +55,12 @@ from .stateful import (
     resume_workflow,
     run_workflow,
 )
+from .vector_calc import (
+    calculate_azimuthal_mean,
+    calculate_curl,
+    calculate_divergence,
+    calculate_gradient,
+)
 
 __all__ = [
     "get_capabilities",
@@ -95,6 +101,10 @@ __all__ = [
     "export_to_netcdf",
     "export_to_csv",
     "write_result",
+    "calculate_gradient",
+    "calculate_curl",
+    "calculate_divergence",
+    "calculate_azimuthal_mean",
     "endpoint_status",
     "get_execution_mode",
     "probe_path_access",

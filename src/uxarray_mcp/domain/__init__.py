@@ -7,6 +7,12 @@ Functions here contain the pure domain logic used by both local tools
 from .area import compute_area_stats
 from .mesh import load_grid
 from .variable import compute_variable_info
+from .vector_calc import (
+    compute_azimuthal_mean,
+    compute_curl,
+    compute_divergence,
+    compute_gradient,
+)
 from .zonal import compute_zonal_mean_stats
 
 __all__ = [
@@ -14,4 +20,8 @@ __all__ = [
     "compute_area_stats",
     "compute_variable_info",
     "compute_zonal_mean_stats",
+    "compute_gradient",
+    "compute_curl",
+    "compute_divergence",
+    "compute_azimuthal_mean",
 ]
