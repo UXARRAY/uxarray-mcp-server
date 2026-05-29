@@ -27,8 +27,7 @@ def compute_gradient(uxds: Any, variable_name: str) -> dict:
     """
     if variable_name not in uxds.data_vars:
         raise ValueError(
-            f"Variable '{variable_name}' not found. "
-            f"Available: {list(uxds.data_vars)}"
+            f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
         )
     var = uxds[variable_name]
     if "n_face" not in var.dims and "nCells" not in var.dims:
@@ -227,8 +226,7 @@ def compute_azimuthal_mean(
     """
     if variable_name not in uxds.data_vars:
         raise ValueError(
-            f"Variable '{variable_name}' not found. "
-            f"Available: {list(uxds.data_vars)}"
+            f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
         )
     var = uxds[variable_name]
     if "n_face" not in var.dims and "nCells" not in var.dims:

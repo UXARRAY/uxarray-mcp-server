@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -20,7 +20,6 @@ from uxarray_mcp.tools.vector_calc import (
     calculate_divergence,
     calculate_gradient,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared fixture — minimal HEALPix dataset with face-centred u and v fields
@@ -42,9 +41,11 @@ def healpix_wind_dataset():
     )
 
     ds = ux.UxDataset(
-        {"u": ux.UxDataArray(u_data, uxgrid=grid),
-         "v": ux.UxDataArray(v_data, uxgrid=grid),
-         "temperature": ux.UxDataArray(scalar, uxgrid=grid)},
+        {
+            "u": ux.UxDataArray(u_data, uxgrid=grid),
+            "v": ux.UxDataArray(v_data, uxgrid=grid),
+            "temperature": ux.UxDataArray(scalar, uxgrid=grid),
+        },
         uxgrid=grid,
     )
     return ds
@@ -160,9 +161,12 @@ class TestComputeAzimuthalMean:
 
     def test_center_recorded(self, healpix_wind_dataset):
         result = compute_azimuthal_mean(
-            healpix_wind_dataset, "temperature",
-            center_lon=-90.0, center_lat=25.0,
-            outer_radius=10.0, radius_step=2.0,
+            healpix_wind_dataset,
+            "temperature",
+            center_lon=-90.0,
+            center_lat=25.0,
+            outer_radius=10.0,
+            radius_step=2.0,
         )
         assert result["center"]["lon"] == -90.0
         assert result["center"]["lat"] == 25.0
@@ -170,9 +174,12 @@ class TestComputeAzimuthalMean:
     def test_missing_variable_raises(self, healpix_wind_dataset):
         with pytest.raises(ValueError, match="not found"):
             compute_azimuthal_mean(
-                healpix_wind_dataset, "bad_var",
-                center_lon=0.0, center_lat=0.0,
-                outer_radius=10.0, radius_step=2.0,
+                healpix_wind_dataset,
+                "bad_var",
+                center_lon=0.0,
+                center_lat=0.0,
+                outer_radius=10.0,
+                radius_step=2.0,
             )
 
 
@@ -183,8 +190,10 @@ class TestComputeAzimuthalMean:
 
 def _make_mock_uxds(healpix_wind_dataset):
     """Patch ux.open_dataset to return the fixture dataset."""
-    return patch("uxarray_mcp.tools.vector_calc.ux.open_dataset",
-                 return_value=healpix_wind_dataset)
+    return patch(
+        "uxarray_mcp.tools.vector_calc.ux.open_dataset",
+        return_value=healpix_wind_dataset,
+    )
 
 
 class TestCalculateGradientTool:
@@ -226,9 +235,13 @@ class TestCalculateAzimuthalMeanTool:
     def test_provenance_attached(self, healpix_wind_dataset):
         with _make_mock_uxds(healpix_wind_dataset):
             result = calculate_azimuthal_mean(
-                "grid.nc", "data.nc", "temperature",
-                center_lon=0.0, center_lat=0.0,
-                outer_radius=30.0, radius_step=5.0,
+                "grid.nc",
+                "data.nc",
+                "temperature",
+                center_lon=0.0,
+                center_lat=0.0,
+                outer_radius=30.0,
+                radius_step=5.0,
             )
         assert "_provenance" in result
         assert result["_provenance"]["tool"] == "calculate_azimuthal_mean"
@@ -236,9 +249,13 @@ class TestCalculateAzimuthalMeanTool:
     def test_center_in_inputs(self, healpix_wind_dataset):
         with _make_mock_uxds(healpix_wind_dataset):
             result = calculate_azimuthal_mean(
-                "grid.nc", "data.nc", "temperature",
-                center_lon=-45.0, center_lat=15.0,
-                outer_radius=20.0, radius_step=2.0,
+                "grid.nc",
+                "data.nc",
+                "temperature",
+                center_lon=-45.0,
+                center_lat=15.0,
+                outer_radius=20.0,
+                radius_step=2.0,
             )
         assert result["_provenance"]["inputs"]["center_lon"] == -45.0
         assert result["_provenance"]["inputs"]["center_lat"] == 15.0
