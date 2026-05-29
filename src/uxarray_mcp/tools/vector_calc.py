@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import uxarray as ux
 
@@ -214,9 +214,15 @@ def calculate_azimuthal_mean(
 
     Examples
     --------
-    >>> calculate_azimuthal_mean("grid.nc", "data.nc", "pressure",
-    ...     center_lon=-90.0, center_lat=25.0,
-    ...     outer_radius=10.0, radius_step=0.5)
+    >>> calculate_azimuthal_mean(
+    ...     "grid.nc",
+    ...     "data.nc",
+    ...     "pressure",
+    ...     center_lon=-90.0,
+    ...     center_lat=25.0,
+    ...     outer_radius=10.0,
+    ...     radius_step=0.5,
+    ... )
     {"radii_deg": [0.0, 0.5, 1.0, ...], "azimuthal_mean_values": [...], ...}
     """
     uxds = ux.open_dataset(grid_path, data_path)
