@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from uxarray_mcp.remote import health
 from uxarray_mcp.remote.config import HPCConfig
 from uxarray_mcp.remote.health import check_endpoint_health
 from uxarray_mcp.tools.inspection import validate_dataset
@@ -23,6 +24,16 @@ globus_available = importlib.util.find_spec("globus_compute_sdk") is not None
 requires_globus = pytest.mark.skipif(
     not globus_available, reason="globus_compute_sdk not installed (HPC extra required)"
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_health_module_cache():
+    """Reset the cached Globus Compute Client + health cache between tests."""
+    health.invalidate_cache()
+    health._CLIENT = None
+    yield
+    health.invalidate_cache()
+    health._CLIENT = None
 
 
 # -----------------------------------------------------------------------------

@@ -44,7 +44,7 @@ docs = [
 uxarray-mcp = "uxarray_mcp.cli:main"
 
 [project.urls]
-Documentation = "https://github.com/UXARRAY/uxarray-mcp-server"
+Documentation = "https://uxarray-mcp-server.readthedocs.io"
 Source = "https://github.com/UXARRAY/uxarray-mcp-server"
 Tracker = "https://github.com/UXARRAY/uxarray-mcp-server/issues"
 

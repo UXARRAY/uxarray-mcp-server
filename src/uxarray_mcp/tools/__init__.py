@@ -19,6 +19,7 @@ from .advanced import (
 from .capabilities import get_capabilities
 from .catalog import list_datasets
 from .execution_control import (
+    endpoint_status,
     get_execution_mode,
     probe_path_access,
     set_execution_mode,
@@ -94,6 +95,7 @@ __all__ = [
     "export_to_netcdf",
     "export_to_csv",
     "write_result",
+    "endpoint_status",
     "get_execution_mode",
     "probe_path_access",
     "set_execution_mode",
