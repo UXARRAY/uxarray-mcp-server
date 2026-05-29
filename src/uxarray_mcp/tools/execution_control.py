@@ -555,12 +555,11 @@ def endpoint_status(
     Returns
     -------
     dict
-        Dictionary with keys:
-        - ``endpoints``: list of per-endpoint status rows
-          (``name``, ``endpoint_id``, ``status``, ``cached``,
-          ``cache_age_seconds``, and ``error`` when applicable)
-        - ``mode``: current execution mode
-        - ``default_endpoint``: name of the default endpoint, if any
+        Dictionary with keys ``endpoints`` (list of per-endpoint status rows
+        containing ``name``, ``endpoint_id``, ``status``, ``cached``,
+        ``cache_age_seconds``, and ``error`` when applicable), ``mode``
+        (current execution mode), and ``default_endpoint`` (name of the
+        default endpoint, if any).
 
     Examples
     --------
