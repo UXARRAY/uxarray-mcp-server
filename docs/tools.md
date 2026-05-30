@@ -372,6 +372,121 @@ Compute and render a zonal-mean profile as latitude versus value.
 
 **JSON metadata returns:** `image_size_bytes`, `variable_name`, `latitudes`, `zonal_mean_values`, `_provenance`
 
+## Vector Calculus Tools
+
+These tools compute differential operators on face-centered fields using
+UXarray's Green-Gauss finite-volume method. All require face-centered variables
+and return statistics over the unstructured mesh.
+
+---
+
+### `calculate_gradient`
+
+Compute the spatial gradient (∂/∂x, ∂/∂y) of a scalar field.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `grid_path` | `str` | Path to the mesh grid file |
+| `data_path` | `str` | Path to the data file |
+| `variable_name` | `str` | Face-centered scalar variable |
+
+**Returns:** `variable_name`, `components` (list of output variable names), `component_stats` (min/max/mean per component), `n_face`, `interpretation`, `_provenance`
+
+---
+
+### `calculate_curl`
+
+Compute the curl of a 2-D vector field — equivalent to **relative vorticity** for wind:
+
+> ζ = ∂v/∂x − ∂u/∂y
+
+This is the primary diagnostic for identifying cyclones, anticyclones, and jet-stream
+structure on unstructured meshes. Positive vorticity = cyclonic (counterclockwise in
+Northern Hemisphere). Negative = anticyclonic.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `grid_path` | `str` | Path to the mesh grid file |
+| `data_path` | `str` | Path to the data file |
+| `u_variable` | `str` | Zonal (east–west) component, e.g. `"uReconstructZonal"` |
+| `v_variable` | `str` | Meridional (north–south) component, e.g. `"uReconstructMeridional"` |
+
+**Returns:** `u_variable`, `v_variable`, `interpretation`, `n_face`, `stats` (min/max/mean/std), `_provenance`
+
+---
+
+### `calculate_divergence`
+
+Compute the horizontal divergence of a 2-D vector field:
+
+> ∇·V = ∂u/∂x + ∂v/∂y
+
+Negative divergence (convergence) drives rising motion and convection. Positive
+divergence indicates sinking motion. Used together with `calculate_curl` to
+characterise the full kinematic structure of atmospheric flow.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `grid_path` | `str` | Path to the mesh grid file |
+| `data_path` | `str` | Path to the data file |
+| `u_variable` | `str` | Zonal (east–west) component |
+| `v_variable` | `str` | Meridional (north–south) component |
+
+**Returns:** `u_variable`, `v_variable`, `interpretation`, `n_face`, `stats` (min/max/mean/std), `_provenance`
+
+---
+
+### `calculate_azimuthal_mean`
+
+Compute the azimuthal (radial) mean of a variable around a centre point, producing a
+radial profile. Useful for:
+
+- **Tropical cyclone structure** — radial profiles of wind, pressure, SST
+- **Polar vortex analysis** — radial decay from the pole
+- **Storm-centred composites** — any feature with approximate radial symmetry
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `grid_path` | `str` | Path to the mesh grid file |
+| `data_path` | `str` | Path to the data file |
+| `variable_name` | `str` | Face-centered variable to average |
+| `center_lon` | `float` | Longitude of centre point (degrees) |
+| `center_lat` | `float` | Latitude of centre point (degrees) |
+| `outer_radius` | `float` | Maximum radius in great-circle degrees |
+| `radius_step` | `float` | Radial bin width in great-circle degrees |
+
+**Returns:** `variable_name`, `center`, `outer_radius_deg`, `radius_step_deg`, `radii_deg`, `azimuthal_mean_values`, `n_face`, `_provenance`
+
+---
+
+## HPC Diagnostics
+
+### `endpoint_status`
+
+Fast, cached status check for one or all configured HPC endpoints. Does not
+submit a remote probe — just asks the local Globus Compute SDK whether each
+endpoint manager is reachable. Results are cached (10 s healthy / 3 s unhealthy)
+so calling this on every chat turn is cheap.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `endpoint` | `str` (optional) | Named endpoint to check; omit for all configured endpoints |
+| `force` | `bool` | Bypass cache and re-query the SDK (default: `False`) |
+
+**Returns:** `endpoints` (list of rows with `name`, `endpoint_id`, `status`, `cached`, `cache_age_seconds`, `error`), `mode`, `default_endpoint`, `_provenance`
+
+---
+
 ## Remote (HPC) Execution
 
 The core inspection, computation, and plotting tools accept an optional
@@ -410,3 +525,43 @@ Autonomous four-stage pipeline that inspects a mesh, plans operations, executes 
 **Returns:** `file_path`, `execution_venue`, `reasoning_trace`, `mesh_summary`, `area_results`, `variable_results`, `zonal_mean_results`, `validation_summary`, `verification`, `_provenance`
 
 See [Scientific Agent](scientific-agent.md) for details on the four-stage loop and auto-routing logic.
+
+---
+
+## MCP Prompts
+
+Prompts are user-invokable slash commands. In Claude Code or Claude Desktop
+they appear as `/first_look`, `/vorticity_analysis`, and `/hpc_diagnose`. The
+client injects the prompt text into the conversation and the AI calls the
+appropriate tools automatically — no need to know tool names or parameter order.
+
+### `/first_look path`
+
+Runs the full `get_capabilities` → `analyze_dataset` pipeline on a mesh or
+dataset file. Returns topology summary, data quality report, zonal mean
+profile, and mesh + variable plots.
+
+**Argument:** path to a local file or `healpix:<zoom>`.
+
+---
+
+### `/vorticity_analysis grid_path data_path u_var v_var`
+
+Runs `calculate_curl` and `calculate_divergence` on the provided wind
+components and asks the AI to interpret the atmospheric dynamics — where is
+vorticity extreme (cyclones/anticyclones)? Where does convergence signal
+rising motion?
+
+**Arguments:** grid file path, data file path, zonal wind variable name,
+meridional wind variable name.
+
+---
+
+### `/hpc_diagnose [endpoint]`
+
+Runs `endpoint_status` (fast cached check) followed by `validate_hpc_setup`
+(deep SDK + remote probe), then guides the user through fixing any failures —
+re-authentication, restarting the endpoint manager, fixing the worker
+environment.
+
+**Argument:** named endpoint (`improv`, `ucar`), or omit to check all.
