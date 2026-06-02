@@ -89,6 +89,10 @@ async def test_dispatched_tools_accept_use_remote():
         "plot_mesh",
         "plot_variable",
         "plot_zonal_mean",
+        "calculate_gradient",
+        "calculate_curl",
+        "calculate_divergence",
+        "calculate_azimuthal_mean",
     }
     for name in dispatched:
         tool = tools[name]

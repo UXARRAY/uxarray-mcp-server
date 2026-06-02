@@ -189,11 +189,8 @@ class TestComputeAzimuthalMean:
 
 
 def _make_mock_uxds(healpix_wind_dataset):
-    """Patch ux.open_dataset to return the fixture dataset."""
-    return patch(
-        "uxarray_mcp.tools.vector_calc.ux.open_dataset",
-        return_value=healpix_wind_dataset,
-    )
+    """Patch uxarray.open_dataset globally to return the fixture dataset."""
+    return patch("uxarray.open_dataset", return_value=healpix_wind_dataset)
 
 
 class TestCalculateGradientTool:
@@ -203,10 +200,25 @@ class TestCalculateGradientTool:
         assert "_provenance" in result
         assert result["_provenance"]["tool"] == "calculate_gradient"
 
+    def test_use_remote_false_stays_local(self, healpix_wind_dataset):
+        with _make_mock_uxds(healpix_wind_dataset):
+            result = calculate_gradient(
+                "grid.nc", "data.nc", "temperature", use_remote=False
+            )
+        assert result["_provenance"]["execution_venue"] == "local"
+
     def test_missing_variable_propagates(self, healpix_wind_dataset):
         with _make_mock_uxds(healpix_wind_dataset):
             with pytest.raises(ValueError, match="not found"):
                 calculate_gradient("grid.nc", "data.nc", "bad_var")
+
+    def test_accepts_use_remote_endpoint_session_params(self, healpix_wind_dataset):
+        import inspect
+
+        sig = inspect.signature(calculate_gradient)
+        assert "use_remote" in sig.parameters
+        assert "endpoint" in sig.parameters
+        assert "session_id" in sig.parameters
 
 
 class TestCalculateCurlTool:
@@ -222,6 +234,19 @@ class TestCalculateCurlTool:
         assert result["_provenance"]["inputs"]["u_variable"] == "u"
         assert result["_provenance"]["inputs"]["v_variable"] == "v"
 
+    def test_use_remote_false_stays_local(self, healpix_wind_dataset):
+        with _make_mock_uxds(healpix_wind_dataset):
+            result = calculate_curl("grid.nc", "data.nc", "u", "v", use_remote=False)
+        assert result["_provenance"]["execution_venue"] == "local"
+
+    def test_accepts_use_remote_endpoint_session_params(self):
+        import inspect
+
+        sig = inspect.signature(calculate_curl)
+        assert "use_remote" in sig.parameters
+        assert "endpoint" in sig.parameters
+        assert "session_id" in sig.parameters
+
 
 class TestCalculateDivergenceTool:
     def test_provenance_attached(self, healpix_wind_dataset):
@@ -229,6 +254,21 @@ class TestCalculateDivergenceTool:
             result = calculate_divergence("grid.nc", "data.nc", "u", "v")
         assert "_provenance" in result
         assert result["_provenance"]["tool"] == "calculate_divergence"
+
+    def test_use_remote_false_stays_local(self, healpix_wind_dataset):
+        with _make_mock_uxds(healpix_wind_dataset):
+            result = calculate_divergence(
+                "grid.nc", "data.nc", "u", "v", use_remote=False
+            )
+        assert result["_provenance"]["execution_venue"] == "local"
+
+    def test_accepts_use_remote_endpoint_session_params(self):
+        import inspect
+
+        sig = inspect.signature(calculate_divergence)
+        assert "use_remote" in sig.parameters
+        assert "endpoint" in sig.parameters
+        assert "session_id" in sig.parameters
 
 
 class TestCalculateAzimuthalMeanTool:
@@ -259,6 +299,28 @@ class TestCalculateAzimuthalMeanTool:
             )
         assert result["_provenance"]["inputs"]["center_lon"] == -45.0
         assert result["_provenance"]["inputs"]["center_lat"] == 15.0
+
+    def test_use_remote_false_stays_local(self, healpix_wind_dataset):
+        with _make_mock_uxds(healpix_wind_dataset):
+            result = calculate_azimuthal_mean(
+                "grid.nc",
+                "data.nc",
+                "temperature",
+                center_lon=0.0,
+                center_lat=0.0,
+                outer_radius=30.0,
+                radius_step=5.0,
+                use_remote=False,
+            )
+        assert result["_provenance"]["execution_venue"] == "local"
+
+    def test_accepts_use_remote_endpoint_session_params(self):
+        import inspect
+
+        sig = inspect.signature(calculate_azimuthal_mean)
+        assert "use_remote" in sig.parameters
+        assert "endpoint" in sig.parameters
+        assert "session_id" in sig.parameters
 
 
 # ---------------------------------------------------------------------------

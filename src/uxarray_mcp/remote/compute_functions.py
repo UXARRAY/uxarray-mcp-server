@@ -965,3 +965,187 @@ def remote_yac_remap_smoke() -> Dict[str, Any]:
         out["remap_setup_traceback"] = traceback.format_exc()
 
     return out
+
+
+# ---------------------------------------------------------------------------
+# Vector calculus remote functions
+# Each function is fully self-contained — no uxarray_mcp imports.
+# Serialized via AllCodeStrategies so the HPC worker only needs uxarray+numpy.
+# ---------------------------------------------------------------------------
+
+
+def remote_calculate_gradient(
+    grid_path: str, data_path: str, variable_name: str
+) -> Dict[str, Any]:
+    """Compute the spatial gradient of a face-centered scalar field on HPC."""
+    import numpy as np
+    import uxarray as ux
+
+    uxds = ux.open_dataset(grid_path, data_path)
+    if variable_name not in uxds.data_vars:
+        raise ValueError(
+            f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
+        )
+    var = uxds[variable_name]
+    if "n_face" not in var.dims and "nCells" not in var.dims:
+        raise ValueError(
+            f"Variable '{variable_name}' is not face-centered. "
+            "Gradient requires face-centered data."
+        )
+
+    grad = var.gradient()
+    comp_names = list(grad.data_vars)
+
+    def _stats(arr: Any) -> Dict[str, Any]:
+        vals = arr.values
+        finite = vals[np.isfinite(vals)]
+        if finite.size == 0:
+            return {"min": None, "max": None, "mean": None}
+        return {
+            "min": float(finite.min()),
+            "max": float(finite.max()),
+            "mean": float(finite.mean()),
+        }
+
+    return {
+        "variable_name": variable_name,
+        "components": comp_names,
+        "component_stats": {name: _stats(grad[name]) for name in comp_names},
+        "n_face": int(uxds.uxgrid.n_face),
+        "interpretation": "zonal (d/dx) and meridional (d/dy) components of the gradient",
+    }
+
+
+def remote_calculate_curl(
+    grid_path: str, data_path: str, u_variable: str, v_variable: str
+) -> Dict[str, Any]:
+    """Compute relative vorticity (curl) of a 2-D wind field on HPC.
+
+    zeta = dv/dx - du/dy
+    """
+    import numpy as np
+    import uxarray as ux
+
+    uxds = ux.open_dataset(grid_path, data_path)
+    for name in (u_variable, v_variable):
+        if name not in uxds.data_vars:
+            raise ValueError(
+                f"Variable '{name}' not found. Available: {list(uxds.data_vars)}"
+            )
+    u, v = uxds[u_variable], uxds[v_variable]
+    for name, var in ((u_variable, u), (v_variable, v)):
+        if "n_face" not in var.dims and "nCells" not in var.dims:
+            raise ValueError(
+                f"Variable '{name}' is not face-centered. "
+                "Curl requires face-centered vector components."
+            )
+
+    result = u.curl(v)
+    vals = result.values
+    finite = vals[np.isfinite(vals)]
+    stats: Dict[str, Any] = (
+        {
+            "min": float(finite.min()),
+            "max": float(finite.max()),
+            "mean": float(finite.mean()),
+            "std": float(finite.std()),
+        }
+        if finite.size > 0
+        else {"min": None, "max": None, "mean": None, "std": None}
+    )
+    return {
+        "u_variable": u_variable,
+        "v_variable": v_variable,
+        "interpretation": "relative vorticity zeta = dv/dx - du/dy",
+        "n_face": int(uxds.uxgrid.n_face),
+        "stats": stats,
+    }
+
+
+def remote_calculate_divergence(
+    grid_path: str, data_path: str, u_variable: str, v_variable: str
+) -> Dict[str, Any]:
+    """Compute horizontal divergence of a 2-D vector field on HPC.
+
+    divergence = du/dx + dv/dy
+    """
+    import numpy as np
+    import uxarray as ux
+
+    uxds = ux.open_dataset(grid_path, data_path)
+    for name in (u_variable, v_variable):
+        if name not in uxds.data_vars:
+            raise ValueError(
+                f"Variable '{name}' not found. Available: {list(uxds.data_vars)}"
+            )
+    u, v = uxds[u_variable], uxds[v_variable]
+    for name, var in ((u_variable, u), (v_variable, v)):
+        if "n_face" not in var.dims and "nCells" not in var.dims:
+            raise ValueError(
+                f"Variable '{name}' is not face-centered. "
+                "Divergence requires face-centered vector components."
+            )
+
+    result = u.divergence(v)
+    vals = result.values
+    finite = vals[np.isfinite(vals)]
+    stats: Dict[str, Any] = (
+        {
+            "min": float(finite.min()),
+            "max": float(finite.max()),
+            "mean": float(finite.mean()),
+            "std": float(finite.std()),
+        }
+        if finite.size > 0
+        else {"min": None, "max": None, "mean": None, "std": None}
+    )
+    return {
+        "u_variable": u_variable,
+        "v_variable": v_variable,
+        "interpretation": "horizontal divergence du/dx + dv/dy",
+        "n_face": int(uxds.uxgrid.n_face),
+        "stats": stats,
+    }
+
+
+def remote_calculate_azimuthal_mean(
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+    center_lon: float,
+    center_lat: float,
+    outer_radius: float,
+    radius_step: float,
+) -> Dict[str, Any]:
+    """Compute the azimuthal (radial) mean around a centre point on HPC."""
+    import uxarray as ux
+
+    uxds = ux.open_dataset(grid_path, data_path)
+    if variable_name not in uxds.data_vars:
+        raise ValueError(
+            f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
+        )
+    var = uxds[variable_name]
+    if "n_face" not in var.dims and "nCells" not in var.dims:
+        raise ValueError(
+            f"Variable '{variable_name}' is not face-centered. "
+            "Azimuthal mean requires face-centered data."
+        )
+
+    result = var.azimuthal_mean(
+        center_coord=(center_lon, center_lat),
+        outer_radius=outer_radius,
+        radius_step=radius_step,
+    )
+    radii = result.coords[result.dims[0]].values.tolist()
+    values = result.values.tolist()
+
+    return {
+        "variable_name": variable_name,
+        "center": {"lon": center_lon, "lat": center_lat},
+        "outer_radius_deg": outer_radius,
+        "radius_step_deg": radius_step,
+        "radii_deg": radii,
+        "azimuthal_mean_values": values,
+        "n_face": int(uxds.uxgrid.n_face),
+    }
