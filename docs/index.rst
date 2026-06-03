@@ -27,6 +27,7 @@ via Globus Compute.
    Code Reference <api>
    architecture
    provenance
+   release
 
 .. toctree::
    :maxdepth: 1

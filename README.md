@@ -205,15 +205,18 @@ uv run sphinx-build -b html docs docs/_build/html
 
 ## Publishing
 
-Releases are built from version tags such as `v0.1.0`. The GitHub release
-workflow uses PyPI trusted publishing, so the `pypi` environment and PyPI
-project must be configured before pushing the first release tag.
+Releases follow the UXarray pattern: publish a GitHub Release from a version tag
+such as `v0.1.0`; the release workflow builds and publishes to PyPI with trusted
+publishing. Conda packages are handled through a separate conda-forge feedstock;
+`conda/recipe/meta.yaml` is a seed recipe for `uxarray-mcp-feedstock`.
 
 ```bash
 uv build
 uv tool install dist/uxarray_mcp-*.whl --force
 uxarray-mcp --help
 ```
+
+See [docs/release.md](docs/release.md) for the full PyPI and Conda workflow.
 
 ## Documentation Index
 
