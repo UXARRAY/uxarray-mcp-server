@@ -165,49 +165,45 @@ def plot_mesh_geo(
     through.
 
     **Regional zoom** — "zoom to the Gulf of Mexico", "show North America",
-    "plot the European region":
-      Set ``lon_bounds`` and ``lat_bounds``.
-      Examples: Gulf of Mexico → lon_bounds=[-98,-79], lat_bounds=[17,32]
-                North America → lon_bounds=[-140,-50], lat_bounds=[15,75]
-                Europe → lon_bounds=[-15,45], lat_bounds=[35,72]
+    "plot the European region": set ``lon_bounds`` and ``lat_bounds``.
+    Gulf of Mexico → lon_bounds=[-98,-79], lat_bounds=[17,32].
+    North America → lon_bounds=[-140,-50], lat_bounds=[15,75].
+    Europe → lon_bounds=[-15,45], lat_bounds=[35,72].
 
     **Mesh boundary** — "show the mesh boundary", "highlight where the mesh
-    ends", "trace the coastline from the mesh itself":
-      Set ``show_mesh_boundary=True``. Traces actual cell boundary edges in
-      red. Only meaningful for culled/regional meshes (MPAS ocean, regional
-      UGRID). Silently skipped for closed meshes (ICON, HEALPix). Off by
-      default because boundary construction can be slow for large meshes.
+    ends", "trace the coastline from the mesh itself": set
+    ``show_mesh_boundary=True``. Traces actual cell boundary edges in red.
+    Only meaningful for culled/regional meshes (MPAS ocean, regional UGRID).
+    Silently skipped for closed meshes (ICON, HEALPix). Off by default
+    because boundary construction can be slow for large meshes.
 
     **Rivers** — "add rivers", "show major rivers", "include waterways":
-      Set ``rivers=True``.
+    set ``rivers=True``.
 
     **City labels** — "show cities", "label major cities", "add city names",
-    "where is Chicago on this mesh":
-      Set ``cities=True``. Use ``city_scale="50m"`` for major cities only
-      (capitals + large cities, ~500 worldwide). Use ``city_scale="10m"``
-      for dense coverage (~7000 cities). Default is "50m".
-      Do NOT set cities=True unless the user explicitly asks for city labels.
+    "where is Chicago on this mesh": set ``cities=True``. Use
+    ``city_scale="50m"`` for major cities only (~500 worldwide) or
+    ``city_scale="10m"`` for dense coverage (~7000 cities).
+    Do NOT set ``cities=True`` unless the user explicitly asks.
 
     **Terrain basemap** — "with terrain", "satellite background",
-    "topographic background", "show elevation":
-      Set ``basemap=True``. Requires ``pip install contextily`` and internet
-      access. Falls back to a NASA stock image if contextily is not installed.
-      Do NOT set basemap=True by default — it requires an external network call.
+    "topographic background", "show elevation": set ``basemap=True``.
+    Requires ``pip install contextily`` and internet access. Falls back to
+    a NASA stock image if contextily is not installed.
+    Do NOT set ``basemap=True`` by default — it requires a network call.
 
-    **Transparent cells** — "more transparent", "see through the cells",
-    "show the background more":
-      Decrease ``mesh_alpha`` (e.g. 0.15). Range 0–1.
+    **Transparent cells** — "more transparent", "see through the cells":
+    decrease ``mesh_alpha`` (e.g. 0.15). Range 0–1.
 
     **Opaque / wireframe** — "just show the mesh edges", "wireframe only",
-    "no fill":
-      Set ``mesh_alpha=0.0`` or ``mesh_alpha=0.05``, increase ``mesh_linewidth``
-      (e.g. 0.5).
+    "no fill": set ``mesh_alpha=0.0`` or ``mesh_alpha=0.05``, increase
+    ``mesh_linewidth`` (e.g. 0.5).
 
     **No borders** — "no political boundaries", "just coastlines":
-      Set ``borders=False``.
+    set ``borders=False``.
 
     **No geographic features** — "clean mesh", "mesh only":
-      Set ``coastlines=False, borders=False, lakes=False``.
+    set ``coastlines=False, borders=False, lakes=False``.
 
     Parameters
     ----------

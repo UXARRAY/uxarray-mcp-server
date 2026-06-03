@@ -227,11 +227,17 @@ def render_mesh_geo(
                         continue
                     lon0, lat0 = node_lon[n0], node_lat[n0]
                     lon1, lat1 = node_lon[n1], node_lat[n1]
-                    # Skip antimeridian-crossing or grid-seam edges — real
-                    # adjacent boundary edges are always short (<10° span).
-                    # Edges spanning >10° are periodic/seam artefacts.
-                    if abs(lon1 - lon0) > 10.0:
+                    # Skip artefact edges:
+                    # 1. Antimeridian-crossing edges span >10° longitude.
+                    # 2. Grid-seam edges at lon=0 have lon0==lon1==0 (or ±180).
+                    #    They form a vertical line down the prime meridian.
+                    #    Filter: skip if both endpoints share the same rounded
+                    #    longitude to within 0.1° (pure meridional seam).
+                    dlon = abs(lon1 - lon0)
+                    if dlon > 10.0:
                         continue
+                    if dlon < 0.1 and abs(round(lon0) % 180) < 1:
+                        continue  # prime meridian / antimeridian seam
                     lines.append([[lon0, lat0], [lon1, lat1]])
                 if lines:
                     lc = LineCollection(
