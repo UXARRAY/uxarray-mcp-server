@@ -1,6 +1,17 @@
 # Chrysalis Endpoint
 
-Chrysalis is an ANL/LCRC cluster hosting E3SM next-generation ocean meshes.
+**Chrysalis** is a 492-node AMD EPYC cluster at Argonne National Laboratory,
+operated by the Laboratory Computing Resource Center (LCRC). It is an E3SM
+dedicated facility used for model runs and post-processing. Nodes have 128
+cores and 256 GB RAM. Storage is on the LCRC GPFS filesystem (`/lcrc/group/`),
+which hosts the E3SM next-generation mesh library.
+
+- **Location:** Argonne National Laboratory, Lemont, IL
+- **Operator:** LCRC — <https://lcrc.anl.gov>
+- **Access:** ANL/LCRC account — <https://accounts.lcrc.anl.gov>
+- **System page:** <https://lcrc.anl.gov/systems/chrysalis>
+- **Scheduler:** Slurm
+- **Login:** `ssh <username>@chrysalis.lcrc.anl.gov`
 
 ## Key Points
 

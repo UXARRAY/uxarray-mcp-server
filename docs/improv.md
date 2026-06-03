@@ -1,8 +1,16 @@
 # Improv Endpoint
 
-Improv is an ANL/LCRC cluster (RHEL 8, AMD EPYC "Zen 3") with PBS Pro scheduling.
+**Improv** is a 736-node AMD EPYC "Zen 3" cluster at Argonne National Laboratory,
+operated by the Laboratory Computing Resource Center (LCRC). It runs RHEL 8 and
+uses PBS Pro for job scheduling. Nodes have 128 cores and 256 GB RAM. Storage is
+on the LCRC GPFS filesystem (`/gpfs/fs1/`).
 
-Official system information: [Improv system page](https://www.lcrc.anl.gov/systems/improv).
+- **Location:** Argonne National Laboratory, Lemont, IL
+- **Operator:** LCRC — <https://lcrc.anl.gov>
+- **Access:** ANL/LCRC account — <https://accounts.lcrc.anl.gov>
+- **System page:** <https://www.lcrc.anl.gov/systems/improv>
+- **Scheduler:** PBS Pro
+- **Login:** `ssh <username>@improv.lcrc.anl.gov`
 
 ## Key Points
 

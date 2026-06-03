@@ -1,8 +1,18 @@
 # UCAR/Casper Endpoint
 
-Casper is an NCAR data analysis cluster on the GLADE filesystem.
+**Casper** is an NCAR data analysis and visualization cluster at the National
+Center for Atmospheric Research (NCAR) Mesa Lab, operated by the CISL
+(Computational and Information Systems Laboratory). It provides access to the
+GLADE parallel filesystem and is the primary NCAR resource for post-processing
+and interactive analysis of climate model output.
 
-Official system information: [Casper system page](https://arc.ucar.edu/knowledge_base/70549913).
+- **Location:** NCAR Mesa Lab, Boulder, CO
+- **Operator:** CISL/NCAR — <https://arc.ucar.edu>
+- **Access:** NCAR allocation required — <https://arc.ucar.edu/knowledge_base/74317833>
+- **System page:** <https://arc.ucar.edu/knowledge_base/70549913>
+- **Scheduler:** PBS Pro (via Slurm frontend on some partitions)
+- **Login:** `ssh <username>@casper.ucar.edu`
+- **Storage:** GLADE — `/glade/work/`, `/glade/scratch/`, `/glade/u/`
 
 ## Key Points
 
