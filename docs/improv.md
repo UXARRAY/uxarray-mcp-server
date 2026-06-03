@@ -1,203 +1,120 @@
-# Improv Playbook
+# Improv Endpoint
 
-This page captures the exact failure modes we hit while bringing up Argonne
-Improv, plus the reusable fixes that now exist in the repository.
+**Improv** is a 736-node AMD EPYC "Zen 3" cluster at Argonne National Laboratory,
+operated by the Laboratory Computing Resource Center (LCRC). It runs RHEL 8 and
+uses PBS Pro for job scheduling. Nodes have 128 cores and 256 GB RAM. Storage is
+on the LCRC GPFS filesystem (`/gpfs/fs1/`).
 
-Official system information for Improv is available from LCRC:
-[Improv system page](https://www.lcrc.anl.gov/systems/improv).
+- **Location:** Argonne National Laboratory, Lemont, IL
+- **Operator:** LCRC — <https://lcrc.anl.gov>
+- **Access:** ANL/LCRC account — <https://accounts.lcrc.anl.gov>
+- **System page:** <https://www.lcrc.anl.gov/systems/improv>
+- **Scheduler:** PBS Pro
+- **Login:** `ssh <username>@improv.lcrc.anl.gov`
 
-If you are new to Globus Compute, read [Globus Compute Primer](globus-compute.md)
-first. This page assumes you already understand the difference between:
+## Key Points
 
-- the local machine
-- the endpoint manager
-- the child endpoint
-- the remote worker environment
+- The **MCP server does not need to be cloned on Improv** — remote functions are
+  sent as source code via `AllCodeStrategies`.
+- The venv Python version should match the local SDK as closely as possible.
+  Improv has Python 3.12 at `/usr/bin/python3.12` — use it to avoid Dill
+  serialisation warnings from the 3.11 venv.
+- Use canonical `/gpfs/fs1/home/<user>/...` paths, not `/home/<user>/...` aliases,
+  when probing remote files.
 
-## Python Version
+## Worker Environment
 
-The current Improv venv uses **Python 3.11.6**. The local SDK runs on 3.13,
-which produces a Dill mismatch warning and can cause `WorkerLost` crashes when
-sending raw closures via `Executor.submit`. All server tools use
-`AllCodeStrategies` to work around this, but the warning is noisy and the
-mismatch can still bite in edge cases.
+| Item | Value |
+|---|---|
+| Venv | `~/venvs/globus-compute` |
+| Python | 3.11 (existing) or 3.12 (`upgrade-venv` subcommand) |
+| Scheduler | PBS Pro |
+| Endpoint name | `improv-uxarray` |
 
-**Python 3.12 is available system-wide on Improv** at `/usr/bin/python3.12`.
-To rebuild the venv and eliminate the mismatch:
-
-```bash
-# On an Improv login node
-bash scripts/improv_endpoint.sh upgrade-venv
-bash scripts/improv_endpoint.sh restart
-```
-
-This creates a new `~/venvs/globus-compute` with Python 3.12 and backs up the
-3.11 venv to `~/venvs/globus-compute-3.11-backup`.
-
-## What Finally Worked
-
-1. Start with a single-host endpoint on one login node only.
-2. Authenticate the local Globus client from an interactive terminal.
-3. Validate the runtime with `validate_hpc_setup(..., sample_path=...)`.
-4. Probe the exact remote path with `probe_path_access(..., use_remote=True)`.
-5. Only after those pass, switch to the PBS-backed template.
-
-The repository now includes a helper script for this:
+## First-Time Setup
 
 ```bash
-scripts/improv_endpoint.sh single-host improv-uxarray
-scripts/improv_endpoint.sh pbs-debug <allocation> improv-uxarray
-```
+# 1. Authenticate Globus locally (one-time)
+globus-compute-endpoint login
 
-## Improv-Specific Misses We Hit
-
-### 1. `/home/...` was not the right path for the worker
-
-The worker resolved files from the canonical GPFS filesystem, not the login
-alias. A path that looked fine interactively:
-
-```text
-/home/<username>/...
-```
-
-needed to be rewritten to:
-
-```text
-/gpfs/fs1/home/<username>/...
-```
-
-Use canonical absolute paths for remote probes and real jobs.
-
-### 2. Endpoint manager `online` was not enough
-
-The manager was healthy while the child endpoint still failed. That is why the
-repository now has:
-
-- `validate_hpc_setup()`
-- `probe_path_access()`
-
-These are the first commands to run on a new cluster.
-
-### 3. `qsub` was missing from the child endpoint environment
-
-The child endpoint could not find PBS commands until `/opt/pbs/bin` was added
-to the environment. The `pbs-debug` mode in `scripts/improv_endpoint.sh` now
-does this for you and also creates `qsub`, `qstat`, and `qdel` symlinks inside
-the endpoint venv.
-
-### 4. `uxarray` was missing on the remote worker
-
-Remote task execution worked before UXarray-specific tools worked. The worker
-needed:
-
-```bash
-python -m pip install uxarray xarray netCDF4 h5netcdf
-```
-
-Install these in the endpoint venv used by the worker.
-
-### 5. Stale PID files and multiple login nodes caused false starts
-
-We hit:
-
-- stale `daemon.pid`
-- "another instance is running"
-- child endpoint startup conflicts across multiple login nodes
-
-Run the endpoint from one login node only, ideally inside `tmux`.
-
-## Recommended Improv Sequence
-
-On Improv:
-
-```bash
-python3 -m venv ~/venvs/globus-compute
+# 2. Create the endpoint profile
 source ~/venvs/globus-compute/bin/activate
-python -m pip install -U pip
-python -m pip install globus-compute-endpoint globus-compute-sdk
-python -m pip install uxarray xarray netCDF4 h5netcdf
 globus-compute-endpoint configure improv-uxarray
-scripts/improv_endpoint.sh single-host improv-uxarray
-globus-compute-endpoint start improv-uxarray
+
+# 3. Write a single-host config (for initial validation)
+scripts/improv_endpoint.sh configure single-host improv-uxarray
+
+# 4. Start
+scripts/improv_endpoint.sh start
 ```
 
-On your laptop:
+## Upgrading to Python 3.12 (recommended)
+
+Eliminates the Dill version mismatch warning between the local 3.13 SDK and the
+3.11 worker:
+
+```bash
+# On an Improv login node:
+scripts/improv_endpoint.sh upgrade-venv
+scripts/improv_endpoint.sh restart
+```
+
+## PBS-Backed Config (for real compute jobs)
+
+```bash
+scripts/improv_endpoint.sh configure pbs-debug <your-allocation> improv-uxarray
+scripts/improv_endpoint.sh restart
+```
+
+## Starting the Endpoint
+
+```bash
+# In a tmux session on a login node:
+scripts/improv_endpoint.sh start
+```
+
+To restart: `scripts/improv_endpoint.sh restart`
+To check: `scripts/improv_endpoint.sh status`
+
+Add the UUID to your local config:
+
+```bash
+uxarray-mcp endpoints add improv <uuid>
+```
+
+## Validation
+
+```bash
+uv run python scripts/hpc_doctor.py --endpoint improv --timeout-seconds 180
+```
+
+Or with a real mesh file:
 
 ```bash
 uv run python scripts/hpc_doctor.py \
-  --timeout-seconds 180 \
-  --sample-path /gpfs/fs1/home/<username>/path/to/file.nc
+    --endpoint improv \
+    --sample-path /gpfs/fs1/home/<user>/uxarray/test/meshfiles/mpas/QU/480/grid.nc
 ```
 
-When that succeeds, switch to PBS mode:
+## Reference Mesh Files on Improv
 
-```bash
-source ~/venvs/globus-compute/bin/activate
-scripts/improv_endpoint.sh pbs-debug <allocation> improv-uxarray
-globus-compute-endpoint start improv-uxarray
 ```
-
-At that point, rerun `validate_hpc_setup` before trying a real UXarray job.
-
-## Worked Example From `jain`
-
-These are real paths and checks that succeeded during the Improv bring-up.
-
-### 1. Prove the remote worker can see one exact file
-
-The first successful remote path probe used the canonical GPFS path:
-
-```bash
-uv run python scripts/hpc_doctor.py \
-  --timeout-seconds 180 \
-  --sample-path /gpfs/fs1/home/jain/WPSV39/20170316_2days/met_em.d01.2017-03-16_00:00:00.nc
-```
-
-That confirmed:
-
-- the remote worker could execute code
-- the remote worker was running on `ilogin3.lcrc.anl.gov`
-- `/gpfs/fs1/home/jain/...` worked where `/home/jain/...` had not
-
-### 2. Run a real UXarray remote inspection
-
-The MPAS sample files that worked were:
-
-```text
+/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc
+/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/QU/480/data.nc
 /gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc
 /gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_data_subset.nc
 ```
 
-Local command:
+Use canonical `/gpfs/fs1/home/...` paths — the `/home/...` alias resolves
+differently on worker nodes.
 
-```bash
-uv run python -c "from uxarray_mcp.tools.remote_tools import inspect_mesh, inspect_variable; import pprint; grid='/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc'; data='/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_data_subset.nc'; print('=== inspect_mesh ==='); pprint.pp(inspect_mesh(grid, use_remote=True)); print(); print('=== inspect_variable ==='); pprint.pp(inspect_variable(grid, data, use_remote=True))"
-```
+## Troubleshooting
 
-Remote UXarray inspection returned:
+**`WorkerLost`** — Python version mismatch causing Dill failure. Run `upgrade-venv`
+to rebuild with Python 3.12.
 
-- `n_face = 195`
-- `n_node = 442`
-- `n_edge = 636`
-- variables:
-  - `face_lat`
-  - `face_lon`
-  - `gaussian`
-  - `inverse_gaussian`
+**`qsub: command not found`** — scheduler binaries missing from worker PATH. The
+PBS-backed config template links them via `ln -sf /opt/pbs/bin/qsub ~/venvs/...`.
 
-### 3. What this example demonstrates
-
-This sequence proved the full path in the right order:
-
-1. local Globus client auth worked
-2. endpoint manager was healthy
-3. remote worker execution worked
-4. canonical GPFS file paths worked
-5. UXarray imports were available remotely
-6. remote mesh and variable inspection worked
-
-## Known Non-Blockers
-
-The local SDK may warn about Python version mismatch, for example local Python
-3.13 vs remote Python 3.11. That warning did not block successful remote
-inspection in our tests.
+**`validate_hpc_setup` passes but real jobs fail** — worker environment lacks
+`uxarray` or its dependencies. Check `pip list` in the venv.

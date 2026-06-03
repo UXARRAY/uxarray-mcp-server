@@ -15,6 +15,7 @@ via Globus Compute.
    tools
    hpc
    improv
+   ucar
    chrysalis
    workflows
    scientific-agent

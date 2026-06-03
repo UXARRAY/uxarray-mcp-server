@@ -15,8 +15,10 @@ ENDPOINT_NAME="${ENDPOINT_NAME:-improv-uxarray}"
 # AllCodeStrategies but will show a mismatch warning.
 PYTHON="${PYTHON:-/usr/bin/python3.12}"
 VENV="$HOME/venvs/globus-compute"
-MCP_SERVER_DIR="/home/$USERNAME/uxarray-mcp-server"
 TMUX_SESSION="uxarray-endpoint"
+# NOTE: the MCP server repo does NOT need to be cloned on Improv. Remote
+# functions are serialised via AllCodeStrategies and only require uxarray
+# + numpy in the worker venv. Never add uxarray_mcp to PYTHONPATH.
 
 usage() {
   cat <<'EOF'
@@ -168,7 +170,6 @@ _do_start() {
   echo "==> Activating venv: $VENV"
   _activate_env
   echo "==> Starting endpoint: $ENDPOINT_NAME"
-  cd "$MCP_SERVER_DIR"
   globus-compute-endpoint start "$ENDPOINT_NAME"
 }
 
