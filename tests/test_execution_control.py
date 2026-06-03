@@ -329,7 +329,7 @@ def test_health_check_caches_status_within_ttl():
     first = health.check_endpoint_health(cfg)
     second = health.check_endpoint_health(cfg)
 
-    assert first["status"] == "online"
+    assert first["status"] == "registered"
     assert first["cached"] is False
     assert second["cached"] is True
     assert "cache_age_seconds" in second
@@ -361,9 +361,9 @@ def test_unhealthy_status_uses_shorter_ttl():
     assert first["cached"] is False
 
     # Pretend the cache entry is older than the unhealthy TTL.
-    ts, payload = health._HEALTH_CACHE["ep-3"]
-    health._HEALTH_CACHE["ep-3"] = (
-        ts - (health.HEALTH_TTL_UNHEALTHY_SECONDS + 0.5),
+    ts, payload = health._STATUS_CACHE["ep-3"]
+    health._STATUS_CACHE["ep-3"] = (
+        ts - (health._TTL_OTHER_SECONDS + 0.5),
         payload,
     )
 
@@ -411,7 +411,7 @@ hpc:
     rows = health.check_all_endpoints_health(config)
     names = {row["name"] for row in rows}
     assert names == {"ucar", "improv"}
-    assert all(row["status"] == "online" for row in rows)
+    assert all(row["status"] == "registered" for row in rows)
 
 
 def test_endpoint_status_tool_returns_cached_summary(monkeypatch, tmp_path):
@@ -482,11 +482,11 @@ def test_set_execution_mode_invalidates_health_cache(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(execution_control, "_CONFIG_PATH", config_path)
 
-    health._HEALTH_CACHE["test-uuid"] = (
+    health._STATUS_CACHE["test-uuid"] = (
         time.monotonic(),
         {"status": "online", "endpoint_id": "test-uuid"},
     )
 
     execution_control.set_execution_mode("local")
 
-    assert "test-uuid" not in health._HEALTH_CACHE
+    assert "test-uuid" not in health._STATUS_CACHE

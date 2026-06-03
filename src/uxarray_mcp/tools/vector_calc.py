@@ -6,7 +6,11 @@ from typing import Any, Dict, Optional
 
 from uxarray_mcp.state import OperationTracker
 
-from .remote_tools import _endpoint_is_ready, _path_is_locally_reachable, _run_sync
+from .remote_tools import (
+    _endpoint_manager_is_up,
+    _path_is_locally_reachable,
+    _run_sync,
+)
 
 
 def _run_vector_calc(
@@ -51,7 +55,7 @@ def _run_vector_calc(
         tracker.succeed(f"{tool_name} completed locally (no endpoint).")
         return result
 
-    ready, reason = _endpoint_is_ready(agent)
+    ready, reason = _endpoint_manager_is_up(agent)
     if not ready:
         if not _path_is_locally_reachable(grid_path):
             msg = (
