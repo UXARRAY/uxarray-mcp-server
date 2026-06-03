@@ -265,7 +265,7 @@ def plot_mesh_geo(
 
     grid = load_grid(grid_path)
 
-    png_bytes = render_mesh_geo(
+    png_bytes, render_info = render_mesh_geo(
         grid,
         width=width,
         height=height,
@@ -294,6 +294,12 @@ def plot_mesh_geo(
         )
 
     b64 = base64.b64encode(png_bytes).decode("utf-8")
+
+    # ── Build human-readable plot note ───────────────────────────────────────
+    note = _build_plot_note(
+        render_info, grid, cities, city_scale, lon_bounds, lat_bounds
+    )
+
     result = {
         "image_size_bytes": len(png_bytes),
         "grid_info": {
@@ -301,15 +307,8 @@ def plot_mesh_geo(
             "n_node": int(grid.n_node),
             "n_edge": int(grid.n_edge),
         },
-        "parameters": {
-            "coastlines": coastlines,
-            "borders": borders,
-            "rivers": rivers,
-            "lakes": lakes,
-            "show_mesh_boundary": show_mesh_boundary,
-            "basemap": basemap,
-            "cities": cities,
-        },
+        "render_info": render_info,
+        "plot_note": note,
     }
     provenance = attach_provenance(
         result,
@@ -333,8 +332,113 @@ def plot_mesh_geo(
     )
     return [
         ImageContent(type="image", data=b64, mimeType="image/png"),
-        TextContent(type="text", text=json.dumps(provenance, indent=2)),
+        TextContent(type="text", text=note + "\n\n" + json.dumps(provenance, indent=2)),
     ]
+
+
+def _build_plot_note(
+    render_info: dict,
+    grid: Any,
+    cities: bool,
+    city_scale: str,
+    lon_bounds: Optional[list],
+    lat_bounds: Optional[list],
+) -> str:
+    """Build a concise, human-readable note describing what was plotted
+    and what the user can ask to change next.
+
+    This note is appended to every plot_mesh_geo response so the user
+    always knows what parameters are active and what they can ask for next,
+    without having to read raw JSON.
+    """
+    lines = []
+
+    # ── What was rendered ────────────────────────────────────────────────────
+    n = render_info["n_faces_rendered"]
+    total = render_info["n_faces_total"]
+    region = render_info["region"]
+    if region == "regional" and lon_bounds and lat_bounds:
+        region_desc = (
+            f"regional subset (lon {lon_bounds[0]}°–{lon_bounds[1]}°, "
+            f"lat {lat_bounds[0]}°–{lat_bounds[1]}°)"
+        )
+    else:
+        region_desc = "global"
+
+    lines.append(
+        f"**Plot note:** {n:,} of {total:,} mesh faces rendered ({region_desc})."
+    )
+
+    # ── Boundary status ───────────────────────────────────────────────────────
+    status = render_info["boundary_status"]
+    if status == "drawn":
+        lines.append(
+            f"Mesh boundary shown in red — {render_info['n_boundary_edges']:,} "
+            f"cell-edge segments tracing the actual mesh cutout boundary."
+        )
+    elif status == "closed_mesh":
+        lines.append(
+            "Mesh boundary not shown — this is a closed spherical mesh "
+            "(ICON, HEALPix) with no geographic cutout; Natural Earth "
+            "coastlines used as reference instead."
+        )
+    elif status == "all_filtered":
+        lines.append(
+            "Mesh boundary not shown — all detected boundary edges were "
+            "grid-seam artefacts (e.g. SCRIP prime-meridian seam). "
+            "This mesh has no real geographic cutout boundary."
+        )
+    elif status == "disabled":
+        lines.append(
+            "Mesh boundary not shown (off by default). "
+            'Ask "show the mesh boundary" to enable it.'
+        )
+
+    # ── Seam faces note ───────────────────────────────────────────────────────
+    skipped = render_info["seam_faces_skipped"]
+    if skipped > 0:
+        lines.append(
+            f"{skipped:,} antimeridian-crossing face(s) omitted "
+            "(UXarray PR #1519 will render these correctly when merged)."
+        )
+
+    # ── Active geographic features ────────────────────────────────────────────
+    feats = render_info["features_drawn"]
+    if feats:
+        lines.append(f"Geographic reference: {', '.join(feats)} (Natural Earth 50m).")
+
+    if cities:
+        scale_desc = (
+            "major cities (~500)" if city_scale == "50m" else "all cities (~7000)"
+        )
+        lines.append(f"City labels: {scale_desc}.")
+
+    basemap = render_info["basemap_used"]
+    if basemap == "contextily":
+        lines.append("Terrain basemap: OpenTopoMap (contextily).")
+    elif basemap == "stock_img":
+        lines.append("Terrain basemap: NASA stock image (contextily not installed).")
+
+    # ── What the user can ask for next ────────────────────────────────────────
+    suggestions = []
+    if lon_bounds is None:
+        suggestions.append('zoom to a region (e.g. "show North America")')
+    if "rivers" not in feats:
+        suggestions.append("add rivers")
+    if not cities:
+        suggestions.append("add city labels")
+    if basemap == "none":
+        suggestions.append("add terrain background")
+    if status == "disabled":
+        suggestions.append("show the mesh boundary in red")
+    if "borders" in feats:
+        suggestions.append("remove borders")
+    suggestions.append("make cells more transparent")
+    suggestions.append("show mesh-only without geographic features")
+
+    lines.append("You can ask to: " + "; ".join(suggestions[:5]) + ".")
+
+    return "\n".join(lines)
 
 
 def _add_city_labels(
