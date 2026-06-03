@@ -5,7 +5,25 @@ This is the short entry-point guide for repository users.
 If you want the full docs version, use
 [docs/getting-started.md](docs/getting-started.md).
 
-## Local Setup
+## User Install
+
+After the package is published:
+
+```bash
+uv tool install uxarray-mcp
+uxarray-mcp setup
+uxarray-mcp install-claude --print-only
+```
+
+For HPC support:
+
+```bash
+uv tool install "uxarray-mcp[hpc]"
+uxarray-mcp setup
+uxarray-mcp endpoints add <name> <endpoint-uuid> --set-default
+```
+
+## Repository Setup
 
 ```bash
 cd /path/to/uxarray-mcp-server

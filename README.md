@@ -40,7 +40,22 @@ but the endpoint is missing or unhealthy.
 ## Install
 
 ```bash
-# Developer / contributor path
+# Stable user path (after the package is published)
+uv tool install uxarray-mcp
+uxarray-mcp setup
+uxarray-mcp install-claude --print-only   # prints the Claude Desktop block
+```
+
+```bash
+# Stable user path with HPC support
+uv tool install "uxarray-mcp[hpc]"
+uxarray-mcp setup
+uxarray-mcp endpoints add improv <your-endpoint-uuid> --set-default
+uxarray-mcp doctor --endpoint improv --timeout-seconds 180
+```
+
+```bash
+# Developer / contributor path, and best path when using repo scripts/docs
 git clone https://github.com/UXARRAY/uxarray-mcp-server.git
 cd uxarray-mcp-server
 uv sync                 # core local install
@@ -48,7 +63,7 @@ uv sync --extra hpc     # add Globus Compute deps
 ```
 
 ```bash
-# User install (no clone)
+# User install directly from GitHub before a PyPI release exists
 uv tool install "git+https://github.com/UXARRAY/uxarray-mcp-server.git"
 uxarray-mcp setup
 uxarray-mcp endpoints add improv <your-endpoint-uuid>
@@ -186,6 +201,18 @@ uv run pre-commit run --all-files
 uv run pytest tests/ --ignore=tests/test_remote_agent.py
 uv sync --extra docs --dev
 uv run sphinx-build -b html docs docs/_build/html
+```
+
+## Publishing
+
+Releases are built from version tags such as `v0.1.0`. The GitHub release
+workflow uses PyPI trusted publishing, so the `pypi` environment and PyPI
+project must be configured before pushing the first release tag.
+
+```bash
+uv build
+uv tool install dist/uxarray_mcp-*.whl --force
+uxarray-mcp --help
 ```
 
 ## Documentation Index

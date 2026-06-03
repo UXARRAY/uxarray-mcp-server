@@ -15,13 +15,34 @@ This guide uses Claude Desktop as the MCP client. Other MCP-compatible clients s
 
 ## Quick Setup
 
+### User Install
+
+After the package is published, install the MCP server as a command-line tool:
+
+```bash
+uv tool install uxarray-mcp
+uxarray-mcp setup
+```
+
+For HPC support, include the optional Globus Compute dependencies:
+
+```bash
+uv tool install "uxarray-mcp[hpc]"
+uxarray-mcp setup
+```
+
+Then skip to **Configure Claude Desktop** below. If you need the cluster helper
+scripts in `scripts/`, use the repository checkout path instead.
+
+### Repository Checkout
+
 ```bash
 cd /path/to/uxarray-mcp-server
 bash SETUP.sh
 ```
 
-This script installs core dependencies, creates `config.yaml` if needed, and
-runs the local test suite. Then skip to **Configure Claude Desktop** below.
+This script installs core dependencies and runs the local test suite. Then skip
+to **Configure Claude Desktop** below.
 
 ## Manual Setup
 
@@ -120,7 +141,7 @@ Find your config file:
 | Linux    | `~/.config/Claude/claude_desktop_config.json` |
 | Windows  | `%APPDATA%\Claude\claude_desktop_config.json` |
 
-Get your paths:
+For a repository checkout, get your paths:
 
 ```bash
 which uv          # e.g. /opt/homebrew/bin/uv
@@ -148,6 +169,22 @@ Edit the config:
 ```
 
 Use **absolute paths** — no `~` or relative paths.
+
+If you installed with `uv tool install`, the config block is simpler:
+
+```json
+{
+  "mcpServers": {
+    "uxarray": {
+      "command": "uxarray-mcp",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+If your MCP client cannot find `uxarray-mcp`, replace `command` with the full
+path printed by `which uxarray-mcp`.
 
 ### Step 5: Restart Claude Desktop
 
