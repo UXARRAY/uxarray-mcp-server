@@ -14,6 +14,26 @@ first. This page assumes you already understand the difference between:
 - the child endpoint
 - the remote worker environment
 
+## Python Version
+
+The current Improv venv uses **Python 3.11.6**. The local SDK runs on 3.13,
+which produces a Dill mismatch warning and can cause `WorkerLost` crashes when
+sending raw closures via `Executor.submit`. All server tools use
+`AllCodeStrategies` to work around this, but the warning is noisy and the
+mismatch can still bite in edge cases.
+
+**Python 3.12 is available system-wide on Improv** at `/usr/bin/python3.12`.
+To rebuild the venv and eliminate the mismatch:
+
+```bash
+# On an Improv login node
+bash scripts/improv_endpoint.sh upgrade-venv
+bash scripts/improv_endpoint.sh restart
+```
+
+This creates a new `~/venvs/globus-compute` with Python 3.12 and backs up the
+3.11 venv to `~/venvs/globus-compute-3.11-backup`.
+
 ## What Finally Worked
 
 1. Start with a single-host endpoint on one login node only.
