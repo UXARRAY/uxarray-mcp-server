@@ -53,7 +53,7 @@ class TestCheckEndpointHealth:
 
     @requires_globus
     def test_healthy_endpoint(self):
-        """Returns online status when Globus SDK reports the endpoint is up."""
+        """Returns 'registered' when Globus SDK reports the endpoint manager is up."""
         config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="hpc")
         mock_client = MagicMock()
         mock_client.get_endpoint_status.return_value = {"status": "online"}
@@ -61,7 +61,7 @@ class TestCheckEndpointHealth:
         with patch("globus_compute_sdk.Client", return_value=mock_client):
             result = check_endpoint_health(config)
 
-        assert result["status"] == "online"
+        assert result["status"] == "registered"
         assert result["endpoint_id"] == "fake-uuid-1234"
 
     @requires_globus
@@ -79,8 +79,8 @@ class TestCheckEndpointHealth:
         assert "error" in result
 
     @requires_globus
-    def test_unknown_status_passed_through(self):
-        """Passes through whatever status string the Globus SDK returns."""
+    def test_globus_offline_maps_to_offline(self):
+        """Globus 'stopped'/'offline' maps to our 'offline' status."""
         config = HPCConfig(endpoint_id="fake-uuid-1234", execution_mode="hpc")
         mock_client = MagicMock()
         mock_client.get_endpoint_status.return_value = {"status": "stopped"}
@@ -88,7 +88,7 @@ class TestCheckEndpointHealth:
         with patch("globus_compute_sdk.Client", return_value=mock_client):
             result = check_endpoint_health(config)
 
-        assert result["status"] == "stopped"
+        assert result["status"] == "offline"
 
 
 # -----------------------------------------------------------------------------
