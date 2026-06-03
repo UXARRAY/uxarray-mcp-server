@@ -60,10 +60,11 @@ To reattach: `tmux attach -t uxarray-endpoint`
 To restart: `scripts/ucar_endpoint.sh restart`
 To check: `scripts/ucar_endpoint.sh status`
 
-Add the UUID to your local config:
+Add the UUID to your private local config on your laptop/workstation, never to
+the repository:
 
 ```bash
-uxarray-mcp endpoints add ucar <uuid>
+uxarray-mcp endpoints add ucar <uuid> --set-default
 ```
 
 ## Validation

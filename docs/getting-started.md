@@ -226,7 +226,7 @@ For the full HPC playbook and reusable scripts, see:
   endpoint manager and worker probe both pass. The tool list itself is unified;
   there are no separate HPC-only tool names.
 
-**Endpoint looks online but remote tasks still fail**
+**Endpoint is registered but remote tasks still fail**
 : `get_execution_mode` only confirms the endpoint manager is reachable.
   Run `validate_hpc_setup` to catch deeper issues such as missing local Globus
   auth, missing `globus_compute_sdk`, PBS submission failures like

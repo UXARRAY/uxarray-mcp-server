@@ -25,7 +25,8 @@ Many confusing failures come from installing something in only one of those plac
 - this repository checked out
 - `uv sync --extra hpc` completed
 - one-time local Globus auth completed
-- `config.yaml` contains the endpoint UUID
+- `~/.config/uxarray-mcp/config.yaml` contains the endpoint UUID, written by
+  `uxarray-mcp endpoints add`
 
 ### On the HPC machine
 
@@ -54,20 +55,28 @@ cd /path/to/uxarray-mcp-server
 uv sync --extra hpc
 ```
 
-Create a local config file:
+Create a private local config file:
 
 ```bash
-cp config.yaml.example config.yaml
+uxarray-mcp setup
 ```
 
-Edit `config.yaml`:
+After the endpoint exists on the cluster and you know its UUID, add it locally:
+
+```bash
+uxarray-mcp endpoints add improv <endpoint-uuid> --set-default
+```
+
+The equivalent private config schema is:
 
 ```yaml
 hpc:
-  globus_compute:
-    endpoint_id: "your-endpoint-uuid"
   execution_mode: "auto"
   timeout_seconds: 300
+  default_endpoint: "improv"
+  endpoints:
+    improv:
+      endpoint_id: "your-endpoint-uuid"
 ```
 
 For deployments that need more than one facility, define named endpoint
@@ -147,6 +156,7 @@ globus-compute-endpoint configure uxarray-endpoint
 
 When you start the endpoint for the first time, Globus Compute may prompt for
 browser-based authorization. Complete that flow and keep the endpoint UUID.
+Add the UUID only to your private local config with `uxarray-mcp endpoints add`.
 
 ## First Bring-Up: Do Not Start With PBS or SLURM
 
@@ -260,10 +270,11 @@ Then restart the endpoint and rerun `validate_hpc_setup`.
 
 ## Common Misses
 
-### `get_execution_mode()` says `online`, but real jobs fail
+### `get_execution_mode()` says `registered`, but real jobs fail
 
-That usually means the endpoint manager is healthy while the child endpoint or
-worker is not. Use `validate_hpc_setup()` instead of trusting manager health.
+That means the endpoint manager is visible to Globus, but the child endpoint or
+worker may still be broken. Use `validate_hpc_setup()` instead of trusting
+manager health alone.
 
 ### The file path looks correct on the login node, but the worker says it does not exist
 
@@ -297,12 +308,13 @@ Use one login node only and run the endpoint inside `tmux`.
 |------|----------|
 | `local` | Always run on your machine |
 | `hpc` | Always send to the endpoint |
-| `auto` | Use HPC for known HPC paths or large meshes |
+| `auto` | Use configured endpoints when tools request remote execution |
 
-Auto-routing uses:
+Tool-level remote execution uses:
 
-- filesystem prefixes such as `/home/`, `/lus/`, `/scratch/`, `/projects/`, `/gpfs/`
-- mesh size thresholds for very large grids
+- `use_remote=True`
+- an optional named `endpoint="improv"` / `endpoint="chrysalis"`
+- `default_endpoint` when no endpoint name is supplied
 
 ## Scripts and Guides
 

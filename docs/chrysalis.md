@@ -84,11 +84,12 @@ unset PYTHONPATH
 ~/venvs/globus-compute-py313/bin/globus-compute-endpoint start uxarray-chrysalis
 ```
 
-The endpoint prints its UUID. Add it to your **local** `config.yaml` (never commit the UUID):
+The endpoint prints its UUID. Add it to your private local config on your
+laptop/workstation, never to the repository:
 
 ```bash
 # On your laptop:
-uxarray-mcp endpoints add chrysalis <uuid>
+uxarray-mcp endpoints add chrysalis <uuid> --set-default
 ```
 
 ## Validation

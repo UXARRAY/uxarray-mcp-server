@@ -47,6 +47,15 @@ Then fully quit and reopen Claude Desktop.
 
 Do not start with scheduler debugging.
 
+Configure endpoint UUIDs with the CLI so they stay in your private user config,
+not in the repository:
+
+```bash
+uv sync --extra hpc
+uxarray-mcp setup
+uxarray-mcp endpoints add <name> <endpoint-uuid> --set-default
+```
+
 Read these in order:
 
 1. [docs/globus-compute.md](docs/globus-compute.md)
@@ -62,7 +71,7 @@ The key idea is that there are three separate layers:
 
 ## First HPC Checks
 
-Once an endpoint UUID is in `config.yaml`, run:
+Once an endpoint UUID is in `~/.config/uxarray-mcp/config.yaml`, run:
 
 ```text
 Run validate_hpc_setup

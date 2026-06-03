@@ -15,12 +15,9 @@ fi
 
 uv sync
 
-if [ ! -f config.yaml ]; then
-  cp config.yaml.example config.yaml
-fi
-
 echo "[SETUP] Running automated tests (no external data required)..."
 uv run pytest tests/ --ignore=tests/test_remote_agent.py
 
 echo ""
 echo "[SUCCESS] Review 'GETTING_STARTED.md' for local setup and 'docs/hpc.md' for HPC bring-up."
+echo "[INFO] For HPC endpoints, run: uxarray-mcp setup && uxarray-mcp endpoints add <name> <uuid>"

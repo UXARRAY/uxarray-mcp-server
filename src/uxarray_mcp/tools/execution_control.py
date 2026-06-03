@@ -350,16 +350,21 @@ def validate_hpc_setup(
             if isinstance(raw_endpoint_status, dict)
             else {"status": str(raw_endpoint_status)}
         )
-        endpoint_status = endpoint_payload.get("status", "unknown")
+        raw_status = endpoint_payload.get("status", "unknown")
+        endpoint_status = {
+            "online": "registered",
+            "healthy": "registered",
+            "stopped": "offline",
+        }.get(str(raw_status).lower(), str(raw_status).lower())
         checks.append(
             _make_check(
                 "endpoint_status",
-                endpoint_status in {"online", "healthy"},
+                endpoint_status in {"registered", "active"},
                 f"Endpoint manager reports status={endpoint_status!r}.",
                 details={"raw_status": endpoint_payload},
                 guidance=(
                     None
-                    if endpoint_status in {"registered", "active", "online", "healthy"}
+                    if endpoint_status in {"registered", "active"}
                     else "Start or restart the endpoint on the cluster before using remote execution."
                 ),
             )
@@ -378,8 +383,7 @@ def validate_hpc_setup(
         result = {
             "passed": False,
             "mode": config.execution_mode,
-            "endpoint_name": config.endpoint_name,
-            "endpoint_id": config.endpoint_id,
+            **_endpoint_configured_payload(config),
             "endpoint_status": "unreachable",
             "checks": checks,
             "remote_probe": remote_probe,
@@ -400,7 +404,7 @@ def validate_hpc_setup(
         tracker.fail("HPC validation failed while querying endpoint status.")
         return result
 
-    if run_remote_probe and endpoint_status in {"online", "healthy"}:
+    if run_remote_probe and endpoint_status in {"registered", "active"}:
         from uxarray_mcp.remote.compute_functions import (
             remote_probe_path,
             remote_runtime_probe,

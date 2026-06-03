@@ -33,9 +33,13 @@ on the LCRC GPFS filesystem (`/gpfs/fs1/`).
 
 ## First-Time Setup
 
+Run these on an Improv login node. The MCP server repository does not need to
+be cloned on Improv, but these helper scripts do assume you have copied the
+script or are running from a checkout available on the login node.
+
 ```bash
-# 1. Authenticate Globus locally (one-time)
-globus-compute-endpoint login
+# 1. Create or upgrade the endpoint venv
+scripts/improv_endpoint.sh upgrade-venv
 
 # 2. Create the endpoint profile
 source ~/venvs/globus-compute/bin/activate
@@ -76,10 +80,11 @@ scripts/improv_endpoint.sh start
 To restart: `scripts/improv_endpoint.sh restart`
 To check: `scripts/improv_endpoint.sh status`
 
-Add the UUID to your local config:
+Add the UUID to your private local config on your laptop/workstation, not to the
+repository:
 
 ```bash
-uxarray-mcp endpoints add improv <uuid>
+uxarray-mcp endpoints add improv <uuid> --set-default
 ```
 
 ## Validation

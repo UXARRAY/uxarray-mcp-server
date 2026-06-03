@@ -7,7 +7,7 @@ The short version:
 - This repository runs **locally** by default.
 - To run on an HPC machine, you need a **Globus Compute endpoint** running on that machine.
 - Your laptop and the cluster need **different software installed in different places**.
-- An endpoint reporting `online` is only the start. You still need to prove that the remote worker can run code and read the real file you care about.
+- An endpoint reporting `registered` is only the start. You still need to prove that the remote worker can run code and read the real file you care about.
 
 ## What Globus Compute Is
 
@@ -41,13 +41,14 @@ Examples:
 - `improv-uxarray`
 - `uxarray-endpoint`
 
-An endpoint has a stable UUID. You put that UUID in `config.yaml` on your local machine.
+An endpoint has a stable UUID. You put that UUID in your private local config
+with `uxarray-mcp endpoints add`; do not commit endpoint UUIDs to the repo.
 
 ### Endpoint manager
 
 The lightweight process that stays connected to Globus and accepts work for an endpoint.
 
-This is what `get_execution_mode()` or `validate_hpc_setup()` may report as `online`.
+This is what `get_execution_mode()` or `validate_hpc_setup()` may report as `registered`.
 
 ### User endpoint / child endpoint
 
@@ -64,7 +65,7 @@ This is where many real failures happen:
 
 The Python process that actually imports packages like `uxarray`, opens files, and runs computations.
 
-An endpoint can be `online` while the worker still fails because:
+An endpoint can be `registered` while the worker still fails because:
 
 - `uxarray` is not installed remotely
 - the scheduler cannot start jobs
@@ -166,8 +167,8 @@ globus-compute-endpoint start uxarray-endpoint
 
 1. Install repository dependencies with `uv sync --extra hpc`.
 2. Authenticate the local Globus client once.
-3. Copy `config.yaml.example` to `config.yaml`.
-4. Add the endpoint UUID to `config.yaml`.
+3. Run `uxarray-mcp setup`.
+4. Add the endpoint UUID with `uxarray-mcp endpoints add <name> <uuid>`.
 5. Run:
 
 ```bash
@@ -194,9 +195,9 @@ That is exactly why this repository now includes:
 
 ## Common Failure Modes
 
-### `online` but still broken
+### `registered` but still broken
 
-`online` usually means the endpoint manager is alive. It does **not** prove the child endpoint or worker can actually run jobs.
+`registered` means the endpoint manager is alive. It does **not** prove the child endpoint or worker can actually run jobs.
 
 ### `qsub: command not found`
 
