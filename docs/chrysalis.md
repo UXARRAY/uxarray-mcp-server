@@ -1,143 +1,118 @@
-# Chrysalis Playbook
+# Chrysalis Endpoint
 
-Chrysalis is an ANL/LCRC cluster with a conda-managed Python 3.12 environment
-that runs uxarray. This page covers the exact steps to bring up the Globus
-Compute endpoint and validate remote tool execution.
+Chrysalis is an ANL/LCRC cluster hosting E3SM next-generation ocean meshes.
 
-Official system information:
-[Chrysalis system page](https://lcrc.anl.gov/systems/chrysalis).
+## Key Points
 
-If you are new to Globus Compute, read [Globus Compute Primer](globus-compute.md)
-first.
+- The **MCP server does not need to be cloned on Chrysalis** — remote functions
+  are sent as source code via `AllCodeStrategies` and only need `uxarray` + deps
+  in the worker environment.
+- Login nodes **kill compute processes** — always use the Slurm backend.
+- `unset PYTHONPATH` before every endpoint start — the conda `uxarray-yac` env
+  injects broken `pydantic_core` paths that crash workers.
 
-## Environment
+## Worker Environment
 
-The working runtime on Chrysalis uses:
-
-- **Python 3.12.13** (`~/.conda/envs/uxarray-yac`)
-- **uxarray** — installed in the conda env
-- **globus-compute-endpoint** — installed in `~/venvs/globus-compute`
-
-This is cleaner than Improv because 3.12 is close enough to the local SDK's
-3.13 that Dill serialization works without `AllCodeStrategies` workarounds
-(though we use them anyway for safety).
+| Item | Value |
+|---|---|
+| Venv | `~/venvs/globus-compute-py313` (Python 3.13) |
+| Slurm partition | `debug` (4h walltime, 20 nodes) |
+| Compute nodes | 251 GB RAM, 128 CPUs |
+| Endpoint name | `uxarray-chrysalis` |
 
 ## First-Time Setup
 
-### 1. Log in to Chrysalis
-
 ```bash
-ssh <username>@chrysalis.lcrc.anl.gov
+# 1. Create Python 3.13 conda env
+/gpfs/fs1/soft/chrysalis/manual/miniforge3/25.3.1/bin/conda create \
+    -n gc-py313 python=3.13 -y
+
+# 2. Build the globus-compute venv
+~/.conda/envs/gc-py313/bin/python -m venv ~/venvs/globus-compute-py313
+~/venvs/globus-compute-py313/bin/pip install \
+    "globus-compute-endpoint==4.12.0" \
+    uxarray xarray netCDF4 h5netcdf numpy matplotlib holoviews cartopy
+
+# 3. Configure the endpoint (Slurm-backed)
+unset PYTHONPATH
+~/venvs/globus-compute-py313/bin/globus-compute-endpoint configure uxarray-chrysalis
+
+cat > ~/.globus_compute/uxarray-chrysalis/user_config_template.yaml.j2 << 'EOF'
+endpoint_setup: ""
+engine:
+  type: GlobusComputeEngine
+  max_workers_per_node: 4
+  provider:
+    type: SlurmProvider
+    partition: debug
+    nodes_per_block: 1
+    init_blocks: 0
+    min_blocks: 0
+    max_blocks: 2
+    walltime: "04:00:00"
+    worker_init: |
+      unset PYTHONPATH
+    launcher:
+      type: SrunLauncher
+idle_heartbeats_soft: 10
+idle_heartbeats_hard: 5760
+EOF
+
+cat > ~/.globus_compute/uxarray-chrysalis/user_environment.yaml << 'EOF'
+PYTHONPATH: ""
+PATH: "/home/<username>/venvs/globus-compute-py313/bin:/usr/bin:/bin"
+EOF
 ```
 
-### 2. Configure the endpoint
+## Starting the Endpoint
+
+Run this every time you log in:
 
 ```bash
-bash scripts/chrysalis_endpoint.sh configure
+unset PYTHONPATH
+~/venvs/globus-compute-py313/bin/globus-compute-endpoint start uxarray-chrysalis
 ```
 
-This writes:
-- `~/.globus_compute/chrysalis-uxarray/user_config_template.yaml.j2`
-- `~/.globus_compute/chrysalis-uxarray/user_environment.yaml`
-
-### 3. Start the endpoint in tmux
+The endpoint prints its UUID. Add it to your **local** `config.yaml` (never commit the UUID):
 
 ```bash
-bash scripts/chrysalis_endpoint.sh start
+# On your laptop:
+uxarray-mcp endpoints add chrysalis <uuid>
 ```
 
-This launches a tmux session named `uxarray-endpoint`, activates the conda
-env, and starts `globus-compute-endpoint`.
+## Validation
 
-To reattach later: `tmux attach -t uxarray-endpoint`
-
-### 4. Register the endpoint UUID
-
-After first start, the endpoint UUID is printed to stdout and stored in
-`~/.globus_compute/chrysalis-uxarray/endpoint.json`. Add it to your local
-config:
+From your laptop after the endpoint is running:
 
 ```bash
-uxarray-mcp endpoints add chrysalis <your-uuid>
+uv run python scripts/hpc_doctor.py --endpoint chrysalis --timeout-seconds 120
 ```
 
-### 5. Validate
+Or manually:
 
-From your local machine:
+```python
+from uxarray_mcp.tools.execution_control import endpoint_status, validate_hpc_setup
 
-```bash
-uv run python -c "
-from uxarray_mcp.tools.execution_control import validate_hpc_setup
-import json
-r = validate_hpc_setup(endpoint='chrysalis', run_remote_probe=True)
-print(json.dumps(r, indent=2))
-"
+print(endpoint_status(endpoint='chrysalis', force=True))
+print(validate_hpc_setup(endpoint='chrysalis', run_remote_probe=True,
+                          probe_timeout_seconds=120))
 ```
 
-## Restart After Login
+## E3SM Next-Generation Ocean Meshes
 
-```bash
-ssh chrysalis.lcrc.anl.gov
-bash scripts/chrysalis_endpoint.sh restart
-```
+Available at `/lcrc/group/e3sm/ac.xylar/polaris_1.0/chrysalis/test_20260520/unified-mesh-topo-cull2/`:
 
-Or to check status:
+| Mesh | Faces | Size | Notes |
+|---|---|---|---|
+| `mesh/.../u.oi240.lr240/base_mesh/build/base_mesh.nc` | 10,302 | 12 MB | Full globe, unculled |
+| `e3sm/init/u.oi240.lr240/.../culled_ocean_no_cavities_mesh.nc` | 7,293 | 8.5 MB | Ocean only |
+| `e3sm/init/u.oi30.lr10/.../culled_ocean_no_cavities_mesh.nc` | 462,919 | 561 MB | Ocean only |
+| `e3sm/init/u.oi6to18.lr6to10/.../culled_ocean_no_cavities_mesh.nc` | 4,015,940 | 4.8 GB | Variable-res 6–18 km |
 
-```bash
-bash scripts/chrysalis_endpoint.sh status
-```
+## Troubleshooting
 
-## Testing Vector Calculus Tools Remotely
+**`ENDPOINT_NOT_ONLINE`** — the Slurm debug job timed out (4h limit). Restart with `unset PYTHONPATH && ~/venvs/globus-compute-py313/bin/globus-compute-endpoint start uxarray-chrysalis`.
 
-Once the endpoint is running, test from your local machine:
+**`WorkerLost` or `SystemError`** — PYTHONPATH is set. Always `unset PYTHONPATH` before starting the endpoint.
 
-```bash
-uv run python -c "
-from uxarray_mcp.tools.vector_calc import calculate_gradient
-r = calculate_gradient(
-    '/path/to/grid.nc',
-    '/path/to/data.nc',
-    'your_variable',
-    use_remote=True,
-    endpoint='chrysalis',
-)
-print('venue:', r['_provenance']['execution_venue'])
-print('components:', r['components'])
-"
-```
-
-## Important: Use Slurm for Real Work
-
-Chrysalis login nodes **kill processes** that use significant CPU or memory.
-The default `single-host` config runs workers on the login node and will
-fail for any real UXarray analysis (mesh loading, plotting, computation).
-
-For actual use, configure with the Slurm backend:
-
-```bash
-bash scripts/chrysalis_endpoint.sh configure slurm-debug
-bash scripts/chrysalis_endpoint.sh restart
-```
-
-This submits workers as proper Slurm jobs on compute nodes. Use
-`single-host` only for quick connectivity probes (e.g. `validate_hpc_setup`
-with `run_remote_probe=False`).
-
-### E3SM Next-Gen Mesh Sizes
-
-These meshes are available on Chrysalis at:
-`/lcrc/group/e3sm/ac.xylar/polaris_1.0/chrysalis/test_20260520/unified-mesh-topo-cull2/e3sm/init/`
-
-| Mesh | Faces | Nodes | Size | Resolution |
-|---|---|---|---|---|
-| `u.oi240.lr240` | 7,293 | 15,422 | 8.5 MB | Low (240 km) |
-| `u.oi30.lr10` | 462,919 | 940,119 | 561 MB | Mid (30 km) |
-| `u.oi6to18.lr6to10` | 4,015,940 | 8,086,361 | 4.8 GB | High (6–18 km) |
-
-## Known Issues
-
-- `conda` is not on the worker PATH — the `worker_init` in the config template
-  activates the env via the full conda init path instead.
-- If `globus-compute-endpoint` is not found after `conda activate`, verify
-  that `~/venvs/globus-compute/bin` is on your PATH.
-- Login node kills: always use `configure slurm-debug` for UXarray work.
+**`pydantic_core` not found** — conda env leaked into the worker. Check `user_environment.yaml` has `PYTHONPATH: ""` and restart.

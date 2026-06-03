@@ -11,9 +11,11 @@ USERNAME="rajeevj"   # your NCAR username
 ENDPOINT_NAME="${ENDPOINT_NAME:-ucar-uxarray-yac}"
 CONDA_ENV="/glade/work/$USERNAME/conda-envs/uxarray_dev"
 YAC_ACTIVATE="$HOME/opt/yac-core-v3.14.0_p1/activate-yac.sh"
-MCP_SERVER_DIR="/glade/u/home/$USERNAME/uxarray-mcp-server"
-UXARRAY_DIR="/glade/u/home/$USERNAME/uxarray"
 TMUX_SESSION="uxarray-endpoint"
+# NOTE: the MCP server repo does NOT need to be cloned on UCAR. Remote
+# functions are serialised via AllCodeStrategies and run with only uxarray
+# + numpy + matplotlib installed in the conda env. Never add uxarray_mcp
+# to PYTHONPATH on the worker — it causes pydantic version conflicts.
 
 usage() {
   cat <<'EOF'
@@ -90,11 +92,10 @@ engine:
     max_blocks: 1
     init_blocks: 1
     worker_init: |
+      unset PYTHONPATH
       source "\$(conda info --base)/etc/profile.d/conda.sh"
       conda activate $CONDA_ENV
       source $YAC_ACTIVATE
-      export PYTHONPATH="$MCP_SERVER_DIR/src:$UXARRAY_DIR:\${PYTHONPATH:-}"
-      cd $MCP_SERVER_DIR
 
 idle_heartbeats_soft: 10
 idle_heartbeats_hard: 5760
@@ -123,7 +124,6 @@ _do_start() {
   echo "==> Checking YAC..."
   _check_yac
   echo "==> Starting endpoint: $ENDPOINT_NAME"
-  cd "$MCP_SERVER_DIR"
   globus-compute-endpoint start "$ENDPOINT_NAME"
 }
 

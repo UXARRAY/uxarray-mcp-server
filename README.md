@@ -76,7 +76,8 @@ Config is discovered in this order: ``$UXARRAY_MCP_CONFIG`` →
 3. [docs/globus-compute.md](docs/globus-compute.md) if you are new to Globus Compute
 4. [docs/hpc.md](docs/hpc.md) for generic cluster bring-up
 5. [docs/improv.md](docs/improv.md) if you are on Argonne Improv
-6. [docs/chrysalis.md](docs/chrysalis.md) if you are on Argonne Chrysalis
+6. [docs/ucar.md](docs/ucar.md) if you are on NCAR Casper
+7. [docs/chrysalis.md](docs/chrysalis.md) if you are on Argonne Chrysalis
 6. [docs/workflows.md](docs/workflows.md) for sequential remote workflows
 
 ## Main Tools
@@ -191,6 +192,7 @@ uv run sphinx-build -b html docs docs/_build/html
 - [docs/globus-compute.md](docs/globus-compute.md)
 - [docs/hpc.md](docs/hpc.md)
 - [docs/improv.md](docs/improv.md)
+- [docs/ucar.md](docs/ucar.md)
 - [docs/chrysalis.md](docs/chrysalis.md)
 - [docs/tools.md](docs/tools.md)
 - [docs/workflows.md](docs/workflows.md)
