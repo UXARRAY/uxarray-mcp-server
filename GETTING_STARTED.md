@@ -52,6 +52,7 @@ Read these in order:
 1. [docs/globus-compute.md](docs/globus-compute.md)
 2. [docs/hpc.md](docs/hpc.md)
 3. [docs/improv.md](docs/improv.md) if you are on Argonne Improv
+4. [docs/chrysalis.md](docs/chrysalis.md) if you are on Argonne Chrysalis
 
 The key idea is that there are three separate layers:
 
