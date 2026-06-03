@@ -80,6 +80,6 @@ Before every release, verify endpoint UUIDs and local config did not re-enter
 tracked history:
 
 ```bash
-git grep -n -E '(endpoint_id: [0-9a-f-]{36}|caf37dc0|79bf66fc|3cca8be6)' -- .
+git grep -n -E 'endpoint_id: [0-9a-f-]{36}' -- .
 git log --all --oneline -- config.yaml
 ```
