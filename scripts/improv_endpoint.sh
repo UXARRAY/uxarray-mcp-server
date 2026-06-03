@@ -9,6 +9,11 @@ USERNAME="jain"   # your Improv username
 # ---------------------------------------------------------------------------
 
 ENDPOINT_NAME="${ENDPOINT_NAME:-improv-uxarray}"
+# Python 3.12 is available system-wide on Improv (/usr/bin/python3.12).
+# Use it for new venv creation to match the local SDK's 3.13 closely enough
+# that Dill serialization works. Existing 3.11 venvs still function via
+# AllCodeStrategies but will show a mismatch warning.
+PYTHON="${PYTHON:-/usr/bin/python3.12}"
 VENV="$HOME/venvs/globus-compute"
 MCP_SERVER_DIR="/home/$USERNAME/uxarray-mcp-server"
 TMUX_SESSION="uxarray-endpoint"
@@ -20,6 +25,7 @@ Usage (run on an Improv login node):
   improv_endpoint.sh start                     Activate venv + start endpoint in tmux
   improv_endpoint.sh restart                   Stop running endpoint, then start fresh
   improv_endpoint.sh status                    Show endpoint list
+  improv_endpoint.sh upgrade-venv              Rebuild venv with Python 3.12 (eliminates Dill mismatch)
 
 Configure modes:
   single-host [endpoint-name]       LocalProvider template (first-pass validation)
@@ -27,6 +33,7 @@ Configure modes:
 
 Environment overrides:
   ENDPOINT_NAME   Globus Compute endpoint profile name (default: improv-uxarray)
+  PYTHON          Python executable for venv creation (default: /usr/bin/python3.12)
 EOF
 }
 
@@ -206,11 +213,49 @@ _status() {
 # Main
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# upgrade-venv: rebuild the globus-compute venv with Python 3.12
+# Eliminates the Dill 3.13<->3.11 mismatch warning and WorkerLost crashes
+# when sending raw closures. AllCodeStrategies still works regardless.
+# ---------------------------------------------------------------------------
+
+_upgrade_venv() {
+  echo "==> Checking Python 3.12: $PYTHON"
+  if ! "$PYTHON" --version 2>&1 | grep -q "3\.12"; then
+    echo "ERROR: $PYTHON is not Python 3.12. Set PYTHON= to the correct path."
+    exit 1
+  fi
+
+  local backup="$HOME/venvs/globus-compute-3.11-backup"
+  if [[ -d "$VENV" ]]; then
+    echo "==> Backing up existing venv to $backup"
+    mv "$VENV" "$backup"
+  fi
+
+  echo "==> Creating new venv with $PYTHON"
+  "$PYTHON" -m venv "$VENV"
+  source "$VENV/bin/activate"
+
+  echo "==> Installing globus-compute-endpoint"
+  pip install --upgrade pip
+  pip install "globus-compute-endpoint>=4.9.0" uxarray xarray netCDF4 h5netcdf numpy
+
+  echo "==> Verifying"
+  python --version
+  python -c "import uxarray; print('uxarray OK')"
+  globus-compute-endpoint --version
+
+  echo ""
+  echo "==> Venv rebuilt with Python 3.12."
+  echo "    Run: improv_endpoint.sh restart"
+}
+
 case "${1:-}" in
-  configure) shift; _configure "$@" ;;
-  start)     _start ;;
-  _do_start) _do_start ;;  # internal: invoked by tmux
-  restart)   _restart ;;
-  status)    _status ;;
+  configure)    shift; _configure "$@" ;;
+  start)        _start ;;
+  _do_start)    _do_start ;;  # internal: invoked by tmux
+  restart)      _restart ;;
+  status)       _status ;;
+  upgrade-venv) _upgrade_venv ;;
   *) usage; exit 1 ;;
 esac

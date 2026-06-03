@@ -93,7 +93,9 @@ docs/                       # Sphinx documentation (MyST Markdown + RST)
   cli.py                    # ``uxarray-mcp`` entry point (serve, setup, doctor, endpoints, install-claude)
 scripts/
   hpc_doctor.py             # CLI diagnostic tool (also exposed as ``uxarray-mcp doctor``)
-  improv_endpoint.sh        # Argonne Improv endpoint setup
+  improv_endpoint.sh        # Argonne Improv endpoint setup + Python 3.12 upgrade
+  ucar_endpoint.sh          # NCAR/Casper (UCAR) endpoint setup
+  chrysalis_endpoint.sh     # Argonne Chrysalis endpoint setup
   hpc_build_yac.py          # Build YAC + YAXT on a Globus Compute worker
   yac_smoke_test.py         # Verify worker-side YAC import + basic surface
   agentic_hpc_loop.py       # Example HPC workflow script

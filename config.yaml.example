@@ -34,6 +34,11 @@ hpc:
       endpoint_id: "00000000-0000-0000-0000-000000000000"
       path_prefixes:
         - "/glade/"
+    chrysalis:
+      endpoint_id: "00000000-0000-0000-0000-000000000000"
+      path_prefixes:
+        - "/lcrc/"
+        - "/home/jain/"
 
   # ---- Legacy single-endpoint form (still supported) ----
   # Keep ``hpc.endpoints`` empty and set this if you only ever submit to one
