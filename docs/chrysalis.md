@@ -106,9 +106,38 @@ print('components:', r['components'])
 "
 ```
 
+## Important: Use Slurm for Real Work
+
+Chrysalis login nodes **kill processes** that use significant CPU or memory.
+The default `single-host` config runs workers on the login node and will
+fail for any real UXarray analysis (mesh loading, plotting, computation).
+
+For actual use, configure with the Slurm backend:
+
+```bash
+bash scripts/chrysalis_endpoint.sh configure slurm-debug
+bash scripts/chrysalis_endpoint.sh restart
+```
+
+This submits workers as proper Slurm jobs on compute nodes. Use
+`single-host` only for quick connectivity probes (e.g. `validate_hpc_setup`
+with `run_remote_probe=False`).
+
+### E3SM Next-Gen Mesh Sizes
+
+These meshes are available on Chrysalis at:
+`/lcrc/group/e3sm/ac.xylar/polaris_1.0/chrysalis/test_20260520/unified-mesh-topo-cull2/e3sm/init/`
+
+| Mesh | Faces | Nodes | Size | Resolution |
+|---|---|---|---|---|
+| `u.oi240.lr240` | 7,293 | 15,422 | 8.5 MB | Low (240 km) |
+| `u.oi30.lr10` | 462,919 | 940,119 | 561 MB | Mid (30 km) |
+| `u.oi6to18.lr6to10` | 4,015,940 | 8,086,361 | 4.8 GB | High (6–18 km) |
+
 ## Known Issues
 
 - `conda` is not on the worker PATH — the `worker_init` in the config template
   activates the env via the full conda init path instead.
 - If `globus-compute-endpoint` is not found after `conda activate`, verify
   that `~/venvs/globus-compute/bin` is on your PATH.
+- Login node kills: always use `configure slurm-debug` for UXarray work.

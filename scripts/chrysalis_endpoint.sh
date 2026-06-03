@@ -16,10 +16,17 @@ TMUX_SESSION="uxarray-endpoint"
 usage() {
   cat <<'EOF'
 Usage (run on a Chrysalis login node):
-  chrysalis_endpoint.sh configure      Write endpoint config files (once per install)
-  chrysalis_endpoint.sh start          Activate env + start endpoint in tmux
-  chrysalis_endpoint.sh restart        Stop running endpoint, then start fresh
-  chrysalis_endpoint.sh status         Show endpoint list
+  chrysalis_endpoint.sh configure [mode]   Write endpoint config files (once per install)
+  chrysalis_endpoint.sh start              Activate env + start endpoint in tmux
+  chrysalis_endpoint.sh restart            Stop running endpoint, then start fresh
+  chrysalis_endpoint.sh status             Show endpoint list
+
+Configure modes:
+  single-host   (default) LocalProvider — fine for quick probes, killed for real compute
+  slurm-debug   SlurmProvider debug queue — submits real compute jobs (use this for plotting/analysis)
+
+NOTE: Chrysalis login nodes kill processes that use significant CPU/memory.
+      Use slurm-debug mode for any real UXarray analysis.
 
 Environment overrides:
   ENDPOINT_NAME   Globus Compute endpoint profile name (default: chrysalis-uxarray)
@@ -53,6 +60,7 @@ _check_endpoint_dir() {
 # ---------------------------------------------------------------------------
 
 _configure() {
+  local mode="${1:-single-host}"
   local ep_dir="$HOME/.globus_compute/$ENDPOINT_NAME"
 
   if [[ ! -d "$ep_dir" ]]; then
@@ -61,7 +69,13 @@ _configure() {
     globus-compute-endpoint configure "$ENDPOINT_NAME"
   fi
 
-  cat > "$ep_dir/user_config_template.yaml.j2" <<EOF
+  cat > "$ep_dir/user_environment.yaml" <<EOF
+PATH: "$CONDA_ENV/bin:$VENV_GC/bin:/usr/bin:/bin"
+EOF
+
+  case "$mode" in
+    single-host)
+      cat > "$ep_dir/user_config_template.yaml.j2" <<EOF
 endpoint_setup: ""
 
 engine:
@@ -79,10 +93,45 @@ engine:
 idle_heartbeats_soft: 10
 idle_heartbeats_hard: 5760
 EOF
+      echo "WARNING: LocalProvider runs on the login node."
+      echo "         Login nodes kill processes that use significant CPU/memory."
+      echo "         Use 'configure slurm-debug' for real UXarray analysis."
+      ;;
 
-  cat > "$ep_dir/user_environment.yaml" <<EOF
-PATH: "$CONDA_ENV/bin:$VENV_GC/bin:/usr/bin:/bin"
+    slurm-debug)
+      cat > "$ep_dir/user_config_template.yaml.j2" <<EOF
+endpoint_setup: ""
+
+engine:
+  type: GlobusComputeEngine
+  max_workers_per_node: 4
+
+  provider:
+    type: SlurmProvider
+    partition: compute
+    nodes_per_block: 1
+    init_blocks: 0
+    min_blocks: 0
+    max_blocks: 2
+    walltime: "01:00:00"
+    worker_init: |
+      source "\$(conda info --base)/etc/profile.d/conda.sh"
+      conda activate $CONDA_ENV
+
+    launcher:
+      type: SrunLauncher
+
+idle_heartbeats_soft: 10
+idle_heartbeats_hard: 5760
 EOF
+      echo "Configured Slurm-backed endpoint (partition: compute, 1 node, 1h walltime)."
+      echo "Workers will be submitted as Slurm jobs — real compute, no login-node kill."
+      ;;
+
+    *)
+      usage; exit 1
+      ;;
+  esac
 
   echo "Wrote:"
   echo "  $ep_dir/user_config_template.yaml.j2"
@@ -147,7 +196,7 @@ _status() {
 # ---------------------------------------------------------------------------
 
 case "${1:-}" in
-  configure) _configure ;;
+  configure) shift; _configure "$@" ;;
   start)     _start ;;
   _do_start) _do_start ;;   # internal: invoked by tmux
   restart)   _restart ;;
