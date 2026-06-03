@@ -101,8 +101,37 @@ def render_mesh_geo(
     mesh_alpha: float = 0.35,
     mesh_edgecolor: str = "#333333",
     mesh_linewidth: float = 0.25,
-) -> bytes:
+) -> tuple[bytes, dict]:
     """Render a mesh with geographic context using Cartopy.
+
+    Returns
+    -------
+    tuple[bytes, dict]
+        ``(png_bytes, render_info)`` where ``render_info`` is a dict describing
+        what was actually drawn — used by the tool layer to build a human-readable
+        note for the user. Keys:
+
+        ``n_faces_rendered``
+            Number of mesh faces included in the plot.
+        ``n_faces_total``
+            Total faces in the grid.
+        ``boundary_drawn``
+            True if mesh boundary edges were drawn in red.
+        ``n_boundary_edges``
+            Number of boundary edge segments drawn.
+        ``boundary_status``
+            One of ``"drawn"``, ``"closed_mesh"``, ``"all_filtered"``,
+            ``"disabled"``.
+        ``seam_faces_skipped``
+            Number of faces skipped due to antimeridian crossing (will be 0
+            once UXarray PR #1519 lands).
+        ``basemap_used``
+            ``"contextily"``, ``"stock_img"``, or ``"none"``.
+        ``features_drawn``
+            List of geographic features added (e.g. ``["coastlines","borders"]``).
+        ``region``
+            ``"global"`` or ``"regional"``.
+
 
     Parameters
     ----------
@@ -136,10 +165,6 @@ def render_mesh_geo(
     mesh_linewidth : float, default 0.25
         Width of mesh cell edges in points.
 
-    Returns
-    -------
-    bytes
-        PNG image data.
     """
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
@@ -156,7 +181,8 @@ def render_mesh_geo(
     )
 
     # ── Region ────────────────────────────────────────────────────────────────
-    if lon_bounds is not None and lat_bounds is not None:
+    is_regional = lon_bounds is not None and lat_bounds is not None
+    if is_regional and lon_bounds is not None and lat_bounds is not None:
         ax.set_extent(
             [lon_bounds[0], lon_bounds[1], lat_bounds[0], lat_bounds[1]], crs=proj
         )
@@ -167,7 +193,10 @@ def render_mesh_geo(
         ax.set_global()
         g = grid
 
+    n_faces_total = int(grid.n_face)
+
     # ── Basemap ───────────────────────────────────────────────────────────────
+    basemap_used = "none"
     if basemap:
         try:
             import contextily as ctx
@@ -179,8 +208,10 @@ def render_mesh_geo(
                 zoom="auto",
                 attribution=False,
             )
+            basemap_used = "contextily"
         except ImportError:
             ax.stock_img()
+            basemap_used = "stock_img"
     else:
         ax.add_feature(cfeature.LAND.with_scale("110m"), facecolor="#e8dcc8", zorder=1)
         ax.add_feature(cfeature.OCEAN.with_scale("110m"), facecolor="#d4e8f5", zorder=1)
@@ -192,6 +223,7 @@ def render_mesh_geo(
     fill = np.iinfo(conn.dtype).min if np.issubdtype(conn.dtype, np.integer) else -1
 
     polys = []
+    seam_skipped = 0
     for row in conn:
         idx = row[row != fill]
         if len(idx) < 3:
@@ -199,7 +231,8 @@ def render_mesh_geo(
         lons = node_lon[idx]
         lats = node_lat[idx]
         if lons.max() - lons.min() > 180:
-            continue  # skip antimeridian-crossing faces (PR #1519 will fix properly)
+            seam_skipped += 1
+            continue  # antimeridian-crossing — PR #1519 will split properly
         polys.append(np.column_stack([lons, lats]))
 
     if polys:
@@ -215,10 +248,17 @@ def render_mesh_geo(
         ax.add_collection(col)
 
     # ── Mesh-derived boundary edges (opt-in) ──────────────────────────────────
+    boundary_drawn = False
+    n_boundary_drawn = 0
+    boundary_status = "disabled"
+
     if show_mesh_boundary:
         try:
             b_idx = g.boundary_edge_indices
-            if len(b_idx) > 0:
+            n_raw = len(b_idx)
+            if n_raw == 0:
+                boundary_status = "closed_mesh"
+            else:
                 enc = g.edge_node_connectivity
                 lines = []
                 for ei in b_idx:
@@ -227,18 +267,13 @@ def render_mesh_geo(
                         continue
                     lon0, lat0 = node_lon[n0], node_lat[n0]
                     lon1, lat1 = node_lon[n1], node_lat[n1]
-                    # Skip artefact edges:
-                    # 1. Antimeridian-crossing edges span >10° longitude.
-                    # 2. Grid-seam edges at lon=0 have lon0==lon1==0 (or ±180).
-                    #    They form a vertical line down the prime meridian.
-                    #    Filter: skip if both endpoints share the same rounded
-                    #    longitude to within 0.1° (pure meridional seam).
                     dlon = abs(lon1 - lon0)
                     if dlon > 10.0:
-                        continue
+                        continue  # antimeridian-crossing edge
                     if dlon < 0.1 and abs(round(lon0) % 180) < 1:
-                        continue  # prime meridian / antimeridian seam
+                        continue  # prime meridian / antimeridian seam artefact
                     lines.append([[lon0, lat0], [lon1, lat1]])
+
                 if lines:
                     lc = LineCollection(
                         lines,
@@ -248,11 +283,17 @@ def render_mesh_geo(
                         zorder=5,
                     )
                     ax.add_collection(lc)
+                    boundary_drawn = True
+                    n_boundary_drawn = len(lines)
+                    boundary_status = "drawn"
+                else:
+                    boundary_status = "all_filtered"
         except Exception:
-            pass  # silently skip if boundary construction fails
+            boundary_status = "error"
 
     # ── Cartopy geographic features ───────────────────────────────────────────
     scale = "50m"
+    features_drawn = []
     if coastlines:
         ax.add_feature(
             cfeature.COASTLINE.with_scale(scale),
@@ -260,6 +301,7 @@ def render_mesh_geo(
             edgecolor="#222222",
             zorder=4,
         )
+        features_drawn.append("coastlines")
     if borders:
         ax.add_feature(
             cfeature.BORDERS.with_scale(scale),
@@ -268,6 +310,7 @@ def render_mesh_geo(
             linestyle="--",
             zorder=4,
         )
+        features_drawn.append("borders")
     if lakes:
         ax.add_feature(
             cfeature.LAKES.with_scale(scale),
@@ -276,6 +319,7 @@ def render_mesh_geo(
             linewidth=0.4,
             zorder=3,
         )
+        features_drawn.append("lakes")
     if rivers:
         ax.add_feature(
             cfeature.RIVERS.with_scale(scale),
@@ -283,6 +327,7 @@ def render_mesh_geo(
             linewidth=0.6,
             zorder=3,
         )
+        features_drawn.append("rivers")
 
     ax.gridlines(linewidth=0.2, color="gray", alpha=0.4)
     fig.tight_layout(pad=0.3)
@@ -294,7 +339,19 @@ def render_mesh_geo(
     png_bytes = buf.read()
     if not png_bytes:
         raise ValueError("Rendered geographic mesh plot is empty.")
-    return png_bytes
+
+    render_info = {
+        "n_faces_rendered": len(polys),
+        "n_faces_total": n_faces_total,
+        "boundary_drawn": boundary_drawn,
+        "n_boundary_edges": n_boundary_drawn,
+        "boundary_status": boundary_status,
+        "seam_faces_skipped": seam_skipped,
+        "basemap_used": basemap_used,
+        "features_drawn": features_drawn,
+        "region": "regional" if is_regional else "global",
+    }
+    return png_bytes, render_info
 
 
 _FACE_DIMS = {"n_face", "nCells"}
