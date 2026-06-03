@@ -33,6 +33,7 @@ from .orchestration import analyze_dataset
 # endpoint when ``use_remote=True``. Internal callers that need the pure
 # local implementation can import the underscored helpers from
 # ``.inspection`` / ``.plotting`` directly.
+from .plotting import plot_mesh_geo
 from .remote_tools import (
     calculate_area,
     calculate_zonal_mean,
@@ -83,6 +84,7 @@ __all__ = [
     "calculate_zonal_mean",
     "validate_dataset",
     "plot_mesh",
+    "plot_mesh_geo",
     "plot_variable",
     "plot_zonal_mean",
     "subset_bbox",
