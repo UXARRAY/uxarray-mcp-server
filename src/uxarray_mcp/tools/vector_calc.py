@@ -1,63 +1,150 @@
-"""Vector calculus and azimuthal mean tools for unstructured meshes."""
+"""Vector calculus tools with optional HPC remote execution."""
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-import uxarray as ux
+from uxarray_mcp.state import OperationTracker
 
-from uxarray_mcp.domain.vector_calc import (
-    compute_azimuthal_mean,
-    compute_curl,
-    compute_divergence,
-    compute_gradient,
-)
-from uxarray_mcp.provenance import attach_provenance
+from .remote_tools import _endpoint_is_ready, _path_is_locally_reachable, _run_sync
+
+
+def _run_vector_calc(
+    *,
+    tool_name: str,
+    use_remote: bool,
+    endpoint: str | None,
+    grid_path: str,
+    session_id: str | None,
+    local_call,
+    remote_call,
+) -> Dict[str, Any]:
+    """Dispatch helper for vector calculus tools.
+
+    Mirrors _run_with_optional_hpc but vector calc tools take grid_path +
+    data_path rather than a single file_path, and remote dispatch goes through
+    the agent's dedicated vector-calc methods.
+    """
+    tracker = OperationTracker(tool_name, session_id=session_id)
+
+    if not use_remote:
+        tracker.stage("running", f"Running {tool_name} locally.")
+        result = local_call()
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.succeed(f"{tool_name} completed locally.")
+        return result
+
+    from uxarray_mcp.remote.agent import get_agent
+
+    agent = get_agent(endpoint=endpoint, path=grid_path)
+    if not agent.config.endpoint_id:
+        if not _path_is_locally_reachable(grid_path):
+            msg = (
+                f"{tool_name}: use_remote=True but no HPC endpoint is configured "
+                f"and the path {grid_path!r} does not exist locally."
+            )
+            tracker.fail(msg)
+            raise RuntimeError(msg)
+        tracker.stage("fallback", "No endpoint configured; running locally.")
+        result = local_call()
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.succeed(f"{tool_name} completed locally (no endpoint).")
+        return result
+
+    ready, reason = _endpoint_is_ready(agent)
+    if not ready:
+        if not _path_is_locally_reachable(grid_path):
+            msg = (
+                f"{tool_name}: HPC endpoint not ready ({reason}) and "
+                f"{grid_path!r} does not exist locally."
+            )
+            tracker.fail(msg)
+            raise RuntimeError(msg)
+        tracker.stage("fallback", "Endpoint not ready; running locally.")
+        result = local_call()
+        result["_provenance"]["warnings"].append(
+            f"HPC endpoint not ready ({reason}); ran locally."
+        )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.succeed(f"{tool_name} completed locally (endpoint not ready).")
+        return result
+
+    tracker.stage("submitted", f"Submitting {tool_name} to HPC endpoint.")
+    result = remote_call(agent)
+    result["_provenance"]["operation_id"] = tracker.operation_id
+    tracker.succeed(f"{tool_name} completed with remote execution.")
+    return result
 
 
 def calculate_gradient(
     grid_path: str,
     data_path: str,
     variable_name: str,
+    use_remote: bool = False,
+    endpoint: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Compute the spatial gradient of a face-centered scalar field.
 
     Uses UXarray's Green-Gauss finite-volume gradient to compute the zonal
-    (∂/∂x) and meridional (∂/∂y) components of the gradient on the
-    unstructured mesh.
+    (d/dx) and meridional (d/dy) components on the unstructured mesh.
 
     Parameters
     ----------
     grid_path : str
-        Path to the mesh grid file.
+        Path to the mesh grid file (local or HPC filesystem).
     data_path : str
         Path to the data file containing the variable.
     variable_name : str
         Name of the face-centered scalar variable.
+    use_remote : bool
+        If True and an HPC endpoint is configured, execute remotely.
+    endpoint : str, optional
+        Named endpoint to target when several are configured.
+    session_id : str, optional
+        Session to track this operation under.
 
     Returns
     -------
     dict
         Dictionary with keys ``components`` (list of output variable names),
-        ``component_stats`` (min/max/mean for each component), ``n_face``,
-        and ``interpretation``.
+        ``component_stats`` (min/max/mean per component), ``n_face``,
+        ``interpretation``, and ``_provenance``.
 
     Examples
     --------
     >>> calculate_gradient("grid.nc", "data.nc", "temperature")
-    {"components": ["d_temperature_d_x", "d_temperature_d_y"],
-     "component_stats": {...}, "n_face": 655362, ...}
+    {"components": ["d_temperature_d_x", "d_temperature_d_y"], ...}
     """
-    uxds = ux.open_dataset(grid_path, data_path)
-    result = compute_gradient(uxds, variable_name)
-    return attach_provenance(
-        result,
-        tool="calculate_gradient",
-        inputs={
-            "grid_path": grid_path,
-            "data_path": data_path,
-            "variable_name": variable_name,
-        },
+    import uxarray as ux
+
+    from uxarray_mcp.domain.vector_calc import compute_gradient
+    from uxarray_mcp.provenance import attach_provenance
+
+    inputs = {
+        "grid_path": grid_path,
+        "data_path": data_path,
+        "variable_name": variable_name,
+    }
+
+    def _local():
+        uxds = ux.open_dataset(grid_path, data_path)
+        return attach_provenance(
+            compute_gradient(uxds, variable_name),
+            tool="calculate_gradient",
+            inputs=inputs,
+        )
+
+    return _run_vector_calc(
+        tool_name="calculate_gradient",
+        use_remote=use_remote,
+        endpoint=endpoint,
+        grid_path=grid_path,
+        session_id=session_id,
+        local_call=_local,
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.calculate_gradient_remote(grid_path, data_path, variable_name)
+        ),
     )
 
 
@@ -66,53 +153,84 @@ def calculate_curl(
     data_path: str,
     u_variable: str,
     v_variable: str,
+    use_remote: bool = False,
+    endpoint: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Compute the curl (relative vorticity) of a 2-D wind or vector field.
 
-    The curl is the vertical component of ∇ × (u, v):
+    The curl is the vertical component of the cross product:
 
-        ζ = ∂v/∂x − ∂u/∂y
+        zeta = dv/dx - du/dy
 
-    For atmospheric wind fields (u = zonal wind, v = meridional wind) this is
-    the **relative vorticity** — a key diagnostic for identifying cyclones,
+    For atmospheric wind fields (u = zonal, v = meridional) this is the
+    **relative vorticity** — the primary diagnostic for cyclones,
     anticyclones, and jet-stream structure on unstructured meshes.
 
     Parameters
     ----------
     grid_path : str
-        Path to the mesh grid file.
+        Path to the mesh grid file (local or HPC filesystem).
     data_path : str
         Path to the data file containing both vector components.
     u_variable : str
-        Zonal (east–west) component — e.g. ``"uReconstructZonal"``.
+        Zonal (east-west) component, e.g. ``"uReconstructZonal"``.
     v_variable : str
-        Meridional (north–south) component — e.g. ``"uReconstructMeridional"``.
+        Meridional (north-south) component, e.g. ``"uReconstructMeridional"``.
+    use_remote : bool
+        If True and an HPC endpoint is configured, execute remotely.
+    endpoint : str, optional
+        Named endpoint to target when several are configured.
+    session_id : str, optional
+        Session to track this operation under.
 
     Returns
     -------
     dict
         Dictionary with keys ``u_variable``, ``v_variable``,
-        ``interpretation``, ``n_face``, and ``stats``
-        (min, max, mean, std of the vorticity field).
+        ``interpretation``, ``n_face``, ``stats`` (min/max/mean/std),
+        and ``_provenance``.
 
     Examples
     --------
     >>> calculate_curl("grid.nc", "data.nc", "u", "v")
-    {"interpretation": "relative vorticity ζ = ∂v/∂x − ∂u/∂y",
-     "stats": {"min": -2.3e-4, "max": 1.8e-4, "mean": 3.1e-7, "std": 4.2e-5},
-     "n_face": 655362, ...}
+    {"stats": {"min": -2.3e-4, "max": 1.8e-4, ...}, ...}
+
+    >>> calculate_curl("/hpc/grid.nc", "/hpc/data.nc", "u", "v", use_remote=True)
+    {"stats": {...}, "_provenance": {"execution_venue": "hpc:...", ...}}
     """
-    uxds = ux.open_dataset(grid_path, data_path)
-    result = compute_curl(uxds, u_variable, v_variable)
-    return attach_provenance(
-        result,
-        tool="calculate_curl",
-        inputs={
-            "grid_path": grid_path,
-            "data_path": data_path,
-            "u_variable": u_variable,
-            "v_variable": v_variable,
-        },
+    import uxarray as ux
+
+    from uxarray_mcp.domain.vector_calc import compute_curl
+    from uxarray_mcp.provenance import attach_provenance
+
+    inputs = {
+        "grid_path": grid_path,
+        "data_path": data_path,
+        "u_variable": u_variable,
+        "v_variable": v_variable,
+    }
+
+    def _local():
+        uxds = ux.open_dataset(grid_path, data_path)
+        return attach_provenance(
+            compute_curl(uxds, u_variable, v_variable),
+            tool="calculate_curl",
+            inputs=inputs,
+        )
+
+    return _run_vector_calc(
+        tool_name="calculate_curl",
+        use_remote=use_remote,
+        endpoint=endpoint,
+        grid_path=grid_path,
+        session_id=session_id,
+        local_call=_local,
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.calculate_curl_remote(
+                grid_path, data_path, u_variable, v_variable
+            )
+        ),
     )
 
 
@@ -121,52 +239,82 @@ def calculate_divergence(
     data_path: str,
     u_variable: str,
     v_variable: str,
+    use_remote: bool = False,
+    endpoint: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Compute the horizontal divergence of a 2-D vector field.
 
-    Divergence = ∂u/∂x + ∂v/∂y
+    divergence = du/dx + dv/dy
 
-    Positive divergence (outflow) is associated with sinking motion; negative
-    divergence (convergence) drives rising motion and convection. Together with
-    vorticity (curl), divergence characterises the full kinematic structure of
+    Negative divergence (convergence) drives rising motion and convection.
+    Positive divergence indicates sinking motion. Together with vorticity
+    (curl), divergence characterises the full kinematic structure of
     atmospheric flow.
 
     Parameters
     ----------
     grid_path : str
-        Path to the mesh grid file.
+        Path to the mesh grid file (local or HPC filesystem).
     data_path : str
         Path to the data file containing both vector components.
     u_variable : str
-        Zonal (east–west) component.
+        Zonal (east-west) component.
     v_variable : str
-        Meridional (north–south) component.
+        Meridional (north-south) component.
+    use_remote : bool
+        If True and an HPC endpoint is configured, execute remotely.
+    endpoint : str, optional
+        Named endpoint to target when several are configured.
+    session_id : str, optional
+        Session to track this operation under.
 
     Returns
     -------
     dict
         Dictionary with keys ``u_variable``, ``v_variable``,
-        ``interpretation``, ``n_face``, and ``stats``
-        (min, max, mean, std of the divergence field).
+        ``interpretation``, ``n_face``, ``stats`` (min/max/mean/std),
+        and ``_provenance``.
 
     Examples
     --------
-    >>> calculate_divergence("grid.nc", "data.nc", "u", "v")
-    {"interpretation": "horizontal divergence ∂u/∂x + ∂v/∂y",
-     "stats": {"min": -1.1e-5, "max": 9.8e-6, "mean": -2.1e-9, "std": 8.3e-7},
-     "n_face": 655362, ...}
+    >>> calculate_divergence(
+    ...     "grid.nc", "data.nc", "u", "v", use_remote=True, endpoint="improv"
+    ... )
+    {"interpretation": "horizontal divergence du/dx + dv/dy", ...}
     """
-    uxds = ux.open_dataset(grid_path, data_path)
-    result = compute_divergence(uxds, u_variable, v_variable)
-    return attach_provenance(
-        result,
-        tool="calculate_divergence",
-        inputs={
-            "grid_path": grid_path,
-            "data_path": data_path,
-            "u_variable": u_variable,
-            "v_variable": v_variable,
-        },
+    import uxarray as ux
+
+    from uxarray_mcp.domain.vector_calc import compute_divergence
+    from uxarray_mcp.provenance import attach_provenance
+
+    inputs = {
+        "grid_path": grid_path,
+        "data_path": data_path,
+        "u_variable": u_variable,
+        "v_variable": v_variable,
+    }
+
+    def _local():
+        uxds = ux.open_dataset(grid_path, data_path)
+        return attach_provenance(
+            compute_divergence(uxds, u_variable, v_variable),
+            tool="calculate_divergence",
+            inputs=inputs,
+        )
+
+    return _run_vector_calc(
+        tool_name="calculate_divergence",
+        use_remote=use_remote,
+        endpoint=endpoint,
+        grid_path=grid_path,
+        session_id=session_id,
+        local_call=_local,
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.calculate_divergence_remote(
+                grid_path, data_path, u_variable, v_variable
+            )
+        ),
     )
 
 
@@ -178,39 +326,48 @@ def calculate_azimuthal_mean(
     center_lat: float,
     outer_radius: float,
     radius_step: float,
+    use_remote: bool = False,
+    endpoint: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Compute the azimuthal (radial) mean of a variable around a centre point.
 
     Averages the field along concentric circles of constant great-circle
     distance from the centre, producing a radial profile. Useful for:
 
-    - **Tropical cyclone structure** — radial profiles of wind, pressure, SST
-    - **Polar vortex analysis** — radial decay from the pole
-    - **Storm-centred composites** — any feature with approximate radial symmetry
+    - Tropical cyclone structure — radial profiles of wind, pressure, SST
+    - Polar vortex analysis — radial decay from the pole
+    - Storm-centred composites — any feature with approximate radial symmetry
 
     Parameters
     ----------
     grid_path : str
-        Path to the mesh grid file.
+        Path to the mesh grid file (local or HPC filesystem).
     data_path : str
         Path to the data file.
     variable_name : str
         Face-centered variable to average.
     center_lon : float
-        Longitude of the centre point in degrees (−180 to 180 or 0 to 360).
+        Longitude of the centre point in degrees.
     center_lat : float
-        Latitude of the centre point in degrees (−90 to 90).
+        Latitude of the centre point in degrees.
     outer_radius : float
         Maximum radius in great-circle degrees.
     radius_step : float
         Radial bin width in great-circle degrees.
+    use_remote : bool
+        If True and an HPC endpoint is configured, execute remotely.
+    endpoint : str, optional
+        Named endpoint to target when several are configured.
+    session_id : str, optional
+        Session to track this operation under.
 
     Returns
     -------
     dict
         Dictionary with keys ``variable_name``, ``center``,
-        ``outer_radius_deg``, ``radius_step_deg``, ``radii_deg`` (list of
-        bin centres), ``azimuthal_mean_values``, and ``n_face``.
+        ``outer_radius_deg``, ``radius_step_deg``, ``radii_deg``,
+        ``azimuthal_mean_values``, ``n_face``, and ``_provenance``.
 
     Examples
     --------
@@ -225,20 +382,47 @@ def calculate_azimuthal_mean(
     ... )
     {"radii_deg": [0.0, 0.5, 1.0, ...], "azimuthal_mean_values": [...], ...}
     """
-    uxds = ux.open_dataset(grid_path, data_path)
-    result = compute_azimuthal_mean(
-        uxds, variable_name, center_lon, center_lat, outer_radius, radius_step
-    )
-    return attach_provenance(
-        result,
-        tool="calculate_azimuthal_mean",
-        inputs={
-            "grid_path": grid_path,
-            "data_path": data_path,
-            "variable_name": variable_name,
-            "center_lon": center_lon,
-            "center_lat": center_lat,
-            "outer_radius": outer_radius,
-            "radius_step": radius_step,
-        },
+    import uxarray as ux
+
+    from uxarray_mcp.domain.vector_calc import compute_azimuthal_mean
+    from uxarray_mcp.provenance import attach_provenance
+
+    inputs = {
+        "grid_path": grid_path,
+        "data_path": data_path,
+        "variable_name": variable_name,
+        "center_lon": center_lon,
+        "center_lat": center_lat,
+        "outer_radius": outer_radius,
+        "radius_step": radius_step,
+    }
+
+    def _local():
+        uxds = ux.open_dataset(grid_path, data_path)
+        return attach_provenance(
+            compute_azimuthal_mean(
+                uxds, variable_name, center_lon, center_lat, outer_radius, radius_step
+            ),
+            tool="calculate_azimuthal_mean",
+            inputs=inputs,
+        )
+
+    return _run_vector_calc(
+        tool_name="calculate_azimuthal_mean",
+        use_remote=use_remote,
+        endpoint=endpoint,
+        grid_path=grid_path,
+        session_id=session_id,
+        local_call=_local,
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.calculate_azimuthal_mean_remote(
+                grid_path,
+                data_path,
+                variable_name,
+                center_lon,
+                center_lat,
+                outer_radius,
+                radius_step,
+            )
+        ),
     )

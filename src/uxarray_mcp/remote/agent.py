@@ -18,6 +18,10 @@ except ImportError:
 
 from .compute_functions import (
     remote_calculate_area,
+    remote_calculate_azimuthal_mean,
+    remote_calculate_curl,
+    remote_calculate_divergence,
+    remote_calculate_gradient,
     remote_calculate_zonal_mean,
     remote_inspect_mesh,
     remote_inspect_variable,
@@ -200,6 +204,56 @@ class UXarrayComputeAgent(_AcademyAgent):
             return self._run_local_calculate_zonal_mean(
                 grid_path, data_path, variable_name, lat_spec, conservative
             )
+
+    @action
+    async def calculate_gradient_remote(
+        self, grid_path: str, data_path: str, variable_name: str
+    ) -> Dict[str, Any]:
+        """Compute spatial gradient on HPC."""
+        return await self._run_on_hpc(
+            remote_calculate_gradient, grid_path, data_path, variable_name
+        )
+
+    @action
+    async def calculate_curl_remote(
+        self, grid_path: str, data_path: str, u_variable: str, v_variable: str
+    ) -> Dict[str, Any]:
+        """Compute relative vorticity (curl) on HPC."""
+        return await self._run_on_hpc(
+            remote_calculate_curl, grid_path, data_path, u_variable, v_variable
+        )
+
+    @action
+    async def calculate_divergence_remote(
+        self, grid_path: str, data_path: str, u_variable: str, v_variable: str
+    ) -> Dict[str, Any]:
+        """Compute horizontal divergence on HPC."""
+        return await self._run_on_hpc(
+            remote_calculate_divergence, grid_path, data_path, u_variable, v_variable
+        )
+
+    @action
+    async def calculate_azimuthal_mean_remote(
+        self,
+        grid_path: str,
+        data_path: str,
+        variable_name: str,
+        center_lon: float,
+        center_lat: float,
+        outer_radius: float,
+        radius_step: float,
+    ) -> Dict[str, Any]:
+        """Compute azimuthal mean around a centre point on HPC."""
+        return await self._run_on_hpc(
+            remote_calculate_azimuthal_mean,
+            grid_path,
+            data_path,
+            variable_name,
+            center_lon,
+            center_lat,
+            outer_radius,
+            radius_step,
+        )
 
     @action
     async def probe_path_remote(
