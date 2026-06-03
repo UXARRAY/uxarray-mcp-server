@@ -346,7 +346,7 @@ def validate_hpc_setup(
                 details={"raw_status": endpoint_payload},
                 guidance=(
                     None
-                    if endpoint_status in {"online", "healthy"}
+                    if endpoint_status in {"registered", "active", "online", "healthy"}
                     else "Start or restart the endpoint on the cluster before using remote execution."
                 ),
             )
@@ -486,29 +486,41 @@ def validate_hpc_setup(
 
 
 def get_execution_mode() -> Dict[str, Any]:
-    """Return the current execution mode and HPC endpoint status.
+    """Return the current execution mode and endpoint manager status.
 
     Returns
     -------
     dict
-        Dictionary with keys ``mode``, ``endpoint_id``,
-        ``endpoint_status``, and ``description``.
+        Dictionary with keys ``mode``, ``endpoint_id``, ``endpoint_status``,
+        ``description``, and ``status_note``.
+
+        ``endpoint_status`` is one of:
+
+        - ``"registered"`` — manager is running; tasks can be submitted and the
+          scheduler will allocate workers on demand.
+        - ``"offline"`` — manager is not running; SSH in and run
+          ``globus-compute-endpoint start <name>``.
+        - ``"unreachable"`` — cannot contact Globus Compute.
+        - ``"no_endpoint"`` — no endpoint is configured.
+
+        To confirm a worker actually responds, call ``endpoint_status(probe=True)``
+        or ``validate_hpc_setup()``.
 
     Examples
     --------
     >>> get_execution_mode()
-    {"mode": "auto", "endpoint_id": "14e272c4-...", "endpoint_status": "online"}
+    {"mode": "auto", "endpoint_id": "00000000-...", "endpoint_status": "registered"}
     """
     from uxarray_mcp.remote.config import load_config
-    from uxarray_mcp.remote.health import check_endpoint_health
+    from uxarray_mcp.remote.health import check_endpoint_manager_status
 
     config = load_config(_CONFIG_PATH)
-    health = check_endpoint_health(config)
+    status_info = check_endpoint_manager_status(config)
 
     descriptions = {
-        "local": "Local mode: all computations run on this machine regardless of HPC availability.",
-        "hpc": "HPC mode: all computations are sent to the HPC endpoint. Fails if endpoint is down.",
-        "auto": "Auto mode: uses HPC when endpoint is available, local otherwise.",
+        "local": "All computations run on this machine regardless of HPC availability.",
+        "hpc": "All computations are sent to the HPC endpoint. Fails if endpoint is offline.",
+        "auto": "Uses HPC when the endpoint manager is registered, local otherwise.",
     }
 
     result: Dict[str, Any] = {
@@ -517,11 +529,13 @@ def get_execution_mode() -> Dict[str, Any]:
         "endpoint_id": config.endpoint_id,
         "default_endpoint": config.default_endpoint,
         "configured_endpoints": config.endpoint_names,
-        "endpoint_status": health.get("status", "unknown"),
+        "endpoint_status": status_info.get("status", "unknown"),
         "description": descriptions.get(config.execution_mode, "Unknown mode."),
-        "note": (
-            "Endpoint status only confirms the manager is reachable. "
-            "Use validate_hpc_setup() to verify real remote-task execution."
+        "status_note": (
+            '"registered" means the manager process is running and will route '
+            "Slurm/PBS submissions. It does not confirm workers are active. "
+            "Call endpoint_status(probe=True) or validate_hpc_setup() to confirm "
+            "a real worker responds."
         ),
     }
 
@@ -535,52 +549,88 @@ def get_execution_mode() -> Dict[str, Any]:
 def endpoint_status(
     endpoint: str | None = None,
     force: bool = False,
+    probe: bool = False,
+    probe_timeout_seconds: int = 60,
 ) -> Dict[str, Any]:
-    """Fast, cached status check for one or all configured HPC endpoints.
+    """Check the status of one or all configured HPC endpoints.
 
-    Unlike :func:`validate_hpc_setup`, this tool does not submit a remote
-    probe task — it just asks the local Globus Compute SDK whether each
-    endpoint manager is reachable. Results are cached in-process for a few
-    seconds so back-to-back calls (for example, polling on every chat turn)
-    are effectively free.
+    By default this is a **fast, cached manager check** — it queries the Globus
+    cloud about the endpoint manager process. Use ``probe=True`` to also submit
+    a lightweight task that confirms a real worker responds.
+
+    Status values
+    -------------
+    ``"registered"``
+        Manager is running; Slurm/PBS will allocate workers on demand.
+        This is the normal idle state between jobs.
+    ``"active"``
+        Manager is running **and** a probe task confirmed a worker responded.
+        Only returned when ``probe=True``.
+    ``"offline"``
+        Manager is not running. SSH in and run
+        ``globus-compute-endpoint start <name>``.
+    ``"unreachable"``
+        Cannot contact Globus Compute (auth or network error).
+    ``"no_endpoint"``
+        No endpoint UUID configured.
 
     Parameters
     ----------
     endpoint : str | None
-        If provided, only this configured endpoint is checked. If ``None``,
-        every endpoint in ``config.yaml`` is checked.
+        Named endpoint to check, or ``None`` to check all configured endpoints.
     force : bool, default False
-        Bypass the in-process cache and re-query the SDK for every endpoint.
+        Bypass the in-process cache and re-query the SDK.
+    probe : bool, default False
+        After the manager check, submit a tiny task to confirm a worker
+        responds. Raises the status from ``"registered"`` to ``"active"``
+        if successful. Takes 15–90 s depending on scheduler queue depth.
+    probe_timeout_seconds : int, default 60
+        Timeout for the worker probe task (only used when ``probe=True``).
 
     Returns
     -------
     dict
-        Dictionary with keys ``endpoints`` (list of per-endpoint status rows
-        containing ``name``, ``endpoint_id``, ``status``, ``cached``,
-        ``cache_age_seconds``, and ``error`` when applicable), ``mode``
-        (current execution mode), and ``default_endpoint`` (name of the
-        default endpoint, if any).
+        Keys ``endpoints`` (list of per-endpoint rows), ``mode``,
+        ``default_endpoint``, and ``_provenance``.
 
     Examples
     --------
     >>> endpoint_status()
-    {"endpoints": [{"name": "improv", "status": "offline", ...},
-                   {"name": "ucar", "status": "online", ...}], ...}
+    {"endpoints": [{"name": "chrysalis", "status": "registered", ...}], ...}
+
+    >>> endpoint_status(endpoint="chrysalis", probe=True, probe_timeout_seconds=90)
+    {"endpoints": [{"name": "chrysalis", "status": "active",
+                    "node": "chr-0497", "python": "3.13.13", ...}], ...}
     """
     from uxarray_mcp.remote.config import load_config
     from uxarray_mcp.remote.health import (
-        check_all_endpoints_health,
-        check_endpoint_health,
+        check_all_endpoints_manager_status,
+        check_endpoint_manager_status,
+        probe_endpoint_worker,
     )
 
     base_config = load_config(_CONFIG_PATH)
 
     if endpoint is not None:
         scoped = base_config.for_endpoint(endpoint=endpoint)
-        row = check_endpoint_health(scoped, force=force)
+        row = check_endpoint_manager_status(scoped, force=force)
+        if probe and row.get("status") in ("registered", "active"):
+            probe_row = probe_endpoint_worker(
+                scoped, timeout_seconds=probe_timeout_seconds
+            )
+            row.update(probe_row)
         endpoints_payload = [{"name": scoped.endpoint_name or endpoint, **row}]
     else:
-        endpoints_payload = check_all_endpoints_health(base_config, force=force)
+        endpoints_payload = check_all_endpoints_manager_status(base_config, force=force)
+        if probe:
+            for i, row in enumerate(endpoints_payload):
+                if row.get("status") in ("registered", "active"):
+                    name = row["name"]
+                    scoped = base_config.for_endpoint(endpoint=name)
+                    probe_row = probe_endpoint_worker(
+                        scoped, timeout_seconds=probe_timeout_seconds
+                    )
+                    endpoints_payload[i] = {**row, **probe_row}
 
     result: Dict[str, Any] = {
         "endpoints": endpoints_payload,
@@ -591,7 +641,12 @@ def endpoint_status(
     return attach_provenance(
         result,
         tool="endpoint_status",
-        inputs={"endpoint": endpoint, "force": force},
+        inputs={
+            "endpoint": endpoint,
+            "force": force,
+            "probe": probe,
+            "probe_timeout_seconds": probe_timeout_seconds if probe else None,
+        },
     )
 
 

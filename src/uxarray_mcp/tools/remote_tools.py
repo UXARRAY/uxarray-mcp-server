@@ -13,21 +13,30 @@ from mcp.types import ImageContent, TextContent
 from uxarray_mcp.state import OperationTracker
 
 
-def _endpoint_is_ready(agent) -> tuple[bool, str]:
-    """Pre-flight check: return (ready, reason) before submitting an HPC job.
+def _endpoint_manager_is_up(agent) -> tuple[bool, str]:
+    """Pre-flight check: return (up, reason) before submitting an HPC job.
 
-    Fails fast instead of waiting for the full timeout_seconds.
+    Checks only that the Globus Compute endpoint manager is registered.
+    ``"registered"`` is sufficient to submit tasks — the scheduler allocates
+    worker nodes on demand. This check does not confirm that a worker will
+    actually respond (use ``probe_endpoint_worker()`` for that).
     """
-    from uxarray_mcp.remote.health import check_endpoint_health
+    from uxarray_mcp.remote.health import check_endpoint_manager_status
 
-    health = check_endpoint_health(agent.config)
-    status = health.get("status", "unknown")
-    if status in ("online", "healthy"):
+    status_info = check_endpoint_manager_status(agent.config)
+    status = status_info.get("status", "unknown")
+    if status in ("registered", "active"):
         return True, "ok"
     return (
         False,
-        f"endpoint status={status!r}: {health.get('error', health.get('message', ''))}",
+        f"endpoint status={status!r}: "
+        f"{status_info.get('error', status_info.get('message', ''))}",
     )
+
+
+# Backwards-compatibility alias — existing callers that import _endpoint_is_ready
+# continue to work while we migrate.
+_endpoint_is_ready = _endpoint_manager_is_up
 
 
 def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
