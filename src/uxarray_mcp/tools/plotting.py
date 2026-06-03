@@ -9,7 +9,12 @@ import uxarray as ux
 from mcp.types import ImageContent, TextContent
 
 from uxarray_mcp.domain.mesh import load_grid
-from uxarray_mcp.domain.plotting import render_mesh, render_variable, render_zonal_mean
+from uxarray_mcp.domain.plotting import (
+    render_mesh,
+    render_mesh_geo,
+    render_variable,
+    render_zonal_mean,
+)
 from uxarray_mcp.domain.zonal import compute_zonal_mean_stats
 from uxarray_mcp.provenance import attach_provenance
 
@@ -117,6 +122,413 @@ def _plot_mesh_local(
         ImageContent(type="image", data=b64, mimeType="image/png"),
         TextContent(type="text", text=json.dumps(provenance, indent=2)),
     ]
+
+
+def plot_mesh_geo(
+    grid_path: Optional[str] = None,
+    width: int = 1200,
+    height: int = 800,
+    lon_bounds: Optional[list] = None,
+    lat_bounds: Optional[list] = None,
+    coastlines: bool = True,
+    borders: bool = True,
+    rivers: bool = False,
+    lakes: bool = True,
+    show_mesh_boundary: bool = False,
+    basemap: bool = False,
+    mesh_alpha: float = 0.35,
+    mesh_edgecolor: str = "#333333",
+    mesh_linewidth: float = 0.25,
+    cities: bool = False,
+    city_scale: str = "50m",
+    session_id: Optional[str] = None,
+    dataset_handle: Optional[str] = None,
+) -> list[Any]:
+    """Render a mesh with geographic context: coastlines, borders, lakes, and optional terrain.
+
+    This tool produces a Cartopy-backed geographic plot that shows the mesh
+    topology overlaid on a proper map with natural geographic features.
+    It works for all mesh formats (MPAS, UGRID, SCRIP, ESMF, ICON, HEALPix).
+
+    ## When to use this vs plot_mesh
+
+    Use ``plot_mesh_geo`` when the user wants to see the mesh **in geographic
+    context** — where it is on the globe, how it relates to coastlines, which
+    regions it covers. Use ``plot_mesh`` (the HoloViews wireframe) for pure
+    topology inspection without geographic reference.
+
+    ## LLM routing guide — map user intent to parameters
+
+    **Default call** — "show me the mesh", "plot the grid", "what does the mesh
+    look like": call with all defaults. Coastlines and borders are on by default;
+    the mesh cells are semi-transparent white so the land/ocean background shows
+    through.
+
+    **Regional zoom** — "zoom to the Gulf of Mexico", "show North America",
+    "plot the European region": set ``lon_bounds`` and ``lat_bounds``.
+    Gulf of Mexico → lon_bounds=[-98,-79], lat_bounds=[17,32].
+    North America → lon_bounds=[-140,-50], lat_bounds=[15,75].
+    Europe → lon_bounds=[-15,45], lat_bounds=[35,72].
+
+    **Mesh boundary** — "show the mesh boundary", "highlight where the mesh
+    ends", "trace the coastline from the mesh itself": set
+    ``show_mesh_boundary=True``. Traces actual cell boundary edges in red.
+    Only meaningful for culled/regional meshes (MPAS ocean, regional UGRID).
+    Silently skipped for closed meshes (ICON, HEALPix). Off by default
+    because boundary construction can be slow for large meshes.
+
+    **Rivers** — "add rivers", "show major rivers", "include waterways":
+    set ``rivers=True``.
+
+    **City labels** — "show cities", "label major cities", "add city names",
+    "where is Chicago on this mesh": set ``cities=True``. Use
+    ``city_scale="50m"`` for major cities only (~500 worldwide) or
+    ``city_scale="10m"`` for dense coverage (~7000 cities).
+    Do NOT set ``cities=True`` unless the user explicitly asks.
+
+    **Terrain basemap** — "with terrain", "satellite background",
+    "topographic background", "show elevation": set ``basemap=True``.
+    Requires ``pip install contextily`` and internet access. Falls back to
+    a NASA stock image if contextily is not installed.
+    Do NOT set ``basemap=True`` by default — it requires a network call.
+
+    **Transparent cells** — "more transparent", "see through the cells":
+    decrease ``mesh_alpha`` (e.g. 0.15). Range 0–1.
+
+    **Opaque / wireframe** — "just show the mesh edges", "wireframe only",
+    "no fill": set ``mesh_alpha=0.0`` or ``mesh_alpha=0.05``, increase
+    ``mesh_linewidth`` (e.g. 0.5).
+
+    **No borders** — "no political boundaries", "just coastlines":
+    set ``borders=False``.
+
+    **No geographic features** — "clean mesh", "mesh only":
+    set ``coastlines=False, borders=False, lakes=False``.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to the mesh file (UGRID, MPAS, SCRIP, ESMF, ICON, etc.) or
+        ``"healpix:<zoom>"`` for HEALPix grids.
+    width : int, default 1200
+        Image width in pixels.
+    height : int, default 800
+        Image height in pixels.
+    lon_bounds : list[float, float] | None
+        Longitude range [west, east] to zoom the plot. None = global.
+    lat_bounds : list[float, float] | None
+        Latitude range [south, north] to zoom the plot. None = global.
+    coastlines : bool, default True
+        Draw Cartopy 50m Natural Earth coastlines.
+    borders : bool, default True
+        Draw national borders.
+    rivers : bool, default False
+        Draw major rivers in blue. Set True only when user asks.
+    lakes : bool, default True
+        Fill lakes with light blue.
+    show_mesh_boundary : bool, default False
+        Trace the actual mesh boundary edges in red. Only useful for culled/
+        open meshes. Off by default — can be slow for large meshes.
+    basemap : bool, default False
+        Fetch terrain tile background via contextily. Requires internet access.
+        Off by default — set True only when user explicitly requests terrain.
+    mesh_alpha : float, default 0.35
+        Cell fill transparency (0 = invisible, 1 = opaque).
+    mesh_edgecolor : str, default "#333333"
+        Cell edge colour.
+    mesh_linewidth : float, default 0.25
+        Cell edge width in points.
+    cities : bool, default False
+        Add city labels. Off by default. Set True only when user asks for
+        city names or wants to identify specific locations.
+    city_scale : str, default "50m"
+        ``"50m"`` = major cities only (~500 worldwide).
+        ``"10m"`` = dense coverage (~7000 cities).
+    session_id : str | None
+        Session for dataset handle resolution.
+    dataset_handle : str | None
+        Handle from ``register_dataset``.
+
+    Returns
+    -------
+    list
+        MCP content list: [ImageContent (inline PNG), TextContent (provenance JSON)].
+    """
+    grid_path, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
+
+    if not grid_path.lower().startswith("healpix"):
+        grid_file = Path(grid_path)
+        if not grid_file.exists():
+            raise FileNotFoundError(f"Grid file not found: {grid_path}")
+        if grid_file.stat().st_size == 0:
+            raise ValueError(f"Grid file is empty: {grid_path}")
+
+    grid = load_grid(grid_path)
+
+    png_bytes, render_info = render_mesh_geo(
+        grid,
+        width=width,
+        height=height,
+        lon_bounds=tuple(lon_bounds) if lon_bounds else None,
+        lat_bounds=tuple(lat_bounds) if lat_bounds else None,
+        coastlines=coastlines,
+        borders=borders,
+        rivers=rivers,
+        lakes=lakes,
+        show_mesh_boundary=show_mesh_boundary,
+        basemap=basemap,
+        mesh_alpha=mesh_alpha,
+        mesh_edgecolor=mesh_edgecolor,
+        mesh_linewidth=mesh_linewidth,
+    )
+
+    # ── Optional city labels (post-render pass) ───────────────────────────────
+    if cities:
+        png_bytes = _add_city_labels(
+            png_bytes,
+            width,
+            height,
+            lon_bounds,
+            lat_bounds,
+            city_scale=city_scale,
+        )
+
+    b64 = base64.b64encode(png_bytes).decode("utf-8")
+
+    # ── Build human-readable plot note ───────────────────────────────────────
+    note = _build_plot_note(
+        render_info, grid, cities, city_scale, lon_bounds, lat_bounds
+    )
+
+    result = {
+        "image_size_bytes": len(png_bytes),
+        "grid_info": {
+            "n_face": int(grid.n_face),
+            "n_node": int(grid.n_node),
+            "n_edge": int(grid.n_edge),
+        },
+        "render_info": render_info,
+        "plot_note": note,
+    }
+    provenance = attach_provenance(
+        result,
+        tool="plot_mesh_geo",
+        inputs={
+            "grid_path": grid_path,
+            "lon_bounds": lon_bounds,
+            "lat_bounds": lat_bounds,
+            "show_mesh_boundary": show_mesh_boundary,
+            "basemap": basemap,
+            "cities": cities,
+        },
+        artifacts=[
+            {
+                "type": "plot",
+                "plot_type": "mesh_geographic",
+                "format": "png",
+                "size_bytes": len(png_bytes),
+            }
+        ],
+    )
+    return [
+        ImageContent(type="image", data=b64, mimeType="image/png"),
+        TextContent(type="text", text=note + "\n\n" + json.dumps(provenance, indent=2)),
+    ]
+
+
+def _build_plot_note(
+    render_info: dict,
+    grid: Any,
+    cities: bool,
+    city_scale: str,
+    lon_bounds: Optional[list],
+    lat_bounds: Optional[list],
+) -> str:
+    """Build a concise, human-readable note describing what was plotted
+    and what the user can ask to change next.
+
+    This note is appended to every plot_mesh_geo response so the user
+    always knows what parameters are active and what they can ask for next,
+    without having to read raw JSON.
+    """
+    lines = []
+
+    # ── What was rendered ────────────────────────────────────────────────────
+    n = render_info["n_faces_rendered"]
+    total = render_info["n_faces_total"]
+    region = render_info["region"]
+    if region == "regional" and lon_bounds and lat_bounds:
+        region_desc = (
+            f"regional subset (lon {lon_bounds[0]}°–{lon_bounds[1]}°, "
+            f"lat {lat_bounds[0]}°–{lat_bounds[1]}°)"
+        )
+    else:
+        region_desc = "global"
+
+    lines.append(
+        f"**Plot note:** {n:,} of {total:,} mesh faces rendered ({region_desc})."
+    )
+
+    # ── Boundary status ───────────────────────────────────────────────────────
+    status = render_info["boundary_status"]
+    if status == "drawn":
+        lines.append(
+            f"Mesh boundary shown in red — {render_info['n_boundary_edges']:,} "
+            f"cell-edge segments tracing the actual mesh cutout boundary."
+        )
+    elif status == "closed_mesh":
+        lines.append(
+            "Mesh boundary not shown — this is a closed spherical mesh "
+            "(ICON, HEALPix) with no geographic cutout; Natural Earth "
+            "coastlines used as reference instead."
+        )
+    elif status == "all_filtered":
+        lines.append(
+            "Mesh boundary not shown — all detected boundary edges were "
+            "grid-seam artefacts (e.g. SCRIP prime-meridian seam). "
+            "This mesh has no real geographic cutout boundary."
+        )
+    elif status == "disabled":
+        lines.append(
+            "Mesh boundary not shown (off by default). "
+            'Ask "show the mesh boundary" to enable it.'
+        )
+
+    # ── Seam faces note ───────────────────────────────────────────────────────
+    skipped = render_info["seam_faces_skipped"]
+    if skipped > 0:
+        lines.append(
+            f"{skipped:,} antimeridian-crossing face(s) omitted "
+            "(UXarray PR #1519 will render these correctly when merged)."
+        )
+
+    # ── Active geographic features ────────────────────────────────────────────
+    feats = render_info["features_drawn"]
+    if feats:
+        lines.append(f"Geographic reference: {', '.join(feats)} (Natural Earth 50m).")
+
+    if cities:
+        scale_desc = (
+            "major cities (~500)" if city_scale == "50m" else "all cities (~7000)"
+        )
+        lines.append(f"City labels: {scale_desc}.")
+
+    basemap = render_info["basemap_used"]
+    if basemap == "contextily":
+        lines.append("Terrain basemap: OpenTopoMap (contextily).")
+    elif basemap == "stock_img":
+        lines.append("Terrain basemap: NASA stock image (contextily not installed).")
+
+    # ── What the user can ask for next ────────────────────────────────────────
+    suggestions = []
+    if lon_bounds is None:
+        suggestions.append('zoom to a region (e.g. "show North America")')
+    if "rivers" not in feats:
+        suggestions.append("add rivers")
+    if not cities:
+        suggestions.append("add city labels")
+    if basemap == "none":
+        suggestions.append("add terrain background")
+    if status == "disabled":
+        suggestions.append("show the mesh boundary in red")
+    if "borders" in feats:
+        suggestions.append("remove borders")
+    suggestions.append("make cells more transparent")
+    suggestions.append("show mesh-only without geographic features")
+
+    lines.append("You can ask to: " + "; ".join(suggestions[:5]) + ".")
+
+    return "\n".join(lines)
+
+
+def _add_city_labels(
+    png_bytes: bytes,
+    width: int,
+    height: int,
+    lon_bounds: Optional[list],
+    lat_bounds: Optional[list],
+    city_scale: str = "50m",
+) -> bytes:
+    """Overlay city labels on an existing PNG using cartopy populated places."""
+    import io as _io
+
+    import cartopy.crs as ccrs
+    import cartopy.io.shapereader as shpreader
+    from PIL import Image
+
+    # Load the existing PNG and composite city labels on top
+    base_img = Image.open(_io.BytesIO(png_bytes)).convert("RGBA")
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    dpi = 120
+    proj = ccrs.PlateCarree()
+    fig, ax = plt.subplots(
+        figsize=(width / dpi, height / dpi),
+        dpi=dpi,
+        subplot_kw={"projection": proj},
+        facecolor=(0, 0, 0, 0),  # transparent
+    )
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
+
+    if lon_bounds and lat_bounds:
+        ax.set_extent(
+            [lon_bounds[0], lon_bounds[1], lat_bounds[0], lat_bounds[1]], crs=proj
+        )
+    else:
+        ax.set_global()
+
+    try:
+        shpfile = shpreader.natural_earth(
+            resolution=city_scale, category="cultural", name="populated_places"
+        )
+        reader = shpreader.Reader(shpfile)
+        for record in reader.records():
+            geom = record.geometry
+            name = record.attributes.get("NAME", "")
+            lon, lat = geom.x, geom.y
+            if lon_bounds and lat_bounds:
+                if not (
+                    lon_bounds[0] <= lon <= lon_bounds[1]
+                    and lat_bounds[0] <= lat <= lat_bounds[1]
+                ):
+                    continue
+            ax.plot(lon, lat, "k.", markersize=2, transform=proj, zorder=6)
+            ax.text(
+                lon + 0.3,
+                lat,
+                name,
+                fontsize=5.5,
+                color="#111",
+                transform=proj,
+                zorder=7,
+                bbox=dict(
+                    facecolor="white",
+                    alpha=0.6,
+                    pad=0.5,
+                    edgecolor="none",
+                    boxstyle="round,pad=0.2",
+                ),
+            )
+    except Exception:
+        pass  # silently skip if shapefile unavailable
+
+    buf = _io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", transparent=True)
+    plt.close(fig)
+    buf.seek(0)
+
+    overlay = Image.open(buf).convert("RGBA").resize(base_img.size)
+    composite = Image.alpha_composite(base_img, overlay)
+
+    out = _io.BytesIO()
+    composite.save(out, format="PNG")
+    out.seek(0)
+    return out.read()
 
 
 def _plot_variable_local(

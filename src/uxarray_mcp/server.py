@@ -41,6 +41,7 @@ from uxarray_mcp.tools import (
     list_datasets,
     list_operations,
     plot_mesh,
+    plot_mesh_geo,
     plot_variable,
     plot_zonal_mean,
     probe_path_access,
@@ -92,6 +93,7 @@ mcp.tool()(list_datasets)
 
 # Visualization tools — same dispatcher pattern.
 mcp.tool()(plot_mesh)
+mcp.tool()(plot_mesh_geo)
 mcp.tool()(plot_variable)
 mcp.tool()(plot_zonal_mean)
 
