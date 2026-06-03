@@ -132,13 +132,22 @@ Discover which tools and UXarray features apply to a specific grid and dataset. 
 
 ### `get_execution_mode`
 
-Returns the current execution mode and whether an HPC endpoint is configured.
+Returns the current execution mode and endpoint manager status.
 
-**Returns:** `mode`, `endpoint_id`, `endpoint_status`, `description`
+**Returns:** `mode`, `endpoint_id`, `endpoint_status`, `description`, `status_note`
 
-This is a manager-level status check only. An endpoint can report `online`
-while real remote tasks still fail because of scheduler, environment, or child
-endpoint issues.
+`endpoint_status` is one of:
+
+| Value | Meaning |
+|---|---|
+| `"registered"` | Manager is running; Slurm/PBS will allocate workers on demand |
+| `"offline"` | Manager is not running — SSH in and start it |
+| `"unreachable"` | Cannot contact Globus Compute |
+| `"no_endpoint"` | No endpoint configured |
+
+`"registered"` does **not** mean workers are actively running. Use
+`endpoint_status(probe=True)` or `validate_hpc_setup()` to confirm a real
+worker responds.
 
 ---
 
@@ -170,10 +179,10 @@ Runs a deeper HPC readiness diagnostic than `get_execution_mode`.
 
 **Returns:** `passed`, `mode`, `endpoint_id`, `endpoint_status`, `checks`, `remote_probe`, `sample_path_probe`, `_provenance`
 
-Use this first when an endpoint looks `online` but real remote calls hang or
-fall back locally. It is designed to surface problems like missing local
-Globus auth, missing `globus_compute_sdk`, scheduler bootstrap failures such as
-`qsub: command not found`, and child-endpoint startup issues.
+Use this when an endpoint is `"registered"` but real remote calls hang or
+fall back locally. It surfaces problems like missing local Globus auth,
+missing `globus_compute_sdk`, scheduler bootstrap failures (`qsub: command not found`),
+and worker environment issues.
 
 ---
 
@@ -471,10 +480,22 @@ radial profile. Useful for:
 
 ### `endpoint_status`
 
-Fast, cached status check for one or all configured HPC endpoints. Does not
-submit a remote probe — just asks the local Globus Compute SDK whether each
-endpoint manager is reachable. Results are cached (10 s healthy / 3 s unhealthy)
-so calling this on every chat turn is cheap.
+Check the status of one or all configured HPC endpoints.
+
+By default this is a **fast, cached manager check** — it queries the Globus
+cloud about the endpoint manager process without submitting any tasks.
+Use `probe=True` to also submit a lightweight task that confirms a real
+scheduler worker responds (takes 15–90 s).
+
+**Status values:**
+
+| Value | Meaning |
+|---|---|
+| `"registered"` | Manager is running; Slurm/PBS will allocate workers on demand. Normal idle state. |
+| `"active"` | Manager running + a probe task confirmed a real worker responded (`probe=True` only). |
+| `"offline"` | Manager not running — SSH in and run `globus-compute-endpoint start <name>`. |
+| `"unreachable"` | Cannot contact Globus Compute (auth or network error). |
+| `"no_endpoint"` | No endpoint UUID configured for this name. |
 
 **Parameters:**
 
@@ -482,8 +503,24 @@ so calling this on every chat turn is cheap.
 |------|------|-------------|
 | `endpoint` | `str` (optional) | Named endpoint to check; omit for all configured endpoints |
 | `force` | `bool` | Bypass cache and re-query the SDK (default: `False`) |
+| `probe` | `bool` | Also submit a lightweight task to confirm a worker responds (default: `False`) |
+| `probe_timeout_seconds` | `int` | Timeout for worker probe (default: `60`, only used when `probe=True`) |
 
-**Returns:** `endpoints` (list of rows with `name`, `endpoint_id`, `status`, `cached`, `cache_age_seconds`, `error`), `mode`, `default_endpoint`, `_provenance`
+**Returns:** `endpoints` (list of rows with `name`, `endpoint_id`, `status`, `cached`,
+`cache_age_seconds`, `node`, `python`, `slurm_job_id`, `error`), `mode`, `default_endpoint`, `_provenance`
+
+**Examples:**
+
+```
+# Fast manager check (always safe to call, results cached 10 s)
+endpoint_status()
+→ {"endpoints": [{"name": "chrysalis", "status": "registered", ...}], ...}
+
+# Confirm a real worker actually runs (submits a Slurm job)
+endpoint_status(endpoint="chrysalis", probe=True)
+→ {"endpoints": [{"name": "chrysalis", "status": "active",
+                  "node": "chr-0497", "python": "3.13.13", ...}], ...}
+```
 
 ---
 
