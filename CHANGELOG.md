@@ -30,6 +30,13 @@ under their entry.
   upstream `__init__.py` is unconditional.
 - `remote_subset_bbox_plot`: bounding-box subset + plot in a single
   remote call; returns inline PNG.
+- `plot_mesh_geo`: geographic mesh visualization with mesh-derived boundary
+  rendering and default metadata suitable for agent interpretation.
+- Vector-calculus tools: `calculate_gradient`, `calculate_curl`,
+  `calculate_divergence`, and `calculate_azimuthal_mean`, including remote
+  dispatch support for HPC workflows.
+- `endpoint_status`: fast cached endpoint manager status plus optional worker
+  probe for named endpoints.
 - Persisted workflows (`run_workflow`, `resume_workflow`,
   `get_workflow_status`) and stateful sessions
   (`create_session`, `register_dataset`, `get_session_state`).
@@ -50,6 +57,9 @@ under their entry.
 - README: replaced the "private repo" install instructions with the
   public-clone path and added a `How it runs` section with two ASCII
   diagrams (local stdio vs HPC dispatch).
+- FastMCP runtime dependency upgraded to `>=3.4.0`.
+- Cluster endpoint docs and setup scripts updated for Improv, UCAR/Casper,
+  and Chrysalis, including Slurm-backed Chrysalis guidance.
 
 ### Fixed
 - CLI config discovery now honors `./config.yaml` in the current working

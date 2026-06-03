@@ -103,7 +103,10 @@ HPC infrastructure for offloading computations to remote clusters via Globus Com
 
 ## Key Design Decisions
 
-**Conditional tool registration** — HPC tools are only registered with the MCP server when an endpoint UUID is configured. This keeps the tool list clean for local-only users.
+**Unified tool surface** — Tools are registered under one canonical name and
+accept `use_remote` / `endpoint` parameters when remote execution is available.
+The dispatcher falls back locally or reports endpoint readiness issues instead
+of exposing separate HPC-only tool names.
 
 **Domain/tool separation** — Computation logic lives in `domain/` so the same code can run locally or be serialized and sent to a remote cluster without importing MCP dependencies.
 

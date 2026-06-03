@@ -62,7 +62,7 @@ class TestCheckEndpointHealth:
             result = check_endpoint_health(config)
 
         assert result["status"] == "registered"
-        assert result["endpoint_id"] == "fake-uuid-1234"
+        assert result["endpoint_configured"] is True
 
     @requires_globus
     def test_unreachable_endpoint(self):
@@ -75,7 +75,7 @@ class TestCheckEndpointHealth:
             result = check_endpoint_health(config)
 
         assert result["status"] == "unreachable"
-        assert result["endpoint_id"] == "fake-uuid-1234"
+        assert result["endpoint_configured"] is True
         assert "error" in result
 
     @requires_globus

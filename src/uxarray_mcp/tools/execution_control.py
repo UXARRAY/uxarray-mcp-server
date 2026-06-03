@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -14,7 +15,22 @@ from uxarray_mcp.remote.config import normalize_execution_mode
 from uxarray_mcp.state import OperationTracker
 
 _VALID_MODES = ("local", "hpc", "auto")
-_CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "config.yaml"
+_CONFIG_PATH: Path | None = None
+
+
+def _load_config_for_tools():
+    """Load config through the same discovery path used by remote dispatch."""
+    from uxarray_mcp.remote.config import discover_config_path, load_config
+
+    path = _CONFIG_PATH or discover_config_path()
+    return load_config(path), path
+
+
+def _endpoint_configured_payload(config: Any) -> dict[str, Any]:
+    return {
+        "endpoint_name": config.endpoint_name,
+        "endpoint_configured": bool(config.endpoint_id),
+    }
 
 
 def _load_globus_compute_sdk():
@@ -223,9 +239,7 @@ def validate_hpc_setup(
     """
     tracker = OperationTracker("validate_hpc_setup", session_id=session_id)
     tracker.stage("config", "Loading HPC configuration.")
-    from uxarray_mcp.remote.config import load_config
-
-    base_config = load_config(_CONFIG_PATH)
+    base_config, config_path = _load_config_for_tools()
     config = base_config.for_endpoint(endpoint=endpoint, path=sample_path)
     checks: List[Dict[str, Any]] = []
     checks.append(
@@ -233,17 +247,18 @@ def validate_hpc_setup(
             "config",
             bool(config.endpoint_id),
             (
-                f"Configured endpoint_id={config.endpoint_id!r} "
-                f"({config.endpoint_name or 'default'}) in {_CONFIG_PATH.name}."
+                f"Configured endpoint {config.endpoint_name or 'default'} "
+                f"in {config_path or 'discovered config'}."
                 if config.endpoint_id
-                else f"No endpoint could be resolved in {_CONFIG_PATH.name}."
+                else f"No endpoint could be resolved in {config_path or 'discovered config'}."
             ),
             details={
                 "mode": config.execution_mode,
                 "endpoint_name": config.endpoint_name,
+                "endpoint_configured": bool(config.endpoint_id),
                 "default_endpoint": config.default_endpoint,
                 "configured_endpoints": config.endpoint_names,
-                "config_path": str(_CONFIG_PATH),
+                "config_path": str(config_path) if config_path is not None else None,
             },
             guidance=(
                 "Copy config.yaml.example to config.yaml and set "
@@ -264,8 +279,7 @@ def validate_hpc_setup(
         result = {
             "passed": False,
             "mode": config.execution_mode,
-            "endpoint_name": config.endpoint_name,
-            "endpoint_id": config.endpoint_id,
+            **_endpoint_configured_payload(config),
             "endpoint_status": endpoint_status,
             "checks": checks,
             "remote_probe": remote_probe,
@@ -304,8 +318,7 @@ def validate_hpc_setup(
         result = {
             "passed": False,
             "mode": config.execution_mode,
-            "endpoint_name": config.endpoint_name,
-            "endpoint_id": config.endpoint_id,
+            **_endpoint_configured_payload(config),
             "endpoint_status": endpoint_status,
             "checks": checks,
             "remote_probe": remote_probe,
@@ -395,14 +408,26 @@ def validate_hpc_setup(
 
         try:
             tracker.stage("submitted", "Submitting remote runtime probe.")
-            executor = Executor(
-                endpoint_id=config.endpoint_id,
-                serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
-            )
-            future = executor.submit(remote_runtime_probe)
-            remote_probe = future.result(
-                timeout=min(config.timeout_seconds, probe_timeout_seconds)
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+                    category=UserWarning,
+                )
+                executor = Executor(
+                    endpoint_id=config.endpoint_id,
+                    serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
+                )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+                    category=UserWarning,
+                )
+                future = executor.submit(remote_runtime_probe)
+                remote_probe = future.result(
+                    timeout=min(config.timeout_seconds, probe_timeout_seconds)
+                )
             checks.append(
                 _make_check(
                     "remote_probe",
@@ -459,8 +484,7 @@ def validate_hpc_setup(
     result = {
         "passed": passed,
         "mode": config.execution_mode,
-        "endpoint_name": config.endpoint_name,
-        "endpoint_id": config.endpoint_id,
+        **_endpoint_configured_payload(config),
         "endpoint_status": endpoint_status,
         "checks": checks,
         "remote_probe": remote_probe,
@@ -491,8 +515,9 @@ def get_execution_mode() -> Dict[str, Any]:
     Returns
     -------
     dict
-        Dictionary with keys ``mode``, ``endpoint_id``, ``endpoint_status``,
-        ``description``, and ``status_note``.
+        Dictionary with keys ``mode``, ``endpoint_name``,
+        ``endpoint_configured``, ``endpoint_status``, ``description``, and
+        ``status_note``.
 
         ``endpoint_status`` is one of:
 
@@ -509,12 +534,11 @@ def get_execution_mode() -> Dict[str, Any]:
     Examples
     --------
     >>> get_execution_mode()
-    {"mode": "auto", "endpoint_id": "00000000-...", "endpoint_status": "registered"}
+    {"mode": "auto", "endpoint_name": "improv", "endpoint_status": "registered"}
     """
-    from uxarray_mcp.remote.config import load_config
     from uxarray_mcp.remote.health import check_endpoint_manager_status
 
-    config = load_config(_CONFIG_PATH)
+    config, _ = _load_config_for_tools()
     status_info = check_endpoint_manager_status(config)
 
     descriptions = {
@@ -525,8 +549,7 @@ def get_execution_mode() -> Dict[str, Any]:
 
     result: Dict[str, Any] = {
         "mode": config.execution_mode,
-        "endpoint_name": config.endpoint_name,
-        "endpoint_id": config.endpoint_id,
+        **_endpoint_configured_payload(config),
         "default_endpoint": config.default_endpoint,
         "configured_endpoints": config.endpoint_names,
         "endpoint_status": status_info.get("status", "unknown"),
@@ -602,14 +625,13 @@ def endpoint_status(
     {"endpoints": [{"name": "chrysalis", "status": "active",
                     "node": "chr-0497", "python": "3.13.13", ...}], ...}
     """
-    from uxarray_mcp.remote.config import load_config
     from uxarray_mcp.remote.health import (
         check_all_endpoints_manager_status,
         check_endpoint_manager_status,
         probe_endpoint_worker,
     )
 
-    base_config = load_config(_CONFIG_PATH)
+    base_config, _ = _load_config_for_tools()
 
     if endpoint is not None:
         scoped = base_config.for_endpoint(endpoint=endpoint)
@@ -667,7 +689,8 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
         Dictionary containing:
         - mode: The new execution mode
         - previous_mode: The mode that was active before this call
-        - endpoint_id: Configured endpoint UUID, or None
+        - endpoint_name: Configured endpoint name, or None
+        - endpoint_configured: Whether an endpoint UUID is configured privately
         - message: Confirmation message
 
     Raises
@@ -690,14 +713,15 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
         ) from exc
 
     from uxarray_mcp.remote import agent as _agent_module
-    from uxarray_mcp.remote.config import load_config
+    from uxarray_mcp.remote.config import USER_CONFIG_PATH
 
-    config = load_config(_CONFIG_PATH)
+    config, config_path = _load_config_for_tools()
     previous_mode = config.execution_mode
+    write_path = config_path or USER_CONFIG_PATH
 
     # Read the current config file and update execution_mode in place
-    if _CONFIG_PATH.exists():
-        with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+    if write_path.exists():
+        with open(write_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     else:
         data = {}
@@ -706,7 +730,8 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
         data["hpc"] = {}
     data["hpc"]["execution_mode"] = normalized_mode
 
-    with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+    write_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(write_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
 
     # Reset singleton agent so next call picks up the new config
@@ -721,10 +746,9 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "mode": normalized_mode,
         "previous_mode": previous_mode,
-        "endpoint_id": config.endpoint_id,
+        **_endpoint_configured_payload(config),
         "message": (
-            f"Switched to {normalized_mode!r} mode. "
-            f"Config saved to {_CONFIG_PATH.name}."
+            f"Switched to {normalized_mode!r} mode. Config saved to {write_path}."
         ),
     }
 

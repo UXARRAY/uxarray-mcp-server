@@ -134,7 +134,7 @@ Discover which tools and UXarray features apply to a specific grid and dataset. 
 
 Returns the current execution mode and endpoint manager status.
 
-**Returns:** `mode`, `endpoint_id`, `endpoint_status`, `description`, `status_note`
+**Returns:** `mode`, `endpoint_name`, `endpoint_configured`, `endpoint_status`, `description`, `status_note`
 
 `endpoint_status` is one of:
 
@@ -161,7 +161,7 @@ Switch execution mode without editing config files.
 |------|------|-------------|
 | `mode` | `str` | One of `"local"`, `"hpc"`, or `"auto"` |
 
-**Returns:** `mode`, `previous_mode`, `endpoint_id`, `message`
+**Returns:** `mode`, `previous_mode`, `endpoint_name`, `endpoint_configured`, `message`
 
 ---
 
@@ -177,7 +177,7 @@ Runs a deeper HPC readiness diagnostic than `get_execution_mode`.
 | `probe_timeout_seconds` | `int` | Timeout for the remote probe (default: `30`) |
 | `sample_path` | `str` (optional) | Exact remote path to probe after the runtime probe succeeds |
 
-**Returns:** `passed`, `mode`, `endpoint_id`, `endpoint_status`, `checks`, `remote_probe`, `sample_path_probe`, `_provenance`
+**Returns:** `passed`, `mode`, `endpoint_name`, `endpoint_configured`, `endpoint_status`, `checks`, `remote_probe`, `sample_path_probe`, `_provenance`
 
 Use this when an endpoint is `"registered"` but real remote calls hang or
 fall back locally. It surfaces problems like missing local Globus auth,
@@ -495,7 +495,7 @@ scheduler worker responds (takes 15–90 s).
 | `"active"` | Manager running + a probe task confirmed a real worker responded (`probe=True` only). |
 | `"offline"` | Manager not running — SSH in and run `globus-compute-endpoint start <name>`. |
 | `"unreachable"` | Cannot contact Globus Compute (auth or network error). |
-| `"no_endpoint"` | No endpoint UUID configured for this name. |
+| `"no_endpoint"` | No endpoint configured for this name. |
 
 **Parameters:**
 
@@ -506,8 +506,11 @@ scheduler worker responds (takes 15–90 s).
 | `probe` | `bool` | Also submit a lightweight task to confirm a worker responds (default: `False`) |
 | `probe_timeout_seconds` | `int` | Timeout for worker probe (default: `60`, only used when `probe=True`) |
 
-**Returns:** `endpoints` (list of rows with `name`, `endpoint_id`, `status`, `cached`,
-`cache_age_seconds`, `node`, `python`, `slurm_job_id`, `error`), `mode`, `default_endpoint`, `_provenance`
+**Returns:** `endpoints` (list of rows with `name`, `endpoint_name`,
+`endpoint_configured`, `status`, `cached`, `cache_age_seconds`, `node`,
+`python`, `slurm_job_id`, `error`), `mode`, `default_endpoint`, `_provenance`.
+Raw endpoint UUIDs are read from private local config but are not returned in
+public tool payloads.
 
 **Examples:**
 

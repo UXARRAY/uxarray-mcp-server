@@ -42,7 +42,8 @@ def attach_provenance(
     inputs : dict
         The input arguments passed to the tool.
     venue : str
-        Execution venue: "local" or "hpc:<endpoint-id>".
+        Execution venue, for example ``"local"`` or ``"hpc:<endpoint-name>"``.
+        Public results should not expose raw endpoint UUIDs.
     warnings : list[str] | None
         Any warnings generated during execution.
     validation_summary : dict | None

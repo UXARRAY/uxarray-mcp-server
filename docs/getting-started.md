@@ -62,23 +62,29 @@ about the setup in three layers:
 3. the **remote worker environment** that must also have `uxarray` and the
    scientific I/O packages installed
 
-Then configure the local side:
+Then configure the local side with the CLI. This writes a private user config
+under `~/.config/uxarray-mcp/`; do not commit endpoint UUIDs to the repository.
 
 ```bash
-cp config.yaml.example config.yaml
+uxarray-mcp setup
+uxarray-mcp endpoints add <name> <endpoint-uuid> --set-default
 ```
 
-Then edit `config.yaml`:
+The equivalent private config schema is:
 
 ```yaml
 hpc:
-  globus_compute:
-    endpoint_id: "your-endpoint-uuid"
   execution_mode: "auto"      # local | hpc | auto
   timeout_seconds: 300
+  default_endpoint: "improv"
+  endpoints:
+    improv:
+      endpoint_id: "your-endpoint-uuid"
 ```
 
-Leave `endpoint_id` as `null` to run everything locally. HPC tools will only appear when an endpoint is configured.
+Omit endpoints to run everything locally. The same MCP tools are always
+registered; use `use_remote=True` and an optional `endpoint="name"` to request
+remote execution.
 
 Before that endpoint UUID will work, you must also:
 
@@ -90,7 +96,7 @@ Before that endpoint UUID will work, you must also:
   - install `globus-compute-endpoint` and `globus-compute-sdk`
   - install `uxarray`, `xarray`, `netCDF4`, and `h5netcdf`
   - run `globus-compute-endpoint configure <endpoint-name>`
-  - start the endpoint and copy its UUID into `config.yaml`
+  - start the endpoint and add its UUID with `uxarray-mcp endpoints add`
 
 Before you try a real remote file, authenticate the local machine once:
 
@@ -215,8 +221,10 @@ For the full HPC playbook and reusable scripts, see:
   2. Fully quit and reopen Claude Desktop
   3. Check the Developer Console: View > Developer > Developer Tools > Console
 
-**HPC tools not appearing**
-: Make sure `endpoint_id` is set in `config.yaml` (not `null`), then restart the server.
+**Remote calls fall back locally**
+: Run `endpoint_status(probe=True)` or `validate_hpc_setup` and make sure the
+  endpoint manager and worker probe both pass. The tool list itself is unified;
+  there are no separate HPC-only tool names.
 
 **Endpoint looks online but remote tasks still fail**
 : `get_execution_mode` only confirms the endpoint manager is reachable.

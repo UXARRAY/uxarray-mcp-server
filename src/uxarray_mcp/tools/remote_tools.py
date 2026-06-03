@@ -138,7 +138,7 @@ def _run_with_optional_hpc(
         )
         return result
 
-    endpoint_label = agent.config.endpoint_name or agent.config.endpoint_id
+    endpoint_label = agent.config.endpoint_name or "configured"
     tracker.stage(
         "submitted", f"Submitting {tool_name} to the HPC endpoint {endpoint_label}."
     )
@@ -422,7 +422,7 @@ def plot_mesh(
         - png_b64: Base64-encoded PNG string
         - image_size_bytes: PNG size in bytes
         - grid_info: {n_face, n_node, n_edge}
-        - execution_venue: "local" or "hpc:<endpoint_id>"
+        - execution_venue: "local" or "hpc:<endpoint-name>"
 
     Examples
     --------
@@ -523,7 +523,7 @@ def plot_variable(
         - image_size_bytes: PNG size in bytes
         - variable_name: Name of the plotted variable
         - grid_info: {n_face, n_node, n_edge}
-        - execution_venue: "local" or "hpc:<endpoint_id>"
+        - execution_venue: "local" or "hpc:<endpoint-name>"
     """
     from .plotting import _plot_variable_local, _resolve_plot_paths
 
@@ -640,7 +640,7 @@ def plot_zonal_mean(
         - variable_name: Name of the plotted variable
         - latitudes: List of latitude values
         - zonal_mean_values: List of zonal mean values
-        - execution_venue: "local" or "hpc:<endpoint_id>"
+        - execution_venue: "local" or "hpc:<endpoint-name>"
     """
     from .plotting import _plot_zonal_mean_local, _resolve_plot_paths
 

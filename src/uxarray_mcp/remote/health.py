@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import threading
 import time
+import warnings
 from typing import Any
 
 # ── Process-wide cached Client ────────────────────────────────────────────────
@@ -73,6 +74,14 @@ _GLOBUS_TO_STATUS: dict[str, str] = {
 def _translate_globus_status(raw: str) -> str:
     """Map a raw Globus status string to our vocabulary."""
     return _GLOBUS_TO_STATUS.get(raw.lower(), "unreachable")
+
+
+def _endpoint_public_fields(config: Any) -> dict[str, Any]:
+    """Return non-sensitive endpoint metadata for public tool payloads."""
+    return {
+        "endpoint_name": getattr(config, "endpoint_name", None) or "configured",
+        "endpoint_configured": bool(getattr(config, "endpoint_id", None)),
+    }
 
 
 def _get_client() -> Any:
@@ -154,8 +163,8 @@ def check_endpoint_manager_status(
         ``status``
             One of ``"registered"``, ``"offline"``, ``"unreachable"``,
             ``"no_endpoint"``.
-        ``endpoint_id``
-            The UUID (if configured).
+        ``endpoint_name`` / ``endpoint_configured``
+            Non-sensitive endpoint metadata. Raw UUIDs stay in private config.
         ``error``
             Error message when ``status`` is ``"unreachable"``.
         ``cached``
@@ -168,7 +177,7 @@ def check_endpoint_manager_status(
     >>> from uxarray_mcp.remote.config import load_config
     >>> config = load_config()
     >>> check_endpoint_manager_status(config)
-    {"status": "registered", "endpoint_id": "00000000-...", "cached": False}
+    {"status": "registered", "endpoint_name": "improv", "cached": False}
     """
     endpoint_id = getattr(config, "endpoint_id", None)
     if not endpoint_id:
@@ -184,12 +193,12 @@ def check_endpoint_manager_status(
         raw = client.get_endpoint_status(endpoint_id)
         raw_status = raw.get("status", "unknown") if isinstance(raw, dict) else str(raw)
         status = _translate_globus_status(raw_status)
-        payload: dict[str, Any] = {"status": status, "endpoint_id": endpoint_id}
+        payload: dict[str, Any] = {"status": status, **_endpoint_public_fields(config)}
         return _store(endpoint_id, payload)
     except Exception as exc:
         payload = {
             "status": "unreachable",
-            "endpoint_id": endpoint_id,
+            **_endpoint_public_fields(config),
             "error": str(exc),
         }
         return _store(endpoint_id, payload)
@@ -255,7 +264,7 @@ def probe_endpoint_worker(
     except ImportError:
         return {
             "status": "unreachable",
-            "endpoint_id": endpoint_id,
+            **_endpoint_public_fields(config),
             "error": "globus-compute-sdk not installed. Run: uv sync --extra hpc",
         }
 
@@ -273,17 +282,23 @@ def probe_endpoint_worker(
 
     t0 = time.monotonic()
     try:
-        with Executor(
-            endpoint_id=endpoint_id,
-            serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
-        ) as ex:
-            fut = ex.submit(_worker_probe)
-            result = fut.result(timeout=timeout_seconds)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+                category=UserWarning,
+            )
+            with Executor(
+                endpoint_id=endpoint_id,
+                serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
+            ) as ex:
+                fut = ex.submit(_worker_probe)
+                result = fut.result(timeout=timeout_seconds)
 
         elapsed = round(time.monotonic() - t0, 1)
         payload = {
             "status": "active",
-            "endpoint_id": endpoint_id,
+            **_endpoint_public_fields(config),
             "node": result.get("node", ""),
             "python": result.get("python", ""),
             "slurm_job_id": result.get("slurm_job_id") or None,
@@ -303,7 +318,7 @@ def probe_endpoint_worker(
     except TimeoutError:
         return {
             "status": "registered",
-            "endpoint_id": endpoint_id,
+            **_endpoint_public_fields(config),
             "error": f"Probe timed out after {timeout_seconds}s. Manager is up but "
             "no worker responded. The scheduler may be busy or the worker "
             "environment may be broken.",
@@ -312,7 +327,7 @@ def probe_endpoint_worker(
     except Exception as exc:
         return {
             "status": "unreachable",
-            "endpoint_id": endpoint_id,
+            **_endpoint_public_fields(config),
             "error": str(exc),
             "elapsed_seconds": round(time.monotonic() - t0, 1),
         }
@@ -323,7 +338,7 @@ def check_all_endpoints_manager_status(
 ) -> list[dict[str, Any]]:
     """Return a status row for every configured endpoint.
 
-    Each row contains ``name``, ``endpoint_id``, and the same fields produced
+    Each row contains ``name`` and the same fields produced
     by :func:`check_endpoint_manager_status`. Uses the cache by default.
     """
     rows: list[dict[str, Any]] = []

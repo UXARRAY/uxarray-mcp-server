@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from typing import Any, Dict, Optional
 
 try:
@@ -70,10 +71,16 @@ class UXarrayComputeAgent(_AcademyAgent):
                 ComputeSerializer,
             )
 
-            self._executor = Executor(
-                endpoint_id=self.config.endpoint_id,
-                serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+                    category=UserWarning,
+                )
+                self._executor = Executor(
+                    endpoint_id=self.config.endpoint_id,
+                    serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
+                )
         return self._executor
 
     @action
@@ -385,22 +392,28 @@ class UXarrayComputeAgent(_AcademyAgent):
         if executor is None:
             raise RuntimeError("HPC endpoint not configured")
 
-        future = executor.submit(func, *args, **kwargs)
-
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None, future.result, self.config.timeout_seconds
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+                category=UserWarning,
+            )
+            future = executor.submit(func, *args, **kwargs)
+            result = await loop.run_in_executor(
+                None, future.result, self.config.timeout_seconds
+            )
 
         # Attach provenance with the correct HPC venue — the remote functions
         # are self contained and don't call attach_provenance themselves.
         from uxarray_mcp.provenance import attach_provenance
 
+        endpoint_label = self.config.endpoint_name or "configured"
         return attach_provenance(
             result,
             tool=func.__name__,
             inputs={"args": [str(a) for a in args]},
-            venue=f"hpc:{self.config.endpoint_id}",
+            venue=f"hpc:{endpoint_label}",
         )
 
     def _run_local_inspect_mesh(self, file_path: str) -> Dict[str, Any]:

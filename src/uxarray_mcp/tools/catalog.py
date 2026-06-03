@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -62,7 +63,7 @@ def list_datasets(
         - groups: Files grouped by subdirectory, each with path, size_mb,
                   kind ("grid", "data", or "unknown"), and suggested tools
         - recommendations: Suggested next steps based on what was found
-        - execution_venue: "local" or "hpc:<endpoint_id>"
+        - execution_venue: "local" or "hpc:<endpoint-name>"
         - _provenance: Provenance metadata
 
     Examples:
@@ -331,17 +332,30 @@ def _list_datasets_remote(
             "HPC dependencies not installed. Run: uv sync --extra hpc"
         ) from exc
 
-    executor = Executor(
-        endpoint_id=config.endpoint_id,
-        serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
-    )
-    future = executor.submit(_remote_catalog_fn, directory, recursive, max_files)
-    raw = future.result(timeout=config.timeout_seconds)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+            category=UserWarning,
+        )
+        executor = Executor(
+            endpoint_id=config.endpoint_id,
+            serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
+        )
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+            category=UserWarning,
+        )
+        future = executor.submit(_remote_catalog_fn, directory, recursive, max_files)
+        raw = future.result(timeout=config.timeout_seconds)
 
     if "error" in raw:
         raise FileNotFoundError(raw["error"])
 
-    raw["execution_venue"] = f"hpc:{config.endpoint_id}"
+    endpoint_label = config.endpoint_name or "configured"
+    raw["execution_venue"] = f"hpc:{endpoint_label}"
     return attach_provenance(
         raw,
         tool="list_datasets",
@@ -351,5 +365,5 @@ def _list_datasets_remote(
             "max_files": max_files,
             "use_remote": True,
         },
-        venue=f"hpc:{config.endpoint_id}",
+        venue=f"hpc:{endpoint_label}",
     )

@@ -253,7 +253,7 @@ hpc:
         )
 
     assert result["endpoint_name"] == "improv"
-    assert result["endpoint_id"] == "improv-uuid"
+    assert result["endpoint_configured"] is True
     mock_client.get_endpoint_status.assert_called_once_with("improv-uuid")
 
 
@@ -293,7 +293,7 @@ hpc:
         )
 
     assert result["endpoint_name"] == "improv"
-    assert result["endpoint_id"] == "improv-uuid"
+    assert result["endpoint_configured"] is True
     mock_client.get_endpoint_status.assert_called_once_with("improv-uuid")
 
 

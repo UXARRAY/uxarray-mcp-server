@@ -91,6 +91,7 @@ Analysis:
 - `validate_dataset` — NaN, Inf, and fill value checks
 - `run_scientific_agent` — autonomous Analyze → Plan → Execute → Verify pipeline
 - `subset_bbox` / `subset_polygon` / `extract_cross_section` — spatial queries and regional reductions
+- `calculate_gradient`, `calculate_curl`, `calculate_divergence`, `calculate_azimuthal_mean` — vector calculus and radial summaries
 - `compare_fields`, `calculate_bias`, `calculate_rmse`, `calculate_pattern_correlation` — same-grid comparison metrics
 - `remap_variable` / `regrid_dataset` — UXarray-backed remapping to a target grid
 - `calculate_temporal_mean`, `calculate_anomaly`, `calculate_ensemble_mean`, `calculate_ensemble_spread` — temporal and ensemble summaries
@@ -105,12 +106,14 @@ Stateful workflows:
 Visualization (returns inline PNG):
 
 - `plot_mesh` — mesh wireframe
+- `plot_mesh_geo` — geographic mesh plot with boundary-aware rendering
 - `plot_variable` — face-centered variable as filled polygon map; supports `cmap`, `vmin`, `vmax`, `title`
 - `plot_zonal_mean` — latitude vs. value line chart; supports `line_color`, `title`
 
 HPC diagnostics:
 
 - `get_execution_mode` / `set_execution_mode`
+- `endpoint_status`
 - `validate_hpc_setup`
 - `probe_path_access`
 
