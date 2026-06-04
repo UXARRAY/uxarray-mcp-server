@@ -88,7 +88,11 @@ jobs:
         if: steps.prep.outputs.release_needed == 'true'
         run: |
           git add pyproject.toml src/uxarray_mcp/__init__.py conda/recipe/meta.yaml
-          git commit -m "Release ${{ steps.prep.outputs.version }}"
+          if git diff --cached --quiet; then
+            echo "Version files already match ${{ steps.prep.outputs.version }}; no release commit needed."
+          else
+            git commit -m "Release ${{ steps.prep.outputs.version }}"
+          fi
 
       - name: Tag release
         if: steps.prep.outputs.release_needed == 'true'

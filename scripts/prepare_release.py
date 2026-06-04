@@ -53,8 +53,6 @@ def _commits_since(tag: str | None) -> int:
 def _replace(path: Path, pattern: str, replacement: str) -> None:
     text = path.read_text()
     new_text = re.sub(pattern, replacement, text, flags=re.MULTILINE)
-    if new_text == text:
-        raise RuntimeError(f"No replacement made in {path}")
     path.write_text(new_text)
 
 
