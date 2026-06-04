@@ -301,11 +301,11 @@ _logs() {
   ps -fu "$USER" | grep -E 'globus|parsl|process_worker|interchange|uxarray-chrysalis' | grep -v grep || true
   echo
   echo "==> Latest submit scripts"
-  find "$HOME/.globus_compute" -path '*3cca8be6-55ec-4386-b7fd-f6c1e161d52b*/submit_scripts/*' \
+  find "$ep_dir" -path '*/submit_scripts/*' \
     -type f -print 2>/dev/null | sort | tail -10
   echo
   echo "==> Latest endpoint logs"
-  find "$HOME/.globus_compute" -path '*3cca8be6-55ec-4386-b7fd-f6c1e161d52b*' \
+  find "$ep_dir" \
     \( -name '*.log' -o -name '*.err' -o -name '*.out' \) -type f -print 2>/dev/null | sort | tail -20
 }
 
