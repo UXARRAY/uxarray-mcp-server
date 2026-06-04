@@ -123,6 +123,13 @@ The conda package should install the core MCP server and CLI. HPC-specific
 Globus Compute dependencies can be added to the feedstock later if conda-forge
 availability and solver behavior are acceptable.
 
+The seed recipe intentionally targets the **core** package only. Keep
+`globus-compute-sdk` and `academy-py` out of the initial conda-forge recipe
+until those dependencies and their transitive solver behavior are validated on
+conda-forge. If conda-native HPC support becomes necessary, prefer a second
+output such as `uxarray-mcp-hpc` or a feedstock variant rather than making every
+local-only user solve the remote-execution stack.
+
 ## Privacy Check
 
 Before every release, verify endpoint UUIDs and local config did not re-enter

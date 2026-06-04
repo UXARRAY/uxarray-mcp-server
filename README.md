@@ -82,7 +82,10 @@ The ``uxarray-mcp`` CLI exposes:
 | ``install-claude``  | print or merge the Claude Desktop ``mcpServers`` block   |
 
 Config is discovered in this order: ``$UXARRAY_MCP_CONFIG`` →
-``~/.config/uxarray-mcp/config.yaml`` → ``./config.yaml`` (repo root).
+``./config.yaml`` in the current working directory →
+``~/.config/uxarray-mcp/config.yaml`` → the editable-install repo config
+fallback. The project-local file wins inside a checkout so development
+endpoints are not shadowed by an empty user config.
 
 ## Most Users Should Read These in Order
 

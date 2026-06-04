@@ -114,6 +114,21 @@ of exposing separate HPC-only tool names.
 
 **Validation gating** — The scientific agent runs dataset validation before zonal mean. If validation fails, zonal mean is skipped rather than producing unreliable results.
 
+## Maintenance Notes
+
+The current implementation favors a small number of broad tool modules while
+the MCP surface is still evolving. That keeps related behavior easy to audit
+for the first release, but the largest files should be split once the public
+contracts settle:
+
+- `remote/compute_functions.py` should be divided by remote capability family
+  (inspection, plotting, vector calculus, remapping, diagnostics).
+- `tools/advanced.py` should be divided into spatial, comparison, remapping,
+  temporal/ensemble, and export modules.
+
+Keep those refactors behavior-preserving and test-backed; they are polish and
+maintainability work, not blockers for the core conda package.
+
 ## Interactive Diagram
 
 An interactive architecture diagram is available at `docs/architecture.html` in the repository.
