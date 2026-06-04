@@ -61,7 +61,7 @@ def _write_version(version: str) -> None:
     _replace(INIT, r'^__version__ = "[^"]+"$', f'__version__ = "{version}"')
     _replace(
         CONDA_RECIPE,
-        r'^{% set version = "[^"]+" %}$',
+        r'^\{%\s*set version = "[^"]+"\s*%\}$',
         f'{{% set version = "{version}" %}}',
     )
 

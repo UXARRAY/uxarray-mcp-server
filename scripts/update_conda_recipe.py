@@ -16,9 +16,11 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _replace(text: str, pattern: str, replacement: str) -> str:
+def _replace(
+    text: str, pattern: str, replacement: str, *, allow_unchanged: bool = False
+) -> str:
     new_text = re.sub(pattern, replacement, text, count=1, flags=re.MULTILINE)
-    if new_text == text:
+    if new_text == text and not allow_unchanged:
         raise RuntimeError(f"No replacement made for pattern: {pattern}")
     return new_text
 
@@ -34,8 +36,9 @@ def main() -> int:
     text = args.recipe.read_text()
     text = _replace(
         text,
-        r'^{% set version = "[^"]+" %}$',
+        r'^\{%\s*set version = "[^"]+"\s*%\}$',
         f'{{% set version = "{args.version}" %}}',
+        allow_unchanged=True,
     )
     text = _replace(text, r"^  sha256: [0-9a-f]+$", f"  sha256: {sha}")
     args.recipe.write_text(text)
