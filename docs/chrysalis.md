@@ -19,69 +19,44 @@ which hosts the E3SM next-generation mesh library.
   are sent as source code via `AllCodeStrategies` and only need `uxarray` + deps
   in the worker environment.
 - Login nodes **kill compute processes** — always use the Slurm backend.
-- `unset PYTHONPATH` before every endpoint start — the conda `uxarray-yac` env
-  injects broken `pydantic_core` paths that crash workers.
+- YAC remapping needs the Python 3.12 `uxarray-yac` environment plus YAC, MKL,
+  MPICH, NetCDF, and local shim library paths. Use
+  `scripts/chrysalis_endpoint.sh` instead of hand-writing those paths.
+- If a remote probe times out after the endpoint is `registered`, inspect the
+  endpoint logs on Chrysalis with `scripts/chrysalis_endpoint.sh logs`.
 
 ## Worker Environment
 
 | Item | Value |
 |---|---|
-| Venv | `~/venvs/globus-compute-py313` (Python 3.13) |
+| UXarray/YAC env | `~/.conda/envs/uxarray-yac` (Python 3.12) |
+| Endpoint helper venv | `~/venvs/globus-compute-py313` |
 | Slurm partition | `debug` (4h walltime, 20 nodes) |
 | Compute nodes | 251 GB RAM, 128 CPUs |
 | Endpoint name | `uxarray-chrysalis` |
 
 ## First-Time Setup
 
+The checked-in helper script writes the endpoint profile, YAC runtime library
+paths, and small BLAS/LAPACK shims needed by the current YAC build:
+
 ```bash
-# 1. Create Python 3.13 conda env
-/gpfs/fs1/soft/chrysalis/manual/miniforge3/25.3.1/bin/conda create \
-    -n gc-py313 python=3.13 -y
-
-# 2. Build the globus-compute venv
-~/.conda/envs/gc-py313/bin/python -m venv ~/venvs/globus-compute-py313
-~/venvs/globus-compute-py313/bin/pip install \
-    "globus-compute-endpoint==4.12.0" \
-    uxarray xarray netCDF4 h5netcdf numpy matplotlib holoviews cartopy
-
-# 3. Configure the endpoint (Slurm-backed)
-unset PYTHONPATH
-~/venvs/globus-compute-py313/bin/globus-compute-endpoint configure uxarray-chrysalis
-
-cat > ~/.globus_compute/uxarray-chrysalis/user_config_template.yaml.j2 << 'EOF'
-endpoint_setup: ""
-engine:
-  type: GlobusComputeEngine
-  max_workers_per_node: 4
-  provider:
-    type: SlurmProvider
-    partition: debug
-    nodes_per_block: 1
-    init_blocks: 0
-    min_blocks: 0
-    max_blocks: 2
-    walltime: "04:00:00"
-    worker_init: |
-      unset PYTHONPATH
-    launcher:
-      type: SrunLauncher
-idle_heartbeats_soft: 10
-idle_heartbeats_hard: 5760
-EOF
-
-cat > ~/.globus_compute/uxarray-chrysalis/user_environment.yaml << 'EOF'
-PYTHONPATH: ""
-PATH: "/home/<username>/venvs/globus-compute-py313/bin:/usr/bin:/bin"
-EOF
+git clone https://github.com/UXARRAY/uxarray-mcp-server.git
+cd uxarray-mcp-server
+bash scripts/chrysalis_endpoint.sh configure slurm-debug
+bash scripts/chrysalis_endpoint.sh check-yac
 ```
+
+The `check-yac` command runs a tiny Slurm job that imports `yac.core`, imports
+UXarray's YAC helper, and remaps HEALPix zoom 2 to zoom 3. It should report
+`yac_core_ok: true` and `remap_ok: true` before the endpoint is used by MCP.
 
 ## Starting the Endpoint
 
 Run this every time you log in:
 
 ```bash
-unset PYTHONPATH
-~/venvs/globus-compute-py313/bin/globus-compute-endpoint start uxarray-chrysalis
+bash scripts/chrysalis_endpoint.sh start
 ```
 
 The endpoint prints its UUID. Add it to your private local config on your
@@ -98,6 +73,8 @@ From your laptop after the endpoint is running:
 
 ```bash
 uv run python scripts/hpc_doctor.py --endpoint chrysalis --timeout-seconds 120
+uv run --extra hpc python scripts/yac_smoke_test.py \
+  --endpoint chrysalis --timeout-seconds 300
 ```
 
 Or manually:
@@ -108,6 +85,14 @@ from uxarray_mcp.tools.execution_control import endpoint_status, validate_hpc_se
 print(endpoint_status(endpoint='chrysalis', force=True))
 print(validate_hpc_setup(endpoint='chrysalis', run_remote_probe=True,
                           probe_timeout_seconds=120))
+```
+
+If the manager reports `registered` but worker probes time out, inspect the
+remote side on Chrysalis:
+
+```bash
+bash scripts/chrysalis_endpoint.sh logs
+squeue -u "$USER"
 ```
 
 ## E3SM Next-Generation Ocean Meshes
@@ -123,8 +108,23 @@ Available at `/lcrc/group/e3sm/ac.xylar/polaris_1.0/chrysalis/test_20260520/unif
 
 ## Troubleshooting
 
-**`ENDPOINT_NOT_ONLINE`** — the Slurm debug job timed out (4h limit). Restart with `unset PYTHONPATH && ~/venvs/globus-compute-py313/bin/globus-compute-endpoint start uxarray-chrysalis`.
+**`ENDPOINT_NOT_ONLINE`** — the Slurm debug job timed out (4h limit). Restart
+with `bash scripts/chrysalis_endpoint.sh restart`.
 
-**`WorkerLost` or `SystemError`** — PYTHONPATH is set. Always `unset PYTHONPATH` before starting the endpoint.
+**Worker probe timeout after `registered`** — the manager is connected, but a
+Slurm worker did not return. Run `bash scripts/chrysalis_endpoint.sh logs` on
+Chrysalis and inspect the latest submit script/log pair.
 
-**`pydantic_core` not found** — conda env leaked into the worker. Check `user_environment.yaml` has `PYTHONPATH: ""` and restart.
+**`pydantic_core` not found** — the worker is running from the wrong Python
+environment. Re-run `bash scripts/chrysalis_endpoint.sh configure slurm-debug`
+and restart the endpoint.
+
+**`libnetcdf.so.22`, `liblapack.so.3`, or `libblas.so.3` not found** — the YAC
+runtime paths or local MKL shims are missing. Re-run
+`bash scripts/chrysalis_endpoint.sh configure slurm-debug`, then
+`bash scripts/chrysalis_endpoint.sh check-yac`.
+
+**`PMI_Init failed` or `WorkerLost` during YAC import** — YAC initializes MPI.
+Inside a Globus Compute worker, run the YAC smoke/remap through the dedicated
+smoke path, which launches the native YAC child process with
+`srun --ntasks 1` when `SLURM_JOB_ID` is present.

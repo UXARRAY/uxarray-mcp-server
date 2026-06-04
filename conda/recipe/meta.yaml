@@ -23,6 +23,9 @@ requirements:
     - pip
     - uv-build >=0.9.26,<0.10.0
   run:
+    # Core package only for the initial feedstock. Add optional HPC support as
+    # a second output/variant after globus-compute-sdk and academy-py solver
+    # behavior is validated on conda-forge.
     - python >={{ python_min }}
     - fastmcp >=3.4.0
     - holoviews >=1.19.0

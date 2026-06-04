@@ -100,7 +100,7 @@
     <div class="logo-box">⬡</div>
     <div class="hdr-text">
       <h1>UXarray MCP Server — Architecture Diagram</h1>
-      <p>Mesh-aware assistant · provenance on every output · local or Argonne Improv HPC via Globus Compute · dynamic tool registration</p>
+      <p>Mesh-aware assistant · provenance on every output · local or named HPC endpoints via Globus Compute · unified tool surface</p>
     </div>
     <div class="branch">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="#58a6ff"><path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25z"/></svg>
@@ -205,7 +205,7 @@
   <text x="540" y="96"  text-anchor="middle" font-size="15" font-weight="700" fill="#58a6ff" font-family="Inter,sans-serif">Receive tool call</text>
   <line x1="400" y1="103" x2="682" y2="103" stroke="#112238" stroke-width="1"/>
   <text x="540" y="121" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">run_scientific_agent(path)</text>
-  <text x="540" y="139" text-anchor="middle" font-size="11.5" fill="#484f58" font-family="Inter,sans-serif">HPC tools only if endpoint configured</text>
+  <text x="540" y="139" text-anchor="middle" font-size="11.5" fill="#484f58" font-family="Inter,sans-serif">Remote execution selected per call</text>
 
   <!-- Agent: Begin analysis -->
   <rect x="747" y="76" width="306" height="74" rx="8" fill="#0d0a20" stroke="#6e40c9" stroke-width="2"/>
@@ -261,13 +261,13 @@
   <text x="1260" y="383" text-anchor="middle" font-size="11.5" fill="#8b949e" font-family="Inter,sans-serif">MPAS · UGRID · SCRIP · HEALPix</text>
   <text x="1260" y="398" text-anchor="middle" font-size="11"   fill="#2ea043" font-family="Inter,sans-serif" font-style="italic">→ n_face · n_node · n_edge · format</text>
 
-  <!-- HPC: inspect_mesh_hpc() -->
+  <!-- HPC: inspect_mesh(..., use_remote=True) -->
   <rect x="1467" y="320" width="306" height="86" rx="8" fill="#180e00" stroke="#d29922" stroke-width="2"/>
-  <text x="1620" y="342" text-anchor="middle" font-size="15" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">inspect_mesh_hpc( )</text>
+  <text x="1620" y="342" text-anchor="middle" font-size="15" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">inspect_mesh(use_remote)</text>
   <line x1="1480" y1="350" x2="1762" y2="350" stroke="#201400" stroke-width="1"/>
   <text x="1620" y="362" text-anchor="middle" font-size="11.5" fill="#39d0d0" font-family="Inter,sans-serif" font-style="italic">✓ _endpoint_is_ready( ) pre-flight</text>
   <text x="1620" y="377" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">remote/compute_functions.py</text>
-  <text x="1620" y="392" text-anchor="middle" font-size="11.5" fill="#8b949e" font-family="Inter,sans-serif">Globus Executor → Improv cluster</text>
+  <text x="1620" y="392" text-anchor="middle" font-size="11.5" fill="#8b949e" font-family="Inter,sans-serif">Globus Executor → named endpoint</text>
   <text x="1620" y="406" text-anchor="middle" font-size="11"   fill="#d29922" font-family="Inter,sans-serif" font-style="italic">File stays on HPC · timeout 300 s</text>
 
   <!-- validate_dataset box -->
@@ -348,13 +348,13 @@
   <text x="1260" y="772" text-anchor="middle" font-size="11.5" fill="#2ea043" font-family="Inter,sans-serif" font-style="italic">Runs entirely on local machine</text>
   <text x="1260" y="787" text-anchor="middle" font-size="11"   fill="#484f58" font-family="Inter,sans-serif">_provenance: venue=local</text>
 
-  <!-- HPC: calc_area_hpc + zonal_mean_hpc -->
+  <!-- HPC: calculate_area/calculate_zonal_mean with use_remote=True -->
   <rect x="1467" y="688" width="306" height="108" rx="8" fill="#180e00" stroke="#d29922" stroke-width="2"/>
   <text x="1620" y="710" text-anchor="middle" font-size="15" font-weight="700" fill="#e3b341" font-family="Inter,sans-serif">HPC Execution</text>
   <line x1="1480" y1="718" x2="1762" y2="718" stroke="#201400" stroke-width="1"/>
   <text x="1620" y="733" text-anchor="middle" font-size="11.5" fill="#39d0d0" font-family="Inter,sans-serif" font-style="italic">✓ _endpoint_is_ready( ) pre-flight</text>
-  <text x="1620" y="749" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">calculate_area_hpc( )</text>
-  <text x="1620" y="765" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">calculate_zonal_mean_hpc( )</text>
+  <text x="1620" y="749" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">calculate_area(use_remote)</text>
+  <text x="1620" y="765" text-anchor="middle" font-size="13"   fill="#8b949e" font-family="Inter,sans-serif">calculate_zonal_mean(use_remote)</text>
   <line x1="1480" y1="776" x2="1762" y2="776" stroke="#3d1400" stroke-width="1" stroke-dasharray="4,3"/>
   <text x="1620" y="790" text-anchor="middle" font-size="12" fill="#f85149" font-family="Inter,sans-serif" font-style="italic">⚠ auto-fallback if endpoint unreachable</text>
 
@@ -446,15 +446,15 @@
     Flow runs <strong>top → bottom</strong>, arrows crossing lanes are handoffs.
     <strong style="color:#e3b341">Orange diamonds</strong> = routing decisions made automatically by the agent.
     <strong style="color:#56d364">Green boxes</strong> = compute runs on your local machine.
-    <strong style="color:#e3b341">Orange boxes</strong> = dispatched to Argonne Improv via Globus Compute — the file never leaves the cluster.
-    <strong style="color:#39d0d0">Teal dashed boxes</strong> = steps that only activate under certain conditions (data_path provided, endpoint configured).
+    <strong style="color:#e3b341">Orange boxes</strong> = dispatched to a named HPC endpoint via Globus Compute — the file never leaves the cluster.
+    <strong style="color:#39d0d0">Teal dashed boxes</strong> = steps that only activate under certain conditions (data_path provided, remote mode requested).
     <strong style="color:#f85149">Red dashed</strong> inside HPC boxes = automatic local fallback when the endpoint is unreachable.
-    <strong>Dynamic registration:</strong> HPC tools (rows 10–13) only appear in Claude's tool list when <code>endpoint_id</code> is set in <code>config.yaml</code>.
+    <strong>Unified registration:</strong> tools are registered once; remote execution is selected with <code>use_remote=True</code> and optional endpoint names.
   </div>
 
   <!-- Tool table -->
   <div class="card">
-    <div class="card-h">All MCP Tools &nbsp;<span style="font-weight:400;color:#6e7681;font-size:12px">— 9 always registered · 4 conditional on endpoint_id</span></div>
+    <div class="card-h">Representative MCP Tools &nbsp;<span style="font-weight:400;color:#6e7681;font-size:12px">— unified local / remote surface</span></div>
     <table>
       <thead>
         <tr><th>#</th><th>Tool Name</th><th>Source File</th><th>Runs On</th><th>Domain Module</th><th>What It Does</th></tr>
@@ -469,14 +469,14 @@
         <tr><td>7</td><td><code>get_execution_mode</code></td><td><code>execution_control.py</code></td><td><span class="tag tl">LOCAL</span></td><td>—</td><td>Returns current execution mode (local / hpc / auto) and whether an HPC endpoint is configured.</td></tr>
         <tr><td>8</td><td><code>set_execution_mode</code></td><td><code>execution_control.py</code></td><td><span class="tag tl">LOCAL</span></td><td>—</td><td>Switch execution mode from the Claude UI without editing config.yaml directly.</td></tr>
         <tr><td>9</td><td><code>run_scientific_agent</code></td><td><code>scientific_agent.py</code></td><td><span class="tag ta">AUTO</span></td><td>All 4 modules</td><td>Autonomous 4-stage pipeline: Analyze → Plan → Execute → Verify. Validation-gated. Returns full reasoning trace + provenance + artifacts.</td></tr>
-        <tr><td>10</td><td><code>inspect_mesh_hpc</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>mesh.py</code> on HPC</td><td>Mesh inspection via Globus Compute on Improv. Pre-flight health check. Auto-fallback to local.</td></tr>
-        <tr><td>11</td><td><code>calculate_area_hpc</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>area.py</code> on HPC</td><td>Face area calculation via Globus Compute. Pre-flight health check. Auto-fallback to local.</td></tr>
-        <tr><td>12</td><td><code>inspect_variable_hpc</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>variable.py</code> on HPC</td><td>Variable inspection via Globus Compute. Pre-flight health check. Auto-fallback to local.</td></tr>
-        <tr><td>13</td><td><code>calculate_zonal_mean_hpc</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>zonal.py</code> on HPC</td><td>Zonal mean via Globus Compute. Pre-flight health check. Auto-fallback to local.</td></tr>
+        <tr><td>10</td><td><code>inspect_mesh</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>mesh.py</code> on HPC</td><td>Mesh inspection with <code>use_remote=True</code>. Pre-flight health check. Auto-fallback to local.</td></tr>
+        <tr><td>11</td><td><code>calculate_area</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>area.py</code> on HPC</td><td>Face area calculation with <code>use_remote=True</code>. Pre-flight health check. Auto-fallback to local.</td></tr>
+        <tr><td>12</td><td><code>inspect_variable</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>variable.py</code> on HPC</td><td>Variable inspection with <code>use_remote=True</code>. Pre-flight health check. Auto-fallback to local.</td></tr>
+        <tr><td>13</td><td><code>calculate_zonal_mean</code></td><td><code>remote_tools.py</code></td><td><span class="tag th">HPC*</span></td><td><code>zonal.py</code> on HPC</td><td>Zonal mean with <code>use_remote=True</code>. Pre-flight health check. Auto-fallback to local.</td></tr>
       </tbody>
     </table>
     <div style="padding:10px 15px;font-size:11.5px;color:#6e7681;border-top:1px solid #21262d;">
-      * HPC tools are only registered when <code>endpoint_id</code> is set in <code>config.yaml</code>. Without an endpoint, Claude's tool list shows 9 tools.
+      * Remote execution is selected per call with <code>use_remote=True</code>. Endpoint readiness controls remote dispatch and fallback.
     </div>
   </div>
 

@@ -43,26 +43,12 @@ def remote_runtime_probe() -> Dict[str, Any]:
         yac_info["package_available"] = False
         yac_info["package_error"] = f"{type(exc).__name__}: {exc}"
 
-    try:
-        yac_core = importlib.import_module("yac.core")
-        yac_info["core_importable"] = True
-        yac_info["core_file"] = getattr(yac_core, "__file__", None)
-        yac_info["version"] = getattr(yac_core, "__version__", None)
-    except Exception as exc:
-        yac_info["core_importable"] = False
-        yac_info["core_import_error"] = f"{type(exc).__name__}: {exc}"
-
-    try:
-        from uxarray.remap.yac import _import_yac
-
-        yc = _import_yac()
-        yac_info["uxarray_helper_ok"] = True
-        yac_info["uxarray_helper_module"] = getattr(yc, "__name__", None)
-        yac_info["uxarray_helper_file"] = getattr(yc, "__file__", None)
-        yac_info["has_basicgrid"] = hasattr(yc, "BasicGrid")
-    except Exception as exc:
-        yac_info["uxarray_helper_ok"] = False
-        yac_info["uxarray_helper_error"] = f"{type(exc).__name__}: {exc}"
+    yac_info["core_importable"] = None
+    yac_info["uxarray_helper_ok"] = None
+    yac_info["native_import_check"] = (
+        "skipped in remote_runtime_probe; use remote_yac_remap_smoke so "
+        "YAC/MPI imports run under srun and cannot kill the Globus worker"
+    )
     modules["yac"] = yac_info
 
     return {
@@ -830,141 +816,156 @@ def remote_subset_bbox_plot(
 def remote_yac_remap_smoke() -> Dict[str, Any]:
     """Smoke-test YAC's availability on the remote worker.
 
-    Loads YAC via uxarray's canonical helper (works around the broken upstream
-    ``yac/__init__.py`` that does ``from ._yac import *``), reports the YAC
-    surface, and runs a minimal nearest-neighbour remap from one HEALPix grid
-    to another using uxarray's YAC-backed remap path.  Returns a dict that
-    includes both the static surface check and, if a remap was attempted, its
-    shape and timing.
+    Runs the native YAC import/remap in a worker-side subprocess. Some YAC/MPI
+    builds can terminate the importing process when their runtime library path
+    is incomplete; keeping the import in a child process lets the Globus worker
+    return structured diagnostics instead of disappearing as ``WorkerLost``.
 
     The function is self-contained and serialised via AllCodeStrategies so the
     Python 3.13/3.11 mismatch between local SDK and worker doesn't bite.
     """
-    import importlib.metadata
-    import time
-    import traceback
+    import json
+    import os
+    import re
+    import shutil
+    import subprocess
+    import sys
+    import textwrap
 
-    out: Dict[str, Any] = {}
+    code = r"""
+import importlib.metadata
+import json
+import os
+import sys
+import time
+import traceback
 
-    def _surface(mod):
+out = {
+    "python": sys.version,
+    "executable": sys.executable,
+    "pythonpath_set": bool(os.environ.get("PYTHONPATH")),
+    "ld_library_path_set": bool(os.environ.get("LD_LIBRARY_PATH")),
+}
+
+def _surface(mod):
+    return {
+        name: hasattr(mod, name)
+        for name in (
+            "BasicGrid",
+            "InterpField",
+            "InterpolationStack",
+            "compute_weights",
+            "Reg2dGrid",
+        )
+    }
+
+try:
+    import yac.core as yc
+
+    out["yac_core_ok"] = True
+    out["yac_core_file"] = getattr(yc, "__file__", None)
+except Exception as exc:
+    out["yac_core_ok"] = False
+    out["yac_core_error"] = f"{type(exc).__name__}: {exc}"
+    out["yac_core_traceback"] = traceback.format_exc()
+
+try:
+    from uxarray.remap.yac import _import_yac
+
+    yc = _import_yac()
+    out["yac_helper_ok"] = True
+    out["yac_loader"] = "uxarray.remap.yac._import_yac"
+    out["yac_module"] = getattr(yc, "__name__", None)
+    out["yac_file"] = getattr(yc, "__file__", None)
+    out["surface"] = _surface(yc)
+except Exception as exc:
+    out["yac_helper_ok"] = False
+    out["yac_helper_error"] = f"{type(exc).__name__}: {exc}"
+    out["yac_helper_traceback"] = traceback.format_exc()
+
+try:
+    out["uxarray_version"] = importlib.metadata.version("uxarray")
+except Exception:
+    out["uxarray_version"] = "unknown"
+
+try:
+    import numpy as np
+    import uxarray as ux
+    import xarray as xr
+
+    src = ux.Grid.from_healpix(zoom=2)
+    dst = ux.Grid.from_healpix(zoom=3)
+    out["src_n_face"] = int(src.n_face)
+    out["dst_n_face"] = int(dst.n_face)
+
+    rng = np.random.default_rng(0)
+    face_data = rng.standard_normal(int(src.n_face))
+    uxda = ux.UxDataArray(
+        xr.DataArray(face_data, dims=("n_face",), name="field"),
+        uxgrid=src,
+    )
+
+    t0 = time.perf_counter()
+    remapped = uxda.remap.nearest_neighbor(
+        destination_grid=dst, remap_to="face centers"
+    )
+    out["remap_method"] = "nearest_neighbor"
+    out["remap_ok"] = True
+    out["remap_seconds"] = round(time.perf_counter() - t0, 3)
+    out["remap_dst_shape"] = list(remapped.shape)
+    out["remap_dst_mean"] = float(np.asarray(remapped).mean())
+except Exception as exc:
+    out["remap_ok"] = False
+    out["remap_error"] = f"{type(exc).__name__}: {exc}"
+    out["remap_traceback"] = traceback.format_exc()
+
+print(json.dumps(out))
+raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
+"""
+
+    try:
+        command = [sys.executable, "-c", textwrap.dedent(code)]
+        launch_mode = "direct"
+        if os.environ.get("SLURM_JOB_ID") and shutil.which("srun"):
+            command = ["srun", "--ntasks", "1", *command]
+            launch_mode = "srun"
+        proc = subprocess.run(
+            command,
+            env=os.environ.copy(),
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
         return {
-            name: hasattr(mod, name)
-            for name in (
-                "BasicGrid",
-                "InterpField",
-                "InterpolationStack",
-                "compute_weights",
-                "Reg2dGrid",
-            )
+            "subprocess_ok": False,
+            "subprocess_timeout_seconds": exc.timeout,
+            "stdout": exc.stdout,
+            "stderr": exc.stderr,
         }
 
-    yc = None
-    try:
-        from uxarray.remap.yac import _import_yac
-
-        yc = _import_yac()
-        out["yac_helper_ok"] = True
-        out["yac_loader"] = "uxarray.remap.yac._import_yac"
-        out["yac_module"] = getattr(yc, "__name__", None)
-        out["yac_file"] = getattr(yc, "__file__", None)
-        out["surface"] = _surface(yc)
-    except Exception as exc:
-        out["yac_helper_ok"] = False
-        out["yac_helper_error"] = f"{type(exc).__name__}: {exc}"
-
-        # Fallback: load core.so directly via ExtensionFileLoader, bypassing
-        # YAC's broken __init__.py. Lets us report surface even when the
-        # site uxarray is unavailable or itself broken.
+    payload: Dict[str, Any] = {
+        "subprocess_ok": proc.returncode == 0,
+        "subprocess_returncode": proc.returncode,
+        "launch_mode": launch_mode,
+    }
+    stdout = proc.stdout.strip()
+    stderr = proc.stderr.strip()
+    if stdout:
+        payload["stdout_tail"] = stdout[-4000:]
+    if stderr:
+        payload["stderr_tail"] = stderr[-4000:]
+    for line in reversed(stdout.splitlines()):
+        line = re.sub(r"^\d+:\s*", "", line)
         try:
-            import importlib.machinery as _m
-            import importlib.util as _u
-            import os as _os
-            import sys as _sys
-            import sysconfig as _sc
-            import types as _t
-            from pathlib import Path as _P
-
-            search_roots = [_sc.get_paths()["purelib"]]
-            search_roots.extend(p for p in _sys.path if p)
-            for env_var in ("YAC_PREFIX", "YAC_ROOT"):
-                if _os.environ.get(env_var):
-                    search_roots.append(_os.environ[env_var])
-            home = _os.path.expanduser("~")
-            search_roots.append(_os.path.join(home, "yac"))
-            search_roots.append("/opt/yac")
-
-            so_candidates: list[str] = []
-            for root in search_roots:
-                rp = _P(root)
-                if not rp.exists():
-                    continue
-                so_candidates.extend(str(p) for p in rp.rglob("yac/core.cpython-*.so"))
-            so_candidates = list(dict.fromkeys(so_candidates))  # dedupe
-            if not so_candidates:
-                raise FileNotFoundError(f"No yac/core*.so found in: {search_roots[:6]}")
-            so = so_candidates[0]
-            out["yac_search_hits"] = so_candidates[:5]
-
-            pkg = _t.ModuleType("yacshim")
-            pkg.__path__ = []
-            _sys.modules["yacshim"] = pkg
-            loader = _m.ExtensionFileLoader("yacshim.core", so)
-            spec = _u.spec_from_loader("yacshim.core", loader)
-            assert spec is not None and spec.loader is not None
-            yc = _u.module_from_spec(spec)
-            spec.loader.exec_module(yc)
-            out["yac_loader"] = "direct_so"
-            out["yac_file"] = so
-            out["surface"] = _surface(yc)
-        except Exception as exc2:
-            out["yac_direct_load_ok"] = False
-            out["yac_direct_load_error"] = f"{type(exc2).__name__}: {exc2}"
-            out["yac_direct_load_traceback"] = traceback.format_exc()
-            return out
-
-    try:
-        out["uxarray_version"] = importlib.metadata.version("uxarray")
-    except Exception:
-        out["uxarray_version"] = "unknown"
-
-    try:
-        import numpy as np
-        import uxarray as ux
-        import xarray as xr
-
-        src = ux.Grid.from_healpix(zoom=2)
-        dst = ux.Grid.from_healpix(zoom=3)
-        out["src_n_face"] = int(src.n_face)
-        out["dst_n_face"] = int(dst.n_face)
-
-        rng = np.random.default_rng(0)
-        face_data = rng.standard_normal(int(src.n_face))
-        uxda = ux.UxDataArray(
-            xr.DataArray(face_data, dims=("n_face",), name="field"),
-            uxgrid=src,
-        )
-
-        t0 = time.perf_counter()
-        try:
-            remapped = uxda.remap.nearest_neighbor(
-                destination_grid=dst, remap_to="face centers"
-            )
-            out["remap_method"] = "nearest_neighbor"
-            out["remap_ok"] = True
-            out["remap_seconds"] = time.perf_counter() - t0
-            out["remap_dst_shape"] = list(remapped.shape)
-            out["remap_dst_mean"] = float(np.asarray(remapped).mean())
-        except Exception as exc:
-            out["remap_method"] = "nearest_neighbor"
-            out["remap_ok"] = False
-            out["remap_error"] = f"{type(exc).__name__}: {exc}"
-            out["remap_traceback"] = traceback.format_exc()
-    except Exception as exc:
-        out["remap_setup_ok"] = False
-        out["remap_setup_error"] = f"{type(exc).__name__}: {exc}"
-        out["remap_setup_traceback"] = traceback.format_exc()
-
-    return out
+            payload.update(json.loads(line))
+            break
+        except Exception:
+            continue
+    else:
+        payload["json_parse_error"] = "No JSON object found in subprocess stdout."
+    return payload
 
 
 # ---------------------------------------------------------------------------
