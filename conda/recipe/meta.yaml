@@ -8,7 +8,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/u/uxarray-mcp/uxarray_mcp-{{ version }}.tar.gz
-  sha256: 5ed7f3fedd2d1c872127a4059336c9d8dee23610f60d29527bb74fa291d0ec9f
+  sha256: 55ccb1206db654b4d8421862df208891fc427e811886806b1fc2051a32f0a2a3
 
 build:
   noarch: python
