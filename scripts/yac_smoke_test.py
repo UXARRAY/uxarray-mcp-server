@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import warnings
 
 from globus_compute_sdk import Executor
 from globus_compute_sdk.serialize import AllCodeStrategies, ComputeSerializer
@@ -38,18 +39,29 @@ def main() -> int:
         return 2
 
     print(
-        f"Submitting remote_yac_remap_smoke to endpoint {args.endpoint} "
-        f"({cfg.endpoint_id}) ...",
+        f"Submitting remote_yac_remap_smoke to endpoint {args.endpoint} ...",
         file=sys.stderr,
     )
 
-    executor = Executor(
-        endpoint_id=cfg.endpoint_id,
-        serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+            category=UserWarning,
+        )
+        executor = Executor(
+            endpoint_id=cfg.endpoint_id,
+            serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
+        )
     try:
-        future = executor.submit(remote_yac_remap_smoke)
-        result = future.result(timeout=args.timeout_seconds)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+                category=UserWarning,
+            )
+            future = executor.submit(remote_yac_remap_smoke)
+            result = future.result(timeout=args.timeout_seconds)
     finally:
         executor.shutdown(wait=False)
 
