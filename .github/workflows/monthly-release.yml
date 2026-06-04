@@ -129,3 +129,12 @@ jobs:
             --title "${{ steps.prep.outputs.tag }}" \
             --notes-file release-notes.md \
             dist/*
+
+      - name: Dispatch PyPI publish workflow
+        if: steps.prep.outputs.release_needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "${{ steps.prep.outputs.tag }}"
