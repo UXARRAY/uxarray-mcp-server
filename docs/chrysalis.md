@@ -77,7 +77,7 @@ uv run --extra hpc python scripts/yac_smoke_test.py \
   --endpoint chrysalis --timeout-seconds 300
 ```
 
-Or manually:
+Or manually through the Python API:
 
 ```python
 from uxarray_mcp.tools.execution_control import endpoint_status, validate_hpc_setup

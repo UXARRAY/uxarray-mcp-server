@@ -53,36 +53,36 @@ class TestGetCapabilitiesGridOnly:
             assert "call_example" in tool, f"Missing 'call_example' in {tool}"
             assert isinstance(tool["applicable"], bool)
 
-    def test_inspect_mesh_always_applicable(self):
-        """inspect_mesh is always applicable regardless of data."""
+    def test_run_analysis_always_applicable(self):
+        """run_analysis is the front door for one-off operations."""
         result = get_capabilities("healpix:2")
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["inspect_mesh"]["applicable"] is True
+        assert tools["run_analysis"]["applicable"] is True
 
-    def test_calculate_area_applicable_with_faces(self):
-        """calculate_area is applicable when mesh has faces."""
+    def test_analyze_dataset_applicable_with_faces(self):
+        """analyze_dataset is the first-look front door."""
         result = get_capabilities("healpix:2")
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["calculate_area"]["applicable"] is True
+        assert tools["analyze_dataset"]["applicable"] is True
 
-    def test_inspect_variable_not_applicable_without_data(self):
-        """inspect_variable requires data_path."""
+    def test_run_analysis_documents_inspection_operations(self):
+        """Variable inspection is now an operation under run_analysis."""
         result = get_capabilities("healpix:2")
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["inspect_variable"]["applicable"] is False
-        assert "data_path" in tools["inspect_variable"]["reason"].lower()
+        assert "inspect_mesh" in tools["run_analysis"]["reason"]
 
-    def test_zonal_mean_not_applicable_without_data(self):
-        """calculate_zonal_mean requires face-centered data."""
+    def test_zonal_mean_is_not_a_separate_public_tool(self):
+        """Zonal mean is dispatched through run_analysis."""
         result = get_capabilities("healpix:2")
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["calculate_zonal_mean"]["applicable"] is False
+        assert "calculate_zonal_mean" not in tools
+        assert "run_analysis" in tools
 
-    def test_validate_dataset_not_applicable_without_data(self):
-        """validate_dataset requires data_path."""
+    def test_validate_dataset_is_run_analysis_operation(self):
+        """Validation is dispatched through run_analysis/analyze_dataset."""
         result = get_capabilities("healpix:2")
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["validate_dataset"]["applicable"] is False
+        assert "validate" in tools["analyze_dataset"]["reason"]
 
     def test_probe_path_access_is_always_available(self):
         """probe_path_access should be surfaced for bring-up on any dataset."""
@@ -90,11 +90,11 @@ class TestGetCapabilitiesGridOnly:
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
         assert tools["probe_path_access"]["applicable"] is True
 
-    def test_session_and_workflow_tools_are_surfaced(self):
-        """Stateful orchestration tools should be discoverable without data."""
+    def test_session_and_workflow_front_doors_are_surfaced(self):
+        """Stateful orchestration should be discoverable without low-level tools."""
         result = get_capabilities("healpix:2")
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["create_session"]["applicable"] is True
+        assert tools["manage_session"]["applicable"] is True
         assert tools["run_workflow"]["applicable"] is True
 
     def test_uxarray_capabilities_structure(self):
@@ -154,8 +154,8 @@ class TestGetCapabilitiesGridOnly:
         result = get_capabilities(synthetic_mesh_file)
         assert result["grid_summary"]["has_faces"] is True
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["inspect_mesh"]["applicable"] is True
-        assert tools["calculate_area"]["applicable"] is True
+        assert tools["run_analysis"]["applicable"] is True
+        assert tools["analyze_dataset"]["applicable"] is True
 
     def test_remote_hint_omitted_without_endpoint(self):
         """Remote-execution hint is omitted when no endpoint is configured."""
@@ -165,11 +165,7 @@ class TestGetCapabilitiesGridOnly:
             result = get_capabilities("healpix:2")
 
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        for name in (
-            "inspect_mesh",
-            "calculate_area",
-            "plot_mesh",
-        ):
+        for name in ("analyze_dataset", "run_analysis", "plot_dataset"):
             assert name in tools
             assert "use_remote" not in tools[name]["reason"]
 
@@ -181,15 +177,7 @@ class TestGetCapabilitiesGridOnly:
             result = get_capabilities("healpix:2")
 
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        for name in (
-            "inspect_mesh",
-            "inspect_variable",
-            "calculate_area",
-            "calculate_zonal_mean",
-            "plot_mesh",
-            "plot_variable",
-            "plot_zonal_mean",
-        ):
+        for name in ("analyze_dataset", "run_analysis", "plot_dataset"):
             assert name in tools
             assert "use_remote=True" in tools[name]["reason"]
 
@@ -215,45 +203,45 @@ class TestGetCapabilitiesWithData:
         for var in result["variables"]:
             assert var["location"] == "faces"
 
-    def test_zonal_mean_applicable_with_face_data(self, synthetic_mesh_with_data):
-        """calculate_zonal_mean is applicable when face-centered data exists."""
+    def test_run_analysis_applicable_with_face_data(self, synthetic_mesh_with_data):
+        """run_analysis covers zonal mean when face-centered data exists."""
         grid_file, data_file = synthetic_mesh_with_data
         result = get_capabilities(grid_file, data_file)
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["calculate_zonal_mean"]["applicable"] is True
+        assert tools["run_analysis"]["applicable"] is True
 
-    def test_inspect_variable_applicable_with_data(self, synthetic_mesh_with_data):
-        """inspect_variable is applicable when data_path provided."""
+    def test_analyze_dataset_applicable_with_data(self, synthetic_mesh_with_data):
+        """analyze_dataset is applicable when data_path provided."""
         grid_file, data_file = synthetic_mesh_with_data
         result = get_capabilities(grid_file, data_file)
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["inspect_variable"]["applicable"] is True
+        assert tools["analyze_dataset"]["applicable"] is True
 
-    def test_validate_dataset_applicable_with_data(self, synthetic_mesh_with_data):
-        """validate_dataset is applicable when data_path provided."""
+    def test_plot_dataset_applicable_with_data(self, synthetic_mesh_with_data):
+        """plot_dataset is the public plotting front door."""
         grid_file, data_file = synthetic_mesh_with_data
         result = get_capabilities(grid_file, data_file)
         tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["validate_dataset"]["applicable"] is True
+        assert tools["plot_dataset"]["applicable"] is True
 
-    def test_subset_compare_and_remap_tools_surface_with_face_data(
+    def test_subset_compare_and_remap_operations_surface_with_face_data(
         self, synthetic_mesh_with_data
     ):
-        """Face-centered data should unlock the newer analysis tools."""
+        """Face-centered data should unlock newer run_analysis operations."""
         grid_file, data_file = synthetic_mesh_with_data
         result = get_capabilities(grid_file, data_file)
-        tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["subset_bbox"]["applicable"] is True
-        assert tools["compare_fields"]["applicable"] is True
-        assert tools["remap_variable"]["applicable"] is True
+        for var in result["variables"]:
+            assert "run_analysis:subset_bbox" in var["applicable_mcp_tools"]
+            assert "run_analysis:compare_fields" in var["applicable_mcp_tools"]
+            assert "run_analysis:remap_variable" in var["applicable_mcp_tools"]
 
     def test_face_var_applicable_tools(self, synthetic_mesh_with_data):
-        """Face-centered variables list calculate_zonal_mean as applicable."""
+        """Face-centered variables list zonal mean as a run_analysis operation."""
         grid_file, data_file = synthetic_mesh_with_data
         result = get_capabilities(grid_file, data_file)
 
         for var in result["variables"]:
-            assert "calculate_zonal_mean" in var["applicable_mcp_tools"]
+            assert "run_analysis:calculate_zonal_mean" in var["applicable_mcp_tools"]
 
     def test_face_var_uxarray_methods_include_zonal_mean(
         self, synthetic_mesh_with_data
@@ -372,11 +360,13 @@ class TestGetCapabilitiesNodeOnlyData:
                 assert var["location"] in ("nodes", "other")
 
     def test_zonal_mean_not_applicable_with_only_node_data(self, mesh_with_node_data):
-        """calculate_zonal_mean is not applicable without face-centered data."""
+        """Zonal mean is not suggested without face-centered data."""
         grid_file, data_file = mesh_with_node_data
         result = get_capabilities(grid_file, data_file)
-        tools = {t["name"]: t for t in result["mcp_server_tools"]}
-        assert tools["calculate_zonal_mean"]["applicable"] is False
+        for var in result.get("variables", []):
+            assert (
+                "run_analysis:calculate_zonal_mean" not in var["applicable_mcp_tools"]
+            )
 
 
 class TestGetCapabilitiesErrors:

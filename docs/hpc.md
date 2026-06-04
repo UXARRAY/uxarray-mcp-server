@@ -223,8 +223,8 @@ uv run python scripts/hpc_doctor.py \
 Or from the MCP client:
 
 ```text
-Run validate_hpc_setup
-Run validate_hpc_setup with probe_timeout_seconds=180 and sample_path="/path/to/file.nc"
+Run diagnose_endpoint with action="validate"
+Run diagnose_endpoint with action="validate", probe_timeout_seconds=180, and file_path="/path/to/file.nc"
 Run probe_path_access on /path/to/file.nc with use_remote=True
 ```
 
@@ -241,8 +241,8 @@ These checks validate, in order:
 Once the remote runtime and file path are proven, then use:
 
 ```text
-Use inspect_mesh on /path/to/grid.nc with use_remote=True
-Use inspect_variable on /path/to/grid.nc and /path/to/data.nc with use_remote=True
+Use run_analysis with operation="inspect_mesh", grid_path="/path/to/grid.nc", and use_remote=True
+Use run_analysis with operation="inspect_variable", grid_path="/path/to/grid.nc", data_path="/path/to/data.nc", and use_remote=True
 ```
 
 ## Switching Back to PBS or SLURM
@@ -266,15 +266,15 @@ to the environment:
 scripts/improv_endpoint.sh pbs-debug <allocation> improv-uxarray
 ```
 
-Then restart the endpoint and rerun `validate_hpc_setup`.
+Then restart the endpoint and rerun `diagnose_endpoint(action="validate")`.
 
 ## Common Misses
 
-### `get_execution_mode()` says `registered`, but real jobs fail
+### Endpoint status says `registered`, but real jobs fail
 
 That means the endpoint manager is visible to Globus, but the child endpoint or
-worker may still be broken. Use `validate_hpc_setup()` instead of trusting
-manager health alone.
+worker may still be broken. Use `diagnose_endpoint(action="validate")` instead
+of trusting manager health alone.
 
 ### The file path looks correct on the login node, but the worker says it does not exist
 
