@@ -10,11 +10,12 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 from urllib.request import urlopen
+from urllib.parse import quote
 from xml.etree import ElementTree
 
 import numpy as np
@@ -132,9 +133,7 @@ def summarize_dataarray(data: xr.DataArray) -> dict[str, Any]:
         finite = np.isfinite(values)
         summary.update(
             {
-                "finite_fraction": round(float(finite.mean()), 6)
-                if values.size
-                else 0.0,
+                "finite_fraction": round(float(finite.mean()), 6) if values.size else 0.0,
                 "min": _safe_float(np.nanmin(values)) if finite.any() else None,
                 "max": _safe_float(np.nanmax(values)) if finite.any() else None,
                 "mean": _safe_float(np.nanmean(values)) if finite.any() else None,
@@ -154,9 +153,7 @@ def inspect_netcdf(path: Path, max_variables: int = 12) -> dict[str, Any]:
     candidate_names = [
         name
         for name in dataset.data_vars
-        if any(
-            token in name.lower() for token in ("sst", "tmp", "tsea", "soil", "snow")
-        )
+        if any(token in name.lower() for token in ("sst", "tmp", "tsea", "soil", "snow"))
     ]
 
     return {
@@ -260,16 +257,10 @@ def write_report(payload: dict[str, Any]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--download", action="store_true", help="Download the demo NetCDF tile"
-    )
+    parser.add_argument("--download", action="store_true", help="Download the demo NetCDF tile")
     parser.add_argument("--no-download", action="store_true", help="Metadata-only mode")
-    parser.add_argument(
-        "--key", default=DEMO_KEY, help="S3 key to download in --download mode"
-    )
-    parser.add_argument(
-        "--max-keys", type=int, default=12, help="Number of S3 objects to list"
-    )
+    parser.add_argument("--key", default=DEMO_KEY, help="S3 key to download in --download mode")
+    parser.add_argument("--max-keys", type=int, default=12, help="Number of S3 objects to list")
     args = parser.parse_args()
 
     context_objects = list_objects(EARTH2_CONTEXT_PREFIX, max_keys=args.max_keys)
