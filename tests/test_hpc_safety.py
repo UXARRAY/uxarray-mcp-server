@@ -6,11 +6,14 @@ and after any refactor so the HPC path stays intact.
 """
 
 import importlib.util
+import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from uxarray_mcp.remote import health
+from uxarray_mcp.remote.compute_functions import remote_yac_remap_smoke
 from uxarray_mcp.remote.config import HPCConfig
 from uxarray_mcp.remote.health import check_endpoint_health
 from uxarray_mcp.tools.inspection import validate_dataset
@@ -89,6 +92,42 @@ class TestCheckEndpointHealth:
             result = check_endpoint_health(config)
 
         assert result["status"] == "offline"
+
+    def test_yac_pythonpath_is_expected_runtime_path(self):
+        """Endpoint-side YAC source/runtime paths are not a worker leak."""
+        pythonpath = (
+            "/home/jain/src/yac/build/python:"
+            "/home/jain/local/yac-3.17/lib/python3.12/site-packages:"
+            "/lcrc/group/e3sm/jain/uxarray-yac-src"
+        )
+
+        assert health._is_expected_yac_pythonpath(pythonpath) is True
+
+    def test_conda_env_pythonpath_is_not_expected_yac_runtime_path(self):
+        """A broad conda env site-packages path can still leak pydantic/dill."""
+        pythonpath = "/home/jain/.conda/envs/uxarray-yac/lib/python3.12/site-packages"
+
+        assert health._is_expected_yac_pythonpath(pythonpath) is False
+
+    def test_remote_yac_smoke_parses_subprocess_payload(self, monkeypatch):
+        """YAC smoke returns structured output from the worker-side subprocess."""
+        payload = {
+            "yac_helper_ok": True,
+            "remap_ok": True,
+            "remap_dst_shape": [768],
+        }
+
+        def fake_run(*args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, f"0: {json.dumps(payload)}", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        result = remote_yac_remap_smoke()
+
+        assert result["subprocess_ok"] is True
+        assert result["subprocess_returncode"] == 0
+        assert result["yac_helper_ok"] is True
+        assert result["remap_dst_shape"] == [768]
 
 
 # -----------------------------------------------------------------------------

@@ -23,8 +23,9 @@ under their entry.
   `endpoints add/list/remove`, `doctor`, `install-claude`.
 - Multi-endpoint config schema (`hpc.endpoints.<name>` with
   `endpoint_id`, `path_prefixes`, `timeout_seconds`) and config
-  discovery order: `$UXARRAY_MCP_CONFIG` → `~/.config/uxarray-mcp/config.yaml`
-  → `./config.yaml`.
+  discovery order: `$UXARRAY_MCP_CONFIG` → `./config.yaml` in the current
+  working directory → `~/.config/uxarray-mcp/config.yaml` → editable-install
+  repo fallback.
 - YAC remote build script (`scripts/hpc_build_yac.py`) and runtime
   fallback that loads `yac.core` via `importlib.machinery` when the
   upstream `__init__.py` is unconditional.

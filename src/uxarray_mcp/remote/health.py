@@ -71,6 +71,16 @@ _GLOBUS_TO_STATUS: dict[str, str] = {
 }
 
 
+def _is_expected_yac_pythonpath(pythonpath: str) -> bool:
+    """Return True when PYTHONPATH only exposes endpoint-side YAC runtime paths."""
+    parts = [part for part in pythonpath.split(":") if part]
+    if not parts:
+        return False
+    return all(
+        "yac" in part.lower() and "/.conda/envs/" not in part.lower() for part in parts
+    )
+
+
 def _translate_globus_status(raw: str) -> str:
     """Map a raw Globus status string to our vocabulary."""
     return _GLOBUS_TO_STATUS.get(raw.lower(), "unreachable")
@@ -296,6 +306,8 @@ def probe_endpoint_worker(
                 result = fut.result(timeout=timeout_seconds)
 
         elapsed = round(time.monotonic() - t0, 1)
+        pythonpath = result.get("pythonpath") or ""
+        yac_pythonpath = _is_expected_yac_pythonpath(pythonpath)
         payload = {
             "status": "active",
             **_endpoint_public_fields(config),
@@ -303,15 +315,17 @@ def probe_endpoint_worker(
             "python": result.get("python", ""),
             "slurm_job_id": result.get("slurm_job_id") or None,
             "pbs_job_id": result.get("pbs_job_id") or None,
-            "pythonpath_set": bool(result.get("pythonpath")),
+            "pythonpath_set": bool(pythonpath),
+            "pythonpath_expected_yac_runtime": yac_pythonpath,
             "elapsed_seconds": elapsed,
         }
-        # Warn if PYTHONPATH is set — this is the root cause of most worker crashes
-        if result.get("pythonpath"):
+        # Warn on arbitrary PYTHONPATH leaks, but allow endpoint-side YAC paths.
+        if pythonpath and not yac_pythonpath:
             payload["warning"] = (
                 "PYTHONPATH is set on the worker. This can cause pydantic/dill "
                 "conflicts. Add 'unset PYTHONPATH' to worker_init in the endpoint "
-                "config, and set PYTHONPATH: '' in user_environment.yaml."
+                "config, and only set narrow runtime paths such as the YAC "
+                "Python bindings when they are required."
             )
         return payload
 
