@@ -106,18 +106,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          notes="Automated release ${{ steps.prep.outputs.version }}."
+          cat > release-notes.md <<'EOF'
+          Automated release ${{ steps.prep.outputs.version }}.
+          EOF
           if [ -n "${{ steps.prep.outputs.previous_tag }}" ]; then
-            notes="$notes
+            cat >> release-notes.md <<'EOF'
 
-Changes since ${{ steps.prep.outputs.previous_tag }}: ${{ steps.prep.outputs.changed_commits }} commit(s)."
+          Changes since ${{ steps.prep.outputs.previous_tag }}: ${{ steps.prep.outputs.changed_commits }} commit(s).
+          EOF
           else
-            notes="$notes
+            cat >> release-notes.md <<'EOF'
 
-Initial release."
+          Initial release.
+          EOF
           fi
           gh release create "${{ steps.prep.outputs.tag }}" \
             --repo "$GITHUB_REPOSITORY" \
             --title "${{ steps.prep.outputs.tag }}" \
-            --notes "$notes" \
+            --notes-file release-notes.md \
             dist/*

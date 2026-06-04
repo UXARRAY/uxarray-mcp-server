@@ -12,7 +12,6 @@ import re
 import subprocess
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
 INIT = ROOT / "src" / "uxarray_mcp" / "__init__.py"
@@ -82,7 +81,9 @@ def _github_output(**values: str | int | bool | None) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", default=None, help="Explicit version to release")
-    parser.add_argument("--force", action="store_true", help="Release even with no changes")
+    parser.add_argument(
+        "--force", action="store_true", help="Release even with no changes"
+    )
     args = parser.parse_args()
 
     latest_tag = _latest_tag()
