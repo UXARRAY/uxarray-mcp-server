@@ -49,6 +49,11 @@ under their entry.
 - Apache 2.0 LICENSE.
 
 ### Changed
+- Reduced the public MCP surface to front-door tools (`run_analysis`,
+  `plot_dataset`, `diagnose_endpoint`, `manage_session`, `get_status`,
+  `get_result`, workflows, and discovery) while keeping low-level
+  implementation functions available as Python APIs. Slash commands now point
+  at workflows/front doors instead of individual implementation tools.
 - Collapsed the `*_hpc` tool surface. The unified tools
   (`inspect_mesh`, `inspect_variable`, `calculate_area`, plotting tools,
   etc.) accept `use_remote: bool` and `endpoint: str | None`; there are

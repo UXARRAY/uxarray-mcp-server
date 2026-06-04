@@ -14,59 +14,25 @@ async def _registered_tools():
 
 
 @pytest.mark.asyncio
-async def test_inspect_mesh_tool_registered():
-    """Verify all expected tools are registered with the MCP server."""
+async def test_public_tool_surface_is_small_and_intent_shaped():
+    """Verify the MCP server exposes front doors, not every implementation tool."""
     tools = await _registered_tools()
 
     expected_tools = {
         "get_capabilities",
-        "list_datasets",
-        "run_scientific_agent",
+        "analyze_dataset",
+        "run_analysis",
+        "plot_dataset",
+        "diagnose_endpoint",
+        "probe_path_access",
         "run_workflow",
         "resume_workflow",
-        "get_workflow_status",
-        "create_session",
-        "register_dataset",
-        "get_session_state",
-        "reset_session_state",
-        "get_result_handle",
-        "get_operation_status",
-        "list_operations",
-        "inspect_mesh",
-        "inspect_variable",
-        "calculate_area",
-        "calculate_zonal_mean",
-        "validate_dataset",
-        "plot_mesh",
-        "plot_variable",
-        "plot_zonal_mean",
-        "subset_bbox",
-        "subset_polygon",
-        "extract_cross_section",
-        "compare_fields",
-        "calculate_bias",
-        "calculate_rmse",
-        "calculate_pattern_correlation",
-        "remap_variable",
-        "regrid_dataset",
-        "calculate_temporal_mean",
-        "calculate_anomaly",
-        "calculate_ensemble_mean",
-        "calculate_ensemble_spread",
-        "export_to_netcdf",
-        "export_to_csv",
-        "write_result",
-        "calculate_gradient",
-        "calculate_curl",
-        "calculate_divergence",
-        "calculate_azimuthal_mean",
-        "endpoint_status",
-        "get_execution_mode",
-        "probe_path_access",
-        "set_execution_mode",
-        "validate_hpc_setup",
+        "get_status",
+        "get_result",
+        "manage_session",
     }
-    assert expected_tools.issubset(set(tools.keys()))
+    assert set(tools.keys()) == expected_tools
+    assert len(tools) <= 12
 
 
 @pytest.mark.asyncio
@@ -78,10 +44,10 @@ async def test_no_hpc_suffixed_tool_names():
 
 
 @pytest.mark.asyncio
-async def test_dispatched_tools_accept_use_remote():
-    """Tools that wrap the dispatcher must expose use_remote/endpoint kwargs."""
+async def test_low_level_implementation_tools_are_not_registered():
+    """The MCP surface should not expose low-level implementation verbs."""
     tools = await _registered_tools()
-    dispatched = {
+    hidden = {
         "inspect_mesh",
         "inspect_variable",
         "calculate_area",
@@ -93,8 +59,17 @@ async def test_dispatched_tools_accept_use_remote():
         "calculate_curl",
         "calculate_divergence",
         "calculate_azimuthal_mean",
+        "endpoint_status",
+        "validate_hpc_setup",
     }
-    for name in dispatched:
+    assert hidden.isdisjoint(tools)
+
+
+@pytest.mark.asyncio
+async def test_front_door_dispatch_tools_accept_remote_kwargs():
+    """Remote execution remains available through the intent-shaped tools."""
+    tools = await _registered_tools()
+    for name in ("analyze_dataset", "run_analysis", "plot_dataset"):
         tool = tools[name]
         sig = inspect.signature(tool.fn)
         assert "use_remote" in sig.parameters, name

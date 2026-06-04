@@ -98,49 +98,32 @@ endpoints are not shadowed by an empty user config.
 7. [docs/chrysalis.md](docs/chrysalis.md) if you are on Argonne Chrysalis
 6. [docs/workflows.md](docs/workflows.md) for sequential remote workflows
 
-## Main Tools
+## MCP Front-Door Tools
 
-Analysis:
+The MCP surface is intentionally small. Low-level UXarray functions are still
+available as Python APIs inside `uxarray_mcp.tools`, but MCP clients see
+intent-shaped tools:
 
-- `inspect_mesh` — topology, format detection, face/node/edge counts
-- `inspect_variable` — variable metadata, location, and statistics
-- `calculate_area` — face area statistics
-- `calculate_zonal_mean` — latitude-band averaging (conservative or standard)
-- `validate_dataset` — NaN, Inf, and fill value checks
-- `run_scientific_agent` — autonomous Analyze → Plan → Execute → Verify pipeline
-- `subset_bbox` / `subset_polygon` / `extract_cross_section` — spatial queries and regional reductions
-- `calculate_gradient`, `calculate_curl`, `calculate_divergence`, `calculate_azimuthal_mean` — vector calculus and radial summaries
-- `compare_fields`, `calculate_bias`, `calculate_rmse`, `calculate_pattern_correlation` — same-grid comparison metrics
-- `remap_variable` / `regrid_dataset` — UXarray-backed remapping to a target grid
-- `calculate_temporal_mean`, `calculate_anomaly`, `calculate_ensemble_mean`, `calculate_ensemble_spread` — temporal and ensemble summaries
-- `export_to_netcdf`, `export_to_csv`, `write_result` — persist derived results to downstream formats
+- `get_capabilities` — discover topology, variables, applicable operations,
+  and next steps.
+- `analyze_dataset` — deterministic first-look pipeline: inspect, validate,
+  area, zonal mean, and plots where possible.
+- `run_analysis` — one-operation dispatcher for inspection, validation,
+  area/zonal statistics, subsetting, vector calculus, comparison, remapping,
+  temporal/ensemble summaries, and export.
+- `plot_dataset` — mesh, geographic mesh, variable, or zonal-mean plots.
+- `diagnose_endpoint` and `probe_path_access` — endpoint status, setup
+  validation, and exact path readability checks.
+- `run_workflow`, `resume_workflow`, `get_status`, `get_result`, and
+  `manage_session` — persisted sessions, workflows, operation status, and
+  result handles.
 
-Stateful workflows:
-
-- `create_session`, `register_dataset`, `get_session_state`, `reset_session_state`
-- `run_workflow`, `resume_workflow`, `get_workflow_status`
-- `get_result_handle`, `get_operation_status`, `list_operations`
-
-Visualization (returns inline PNG):
-
-- `plot_mesh` — mesh wireframe
-- `plot_mesh_geo` — geographic mesh plot with boundary-aware rendering
-- `plot_variable` — face-centered variable as filled polygon map; supports `cmap`, `vmin`, `vmax`, `title`
-- `plot_zonal_mean` — latitude vs. value line chart; supports `line_color`, `title`
-
-HPC diagnostics:
-
-- `get_execution_mode` / `set_execution_mode`
-- `endpoint_status`
-- `validate_hpc_setup`
-- `probe_path_access`
-
-All inspection, computation, and plotting tools accept ``use_remote: bool``
-and ``endpoint: str | None``. When ``use_remote=True`` the dispatcher submits
-to the configured (or named) Globus Compute endpoint and falls back to local
-execution if the endpoint is missing or unhealthy. There are no separate
-``*_hpc`` tool names on the MCP surface — the same tool runs locally or
-remotely based on the flag.
+`analyze_dataset`, `run_analysis`, `plot_dataset`, and `probe_path_access`
+accept ``use_remote: bool`` and ``endpoint: str | None`` where remote execution
+applies. When ``use_remote=True`` the dispatcher submits to the configured (or
+named) Globus Compute endpoint and falls back to local execution if the endpoint
+is missing or unhealthy. There are no separate ``*_hpc`` tool names on the MCP
+surface.
 
 Full parameter and return details live in [docs/tools.md](docs/tools.md).
 
@@ -165,7 +148,7 @@ Remote execution has three separate layers:
 
 Most confusing failures happen because only one or two of those layers are set
 up. Start with [docs/globus-compute.md](docs/globus-compute.md) and use
-`validate_hpc_setup()` before real remote jobs.
+`diagnose_endpoint(action="validate")` before real remote jobs.
 
 ## Configuration
 

@@ -195,7 +195,7 @@ Fully quit (`Cmd+Q` on macOS) and reopen. Closing the window is not enough.
 In Claude, ask:
 
 ```
-Do you have access to an inspect_mesh tool?
+Do you have access to the UXarray MCP front-door tools?
 ```
 
 Claude should confirm and describe the available tools.
@@ -205,7 +205,7 @@ Claude should confirm and describe the available tools.
 **Inspect a HEALPix mesh:**
 
 ```
-Use inspect_mesh with healpix:4
+Use run_analysis with operation="inspect_mesh" and grid_path="healpix:4"
 ```
 
 **Run the full scientific agent:**
@@ -225,20 +225,19 @@ Run the workflow for temperature using the registered dataset
 **Check and change execution mode:**
 
 ```
-What is the current execution mode?
-Switch to HPC execution mode
+Diagnose my configured endpoint status
 ```
 
 **Validate the full HPC path before a real job:**
 
 ```
-Run validate_hpc_setup
+Run diagnose_endpoint with action="validate"
 ```
 
 **Validate one exact remote file before debugging UXarray parsing:**
 
 ```
-Run validate_hpc_setup with probe_timeout_seconds=180 and sample_path="/path/to/file.nc"
+Run diagnose_endpoint with action="validate" and file_path="/path/to/file.nc"
 Run probe_path_access on /path/to/file.nc with use_remote=True
 ```
 
@@ -259,13 +258,14 @@ For the full HPC playbook and reusable scripts, see:
   3. Check the Developer Console: View > Developer > Developer Tools > Console
 
 **Remote calls fall back locally**
-: Run `endpoint_status(probe=True)` or `validate_hpc_setup` and make sure the
+: Run `diagnose_endpoint(action="status")` or
+  `diagnose_endpoint(action="validate")` and make sure the
   endpoint manager and worker probe both pass. The tool list itself is unified;
   there are no separate HPC-only tool names.
 
 **Endpoint is registered but remote tasks still fail**
-: `get_execution_mode` only confirms the endpoint manager is reachable.
-  Run `validate_hpc_setup` to catch deeper issues such as missing local Globus
+: Endpoint status only confirms the endpoint manager is reachable.
+  Run `diagnose_endpoint(action="validate")` to catch deeper issues such as missing local Globus
   auth, missing `globus_compute_sdk`, PBS submission failures like
   `qsub: command not found`, or child-endpoint startup problems.
 
@@ -275,7 +275,8 @@ For the full HPC playbook and reusable scripts, see:
 
 **Brand-new cluster bring-up is getting stuck in PBS/SLURM**
 : Start with a single-host endpoint template first. Prove that
-  `validate_hpc_setup(..., sample_path=...)` and `probe_path_access(..., use_remote=True)`
+  `diagnose_endpoint(action="validate", file_path=...)` and
+  `probe_path_access(..., use_remote=True)`
   work on one real file, then switch the endpoint back to PBS/SLURM.
 
 **I want reusable CLI helpers, not just MCP prompts**

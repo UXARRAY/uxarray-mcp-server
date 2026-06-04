@@ -329,7 +329,7 @@ class TestCalculateAzimuthalMeanTool:
 
 
 @pytest.mark.asyncio
-async def test_vector_calc_tools_registered():
+async def test_vector_calc_operations_available_through_run_analysis():
     from uxarray_mcp.server import mcp
 
     if hasattr(mcp, "get_tools"):
@@ -338,13 +338,9 @@ async def test_vector_calc_tools_registered():
         tools_list = await mcp.list_tools()
         tools = {t.name: t for t in tools_list}
 
-    for name in (
-        "calculate_gradient",
-        "calculate_curl",
-        "calculate_divergence",
-        "calculate_azimuthal_mean",
-    ):
-        assert name in tools, f"Tool '{name}' not registered"
+    assert "run_analysis" in tools
+    for name in ("gradient", "curl", "divergence", "azimuthal_mean"):
+        assert name in tools["run_analysis"].description
 
 
 @pytest.mark.asyncio

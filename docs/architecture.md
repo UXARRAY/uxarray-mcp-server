@@ -41,15 +41,17 @@ The UXarray MCP Server is organized into three layers:
 
 ### Local execution
 
-1. The MCP client calls a tool such as `inspect_mesh`.
-2. The tool implementation in `tools/` validates inputs and chooses the local path.
+1. The MCP client calls a front-door tool such as
+   `run_analysis(operation="inspect_mesh", grid_path="...")`.
+2. The front door routes to the implementation in `tools/` and chooses the local path.
 3. The shared computation in `domain/` runs through UXarray.
 4. The result gets a `_provenance` block and is returned to the client.
 
 ### Remote execution
 
-1. The MCP client calls a tool such as `inspect_mesh(..., use_remote=True)`.
-2. The HPC wrapper checks endpoint readiness and configuration.
+1. The MCP client calls a front-door tool such as
+   `run_analysis(operation="inspect_mesh", grid_path="...", use_remote=True)`.
+2. The implementation wrapper checks endpoint readiness and configuration.
 3. The remote agent submits a self-contained function from `remote/compute_functions.py` through Globus Compute.
 4. The endpoint receives that function and runs it in the remote worker environment.
 5. The result comes back to the local machine, where provenance is attached before returning it to the client.
@@ -75,9 +77,12 @@ transport itself. Globus Compute is still the actual remote execution system.
 
 ## Tools Layer (`tools/`)
 
-MCP tool functions that are registered with the FastMCP server and exposed to AI agents. Each tool handles input validation, calls into the domain layer, attaches provenance, and returns structured results.
+The FastMCP server exposes a small front-door tool surface. Those tools route
+to lower-level implementation functions in `tools/`, which handle input
+validation, domain calls, remote dispatch, provenance, and structured results.
 
-- **inspection.py** — Core local tools: mesh inspection, variable inspection, area calculation, zonal mean, dataset validation
+- **frontdoor.py** — Public MCP front doors: operation dispatch, plotting dispatch, endpoint diagnostics, session management, status, and result lookup
+- **inspection.py** — Core local implementations: mesh inspection, variable inspection, area calculation, zonal mean, dataset validation
 - **remote_tools.py** — HPC-enabled wrappers with pre-flight health checks and automatic fallback to local
 - **scientific_agent.py** — Autonomous four-stage agent (Analyze > Plan > Execute > Verify)
 - **capabilities.py** — Tool discovery and filtering based on grid topology and data
@@ -103,10 +108,15 @@ HPC infrastructure for offloading computations to remote clusters via Globus Com
 
 ## Key Design Decisions
 
-**Unified tool surface** — Tools are registered under one canonical name and
-accept `use_remote` / `endpoint` parameters when remote execution is available.
-The dispatcher falls back locally or reports endpoint readiness issues instead
-of exposing separate HPC-only tool names.
+**Small public tool surface** — MCP clients see intent-shaped front doors such
+as `run_analysis`, `plot_dataset`, and `diagnose_endpoint`, not every
+implementation function. Lower-level functions remain available to Python
+callers and internal workflows.
+
+**Unified local/remote dispatch** — Front doors accept `use_remote` /
+`endpoint` parameters when remote execution is available. The dispatcher falls
+back locally or reports endpoint readiness issues instead of exposing separate
+HPC-only tool names.
 
 **Domain/tool separation** — Computation logic lives in `domain/` so the same code can run locally or be serialized and sent to a remote cluster without importing MCP dependencies.
 

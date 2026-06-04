@@ -3,14 +3,14 @@
 The repository now includes a first-class persisted workflow surface for
 multi-step scientific runs:
 
-- `create_session(...)`
-- `register_dataset(...)`
+- `manage_session(action="create", ...)`
+- `manage_session(action="register_dataset", ...)`
 - `run_workflow(...)`
 - `resume_workflow(...)`
-- `get_workflow_status(...)`
-- `get_operation_status(...)`
+- `get_status(kind="workflow", ...)`
+- `get_status(kind="operation", ...)`
 
-The default workflow template is a deterministic sequence that runs:
+Internally, the default workflow template is a deterministic sequence that runs:
 
 1. `validate_hpc_setup`
 2. `probe_path_access`
