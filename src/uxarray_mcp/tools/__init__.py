@@ -25,6 +25,14 @@ from .execution_control import (
     set_execution_mode,
     validate_hpc_setup,
 )
+from .frontdoor import (
+    diagnose_endpoint,
+    get_result,
+    get_status,
+    manage_session,
+    plot_dataset,
+    run_analysis,
+)
 from .inspection import validate_dataset
 from .orchestration import analyze_dataset
 
@@ -112,4 +120,10 @@ __all__ = [
     "probe_path_access",
     "set_execution_mode",
     "validate_hpc_setup",
+    "run_analysis",
+    "plot_dataset",
+    "diagnose_endpoint",
+    "manage_session",
+    "get_status",
+    "get_result",
 ]

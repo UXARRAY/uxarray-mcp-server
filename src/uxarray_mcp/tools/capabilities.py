@@ -131,25 +131,27 @@ def get_capabilities(
             else:
                 location = "other"
 
-            # Per-variable applicable tools
-            applicable_mcp: List[str] = ["inspect_variable", "validate_dataset"]
+            # Per-variable applicable front-door operations.
+            applicable_mcp: List[str] = [
+                "run_analysis:inspect_variable",
+                "run_analysis:validate_dataset",
+            ]
             applicable_uxarray: List[str] = []
 
             if location == "faces":
                 applicable_mcp += [
-                    "calculate_zonal_mean",
-                    "subset_bbox",
-                    "subset_polygon",
-                    "extract_cross_section",
-                    "compare_fields",
-                    "remap_variable",
-                    "regrid_dataset",
-                    "calculate_temporal_mean",
-                    "calculate_anomaly",
-                    "calculate_ensemble_mean",
-                    "calculate_ensemble_spread",
-                    "export_to_netcdf",
-                    "export_to_csv",
+                    "run_analysis:calculate_zonal_mean",
+                    "run_analysis:subset_bbox",
+                    "run_analysis:subset_polygon",
+                    "run_analysis:cross_section",
+                    "run_analysis:compare_fields",
+                    "run_analysis:remap_variable",
+                    "run_analysis:regrid_dataset",
+                    "run_analysis:temporal_mean",
+                    "run_analysis:anomaly",
+                    "run_analysis:ensemble_mean",
+                    "run_analysis:ensemble_spread",
+                    "run_analysis:export",
                 ]
                 applicable_uxarray += [
                     "var.zonal_mean()",
@@ -188,116 +190,38 @@ def get_capabilities(
                 }
             )
 
-    # --- MCP Server tool filtering ---
+    # --- MCP Server front-door tool filtering ---
     gp = f'"{grid_path}"'
     dp = f', "{data_path}"' if data_path else ""
 
     mcp_tools = [
         {
-            "name": "inspect_mesh",
+            "name": "get_capabilities",
             "applicable": True,
-            "reason": "Always available — inspects topology and format of any mesh.",
-            "call_example": f"inspect_mesh({gp})",
+            "reason": "Always available — discovers topology, variables, and recommended operations.",
+            "call_example": f"get_capabilities({gp}{dp})",
         },
         {
-            "name": "inspect_variable",
-            "applicable": data_path is not None,
-            "reason": (
-                "Available — inspects all variables in the dataset."
-                if data_path
-                else "Requires a data file (data_path not provided)."
-            ),
-            "call_example": f"inspect_variable({gp}{dp})",
+            "name": "analyze_dataset",
+            "applicable": True,
+            "reason": "Runs the deterministic first-look pipeline: inspect, validate, area, zonal mean, and plots when possible.",
+            "call_example": f"analyze_dataset(grid_path={gp}{dp})",
         },
         {
-            "name": "calculate_area",
+            "name": "run_analysis",
+            "applicable": True,
+            "reason": "Runs one named operation such as inspect_mesh, calculate_area, calculate_zonal_mean, subset, compare, remap, temporal, ensemble, or export.",
+            "call_example": f'run_analysis(operation="calculate_area", grid_path={gp})',
+        },
+        {
+            "name": "plot_dataset",
             "applicable": has_faces,
             "reason": (
-                f"Available — mesh has {n_face:,} faces for area calculation."
+                "Renders mesh, geographic mesh, variable, or zonal-mean plots."
                 if has_faces
-                else "Not applicable — no faces found (point cloud or node-only mesh)."
+                else "Requires mesh faces for plot types other than point-style future work."
             ),
-            "call_example": f"calculate_area({gp})",
-        },
-        {
-            "name": "calculate_zonal_mean",
-            "applicable": has_face_centered_vars,
-            "reason": (
-                f"Available — face-centered variables found: {face_centered_var_names}."
-                if has_face_centered_vars
-                else (
-                    "Requires face-centered data — provide data_path with face-centered variables."
-                    if data_path is None
-                    else "Not applicable — no face-centered variables found. Zonal mean requires data mapped to faces."
-                )
-            ),
-            "call_example": f'calculate_zonal_mean({gp}{dp}, variable_name="...")',
-        },
-        {
-            "name": "validate_dataset",
-            "applicable": data_path is not None,
-            "reason": (
-                "Available — checks for NaN, Inf, and fill value issues."
-                if data_path
-                else "Requires a data file (data_path not provided)."
-            ),
-            "call_example": f"validate_dataset({gp}{dp})",
-        },
-        {
-            "name": "plot_mesh",
-            "applicable": has_faces,
-            "reason": (
-                "Available — renders a wireframe visualization of the mesh."
-                if has_faces
-                else "Not applicable — no faces found to visualize as a mesh."
-            ),
-            "call_example": f"plot_mesh({gp})",
-        },
-        {
-            "name": "plot_variable",
-            "applicable": has_face_centered_vars,
-            "reason": (
-                f"Available — face-centered variables found: {face_centered_var_names}."
-                if has_face_centered_vars
-                else (
-                    "Requires face-centered data — provide data_path with face-centered variables."
-                    if data_path is None
-                    else "Not applicable — no face-centered variables found for polygon plotting."
-                )
-            ),
-            "call_example": f'plot_variable({gp}{dp}, variable_name="...")',
-        },
-        {
-            "name": "plot_zonal_mean",
-            "applicable": has_face_centered_vars,
-            "reason": (
-                f"Available — face-centered variables found: {face_centered_var_names}."
-                if has_face_centered_vars
-                else (
-                    "Requires face-centered data — provide data_path with face-centered variables."
-                    if data_path is None
-                    else "Not applicable — no face-centered variables found for zonal plotting."
-                )
-            ),
-            "call_example": f'plot_zonal_mean({gp}{dp}, variable_name="...")',
-        },
-        {
-            "name": "create_session",
-            "applicable": True,
-            "reason": (
-                "Available — creates a lightweight scientific session for "
-                "datasets, results, workflows, and progress tracking."
-            ),
-            "call_example": 'create_session(name="analysis")',
-        },
-        {
-            "name": "register_dataset",
-            "applicable": True,
-            "reason": (
-                "Available — registers a grid/data pair in a session so later "
-                "calls can use dataset handles instead of repeated file paths."
-            ),
-            "call_example": f'register_dataset(session_id="...", grid_path={gp}{dp})',
+            "call_example": f'plot_dataset(plot_type="mesh", grid_path={gp})',
         },
         {
             "name": "run_workflow",
@@ -309,167 +233,39 @@ def get_capabilities(
             "call_example": f'run_workflow(file_path={gp}{dp}, variable_name="...")',
         },
         {
-            "name": "subset_bbox",
-            "applicable": has_faces,
-            "reason": (
-                "Available — crops a mesh or face-centered field by lon/lat bounds."
-                if has_faces
-                else "Not applicable — no faces found for spatial subsetting."
-            ),
-            "call_example": (
-                f"subset_bbox(lon_bounds=[0, 10], lat_bounds=[-5, 5], grid_path={gp}{dp})"
-            ),
-        },
-        {
-            "name": "subset_polygon",
-            "applicable": has_faces,
-            "reason": (
-                "Available — selects face centers within a polygon footprint."
-                if has_faces
-                else "Not applicable — no faces found for polygon selection."
-            ),
-            "call_example": (
-                f"subset_polygon(polygon_lon_lat=[[0, 0], [10, 0], [10, 5]], "
-                f"grid_path={gp}{dp})"
-            ),
-        },
-        {
-            "name": "extract_cross_section",
-            "applicable": has_faces,
-            "reason": (
-                "Available — extracts constant-latitude or constant-longitude slices."
-                if has_faces
-                else "Not applicable — no faces found for cross-sections."
-            ),
-            "call_example": (
-                f"extract_cross_section(latitude=0.0, grid_path={gp}{dp})"
-            ),
-        },
-        {
-            "name": "compare_fields",
-            "applicable": has_face_centered_vars,
-            "reason": (
-                "Available — compares same-grid fields and persists a difference field."
-                if has_face_centered_vars
-                else "Requires same-grid face-centered data for v1 comparisons."
-            ),
-            "call_example": (
-                f'compare_fields(variable_name="...", data_path_a="...", '
-                f'data_path_b="...", grid_path={gp})'
-            ),
-        },
-        {
-            "name": "remap_variable",
-            "applicable": has_face_centered_vars,
-            "reason": (
-                "Available — remaps one face-centered variable to a target grid."
-                if has_face_centered_vars
-                else "Requires a face-centered variable to remap."
-            ),
-            "call_example": (
-                f'remap_variable(target_grid_path="target.nc", variable_name="...", '
-                f"grid_path={gp}{dp})"
-            ),
-        },
-        {
-            "name": "regrid_dataset",
-            "applicable": has_face_centered_vars,
-            "reason": (
-                "Available — remaps selected face-centered variables to a target grid."
-                if has_face_centered_vars
-                else "Requires face-centered variables to regrid a dataset."
-            ),
-            "call_example": (
-                f'regrid_dataset(target_grid_path="target.nc", grid_path={gp}{dp})'
-            ),
-        },
-        {
-            "name": "calculate_temporal_mean",
-            "applicable": data_path is not None,
-            "reason": (
-                "Available when the requested variable includes a time dimension."
-                if data_path
-                else "Requires a data file with a time-aware variable."
-            ),
-            "call_example": (
-                'calculate_temporal_mean(data_path="data.nc", '
-                'variable_name="temperature")'
-            ),
-        },
-        {
-            "name": "calculate_anomaly",
-            "applicable": data_path is not None,
-            "reason": (
-                "Available when the requested variable includes a time dimension."
-                if data_path
-                else "Requires a data file with a time-aware variable."
-            ),
-            "call_example": (
-                'calculate_anomaly(data_path="data.nc", variable_name="temperature")'
-            ),
-        },
-        {
-            "name": "calculate_ensemble_mean",
-            "applicable": data_path is not None,
-            "reason": (
-                "Available — computes a mean across multiple explicitly provided files."
-                if data_path
-                else "Requires one or more data files with a common variable."
-            ),
-            "call_example": (
-                'calculate_ensemble_mean(variable_name="temperature", '
-                'data_paths=["run1.nc", "run2.nc"])'
-            ),
-        },
-        {
-            "name": "calculate_ensemble_spread",
-            "applicable": data_path is not None,
-            "reason": (
-                "Available — computes ensemble spread across multiple files."
-                if data_path
-                else "Requires one or more data files with a common variable."
-            ),
-            "call_example": (
-                'calculate_ensemble_spread(variable_name="temperature", '
-                'data_paths=["run1.nc", "run2.nc"])'
-            ),
-        },
-        {
-            "name": "export_to_netcdf",
+            "name": "resume_workflow",
             "applicable": True,
-            "reason": (
-                "Available — exports a persisted result handle or session dataset to NetCDF."
-            ),
-            "call_example": (
-                'export_to_netcdf(output_path="out.nc", result_handle="result_...")'
-            ),
+            "reason": "Resumes a persisted workflow that stopped after a failed or skipped step.",
+            "call_example": 'resume_workflow(workflow_id="workflow_...")',
         },
         {
-            "name": "export_to_csv",
+            "name": "get_status",
             "applicable": True,
-            "reason": (
-                "Available — exports a persisted result handle or session dataset to CSV."
-            ),
-            "call_example": (
-                'export_to_csv(output_path="out.csv", result_handle="result_...")'
-            ),
+            "reason": "Reads workflow or operation status without exposing separate status tools.",
+            "call_example": 'get_status(kind="workflow", workflow_id="workflow_...")',
         },
         {
-            "name": "validate_hpc_setup",
+            "name": "get_result",
             "applicable": True,
-            "reason": (
-                "Available — validates local Globus auth, endpoint status, and "
-                "optionally submits a tiny remote probe to catch scheduler/bootstrap failures."
-            ),
-            "call_example": "validate_hpc_setup()",
+            "reason": "Inspects a persisted result handle and artifact metadata.",
+            "call_example": 'get_result(result_handle="result_...")',
+        },
+        {
+            "name": "manage_session",
+            "applicable": True,
+            "reason": "Creates sessions, registers datasets, reads session state, resets state, and lists operations.",
+            "call_example": f'manage_session(action="register_dataset", session_id="...", grid_path={gp}{dp})',
+        },
+        {
+            "name": "diagnose_endpoint",
+            "applicable": True,
+            "reason": "Runs endpoint status, setup validation, or path probes with concrete failure guidance.",
+            "call_example": 'diagnose_endpoint(action="status", endpoint="improv")',
         },
         {
             "name": "probe_path_access",
             "applicable": True,
-            "reason": (
-                "Available — proves whether the exact target path is readable "
-                "before debugging UXarray parsing or scheduler behavior."
-            ),
+            "reason": "Direct path-readability probe kept as a convenience for cluster bring-up.",
             "call_example": 'probe_path_access("/path/to/file.nc", use_remote=True)',
         },
     ]
@@ -487,13 +283,11 @@ def get_capabilities(
         )
         for tool in mcp_tools:
             if tool["name"] in {
-                "inspect_mesh",
-                "inspect_variable",
-                "calculate_area",
-                "calculate_zonal_mean",
-                "plot_mesh",
-                "plot_variable",
-                "plot_zonal_mean",
+                "analyze_dataset",
+                "run_analysis",
+                "plot_dataset",
+                "diagnose_endpoint",
+                "probe_path_access",
             }:
                 tool["reason"] = str(tool["reason"]) + remote_note
 
