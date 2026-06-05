@@ -138,4 +138,5 @@ jobs:
         run: |
           gh workflow run release.yml \
             --repo "$GITHUB_REPOSITORY" \
-            --ref "${{ steps.prep.outputs.tag }}"
+            --ref "${{ steps.prep.outputs.tag }}" \
+            -f tag="${{ steps.prep.outputs.tag }}"
