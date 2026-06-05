@@ -68,9 +68,46 @@ jobs:
           skip-existing: true
           verbose: true
 
-  update-conda-feedstock:
+  verify-pypi-install:
     runs-on: ubuntu-latest
     needs: publish-pypi
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install released wheel from PyPI
+        env:
+          REF_NAME: ${{ inputs.tag || github.ref_name }}
+        run: |
+          version="${REF_NAME#v}"
+          echo "Verifying uxarray-mcp==${version} from PyPI"
+          uv venv /tmp/uxarray-mcp-pypi --python 3.13
+          installed=0
+          for attempt in 1 2 3 4 5; do
+            if uv pip install --python /tmp/uxarray-mcp-pypi/bin/python \
+                 --index-strategy unsafe-best-match \
+                 "uxarray-mcp==${version}"; then
+              installed=1
+              break
+            fi
+            echo "PyPI install attempt ${attempt} failed; sleeping before retry."
+            sleep 30
+          done
+          if [ "$installed" -ne 1 ]; then
+            echo "Failed to install uxarray-mcp==${version} from PyPI after 5 attempts." >&2
+            exit 1
+          fi
+          /tmp/uxarray-mcp-pypi/bin/uxarray-mcp --help
+          /tmp/uxarray-mcp-pypi/bin/python -c "import uxarray_mcp; print(uxarray_mcp.__version__)"
+
+  update-conda-feedstock:
+    runs-on: ubuntu-latest
+    needs: verify-pypi-install
     env:
       CONDA_FEEDSTOCK_REPOSITORY: ${{ vars.CONDA_FEEDSTOCK_REPOSITORY }}
       CONDA_FEEDSTOCK_TOKEN: ${{ secrets.CONDA_FEEDSTOCK_TOKEN }}
