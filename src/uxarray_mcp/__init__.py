@@ -4,4 +4,4 @@ from uxarray_mcp.server import mcp
 from uxarray_mcp.tools import inspect_mesh
 
 __all__ = ["mcp", "inspect_mesh"]
-__version__ = "0.1.0"
+__version__ = "0.1.1"
