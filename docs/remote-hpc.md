@@ -6,14 +6,14 @@ that lives on that machine.
 
 > **Prerequisites — check each one before starting:**
 > 1. uxarray-mcp installed locally and working with your AI client. See the
->    [README](../README.md#local-install).
+>    [README](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/README.md#local-install).
 > 2. A user account on the HPC machine, with shell access.
 > 3. The data you want to analyze is readable by your HPC account.
 > 4. Either: someone has given you a **Globus Compute endpoint UUID** for
 >    that machine, **or** you plan to stand up your own — in which case
 >    stop and read [operating-an-endpoint.md](operating-an-endpoint.md) first,
 >    then come back here.
-> 5. You have read [SECURITY.md](../SECURITY.md). Connecting an endpoint
+> 5. You have read [SECURITY.md](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/SECURITY.md). Connecting an endpoint
 >    means the operator can see what you submit.
 
 The total setup is **5 steps**, expect **15–30 minutes** the first time.
@@ -117,7 +117,7 @@ uxarray-mcp endpoints list
 ```
 
 The endpoint UUID is **not a secret** by itself, but you still shouldn't
-post it publicly — see [SECURITY.md](../SECURITY.md). It lives in
+post it publicly — see [SECURITY.md](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/SECURITY.md). It lives in
 `~/.config/uxarray-mcp/config.yaml` (which is in `.gitignore` if you're in
 the repo).
 

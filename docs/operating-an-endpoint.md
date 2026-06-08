@@ -2,7 +2,7 @@
 
 This page is for the person who stands up the Globus Compute endpoint on
 the HPC machine. That might be you (for personal use) or a sysadmin / PI
-(for a group). **Read [SECURITY.md](../SECURITY.md) first** — operating an
+(for a group). **Read [SECURITY.md](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/SECURITY.md) first** — operating an
 endpoint is shell-equivalent delegation, not a casual config change.
 
 > **Prerequisites:**
@@ -336,7 +336,7 @@ Send users:
 1. The endpoint UUID.
 2. The path prefix(es) where data lives (e.g., `/glade/`).
 3. A pointer to [remote-hpc.md](remote-hpc.md) for their setup.
-4. A pointer to [SECURITY.md](../SECURITY.md) so they know what they're
+4. A pointer to [SECURITY.md](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/SECURITY.md) so they know what they're
    trusting.
 
 **Distribute out-of-band** — Slack DM, email, lab wiki behind SSO. Not in
@@ -376,7 +376,7 @@ sacct -u svc_uxarray --starttime $(date -d '7 days ago' +%F)  # Slurm history
 
 ### Incident response
 
-See [SECURITY.md § Incident response](../SECURITY.md#incident-response).
+See [SECURITY.md § Incident response](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/SECURITY.md#incident-response).
 
 ---
 
