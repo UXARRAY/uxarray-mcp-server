@@ -1,218 +1,187 @@
 # UXarray MCP Server
 
-An MCP server that exposes [UXarray](https://uxarray.readthedocs.io/) tools to
-AI clients such as Claude. It supports:
+An MCP server that lets an AI assistant (Claude Code, Claude Desktop, Cursor,
+or any MCP client) analyze unstructured climate meshes with
+[UXarray](https://uxarray.readthedocs.io/) — locally on your machine, or
+remotely on an HPC system you have access to.
 
-- local execution for normal mesh analysis
-- optional remote execution on HPC systems through Globus Compute
-- diagnostics and provenance for scientific workflows
-
-## How it runs
-
-The server runs as a subprocess of the MCP client (Claude Code, Claude Desktop,
-or any FastMCP transport) and dispatches tool calls either locally or to a
-configured Globus Compute endpoint on an HPC cluster. Same MCP tool, same
-schema — `use_remote: bool` on every tool decides which path runs.
-
-**Local mode** — analysis on your machine, files on your disk:
-
-```
- ┌────────────────┐         ┌─────────────────────────────┐
- │  Claude Code   │  stdio  │  uv run python -m           │      reads
- │  / Desktop     │ ◀─────▶ │  uxarray_mcp                │ ───▶  local
- │                │  pipe   │  (subprocess on your box)   │       mesh files
- └────────────────┘         └─────────────────────────────┘
+```text
+┌─────────────┐  stdio  ┌──────────────┐                    ┌─────────────────┐
+│  AI client  │ ◀─────▶ │ uxarray-mcp  │ ◀── Globus ──────▶ │  HPC endpoint   │
+│  (Claude…)  │   pipe  │ (your laptop)│    Compute (opt)   │ (Slurm/PBS node)│
+└─────────────┘         └──────────────┘                    └─────────────────┘
 ```
 
-**HPC mode** — analysis on facility hardware, files stay on facility storage:
+> **What the AI can do.** Open meshes and datasets, compute area / zonal mean
+> / vorticity / divergence, subset, remap, plot, and run multi-step workflows.
+> All as natural-language prompts.
 
-```
- ┌────────────────┐  stdio  ┌─────────────────────────┐  Globus  ┌─────────────────────────┐
- │  Claude Code   │ ◀─────▶ │  uxarray_mcp on laptop  │ ◀──────▶ │  Worker on HPC endpoint │      reads
- │  / Desktop     │  pipe   │  (dispatches when       │  Compute │  (uxarray reads file    │ ───▶ facility
- │                │         │   use_remote=True)      │  RPC     │   from facility GPFS)   │      mesh files
- └────────────────┘         └─────────────────────────┘          └─────────────────────────┘      (never copied)
-```
+> **⚠️ What the AI can access.** Any file you (or your HPC account) can read.
+> Any compute the configured endpoint can submit. Outputs are written to your
+> disk. **See [SECURITY.md](SECURITY.md) before connecting any remote endpoint.**
 
-The dispatcher falls back to local execution if a remote call is requested
-but the endpoint is missing or unhealthy.
+---
 
-## Install
+## Pick your path
+
+You are most likely one of:
+
+1. **Local user** — laptop only, no HPC. → [Local install](#local-install) (5 min).
+2. **HPC user, endpoint already exists** — someone at your lab gave you a
+   Globus Compute endpoint UUID. → [Local install](#local-install), then
+   [docs/remote-hpc.md](docs/remote-hpc.md) (15 min).
+3. **HPC user, no endpoint yet** — you have shell access to ANL, NCAR, NERSC,
+   etc., and need to stand one up. → [Local install](#local-install),
+   then [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md) (~1 hr,
+   site-dependent).
+
+---
+
+## Local install
+
+Five steps. Each is one command unless noted.
+
+### Step 1 — Install the package
+
+Pick one. `uv` is the easiest; `pip` works too.
 
 ```bash
-# Stable user path (after the package is published)
+# Recommended
 uv tool install uxarray-mcp
-uxarray-mcp setup
-uxarray-mcp install-claude --print-only   # prints the Claude Desktop block
-```
 
-```bash
-# Stable user path with HPC support
-uv tool install "uxarray-mcp[hpc]"
-uxarray-mcp setup
-uxarray-mcp endpoints add improv <your-endpoint-uuid> --set-default
-uxarray-mcp doctor --endpoint improv --timeout-seconds 180
-```
-
-```bash
-# Developer / contributor path, and best path when using repo scripts/docs
+# Or from a fresh clone (developer path)
 git clone https://github.com/UXARRAY/uxarray-mcp-server.git
-cd uxarray-mcp-server
-uv sync                 # core local install
-uv sync --extra hpc     # add Globus Compute deps
+cd uxarray-mcp-server && uv sync
 ```
 
-```bash
-# User install directly from GitHub before a PyPI release exists
-uv tool install "git+https://github.com/UXARRAY/uxarray-mcp-server.git"
-uxarray-mcp setup
-uxarray-mcp endpoints add improv <your-endpoint-uuid>
-uxarray-mcp install-claude --print-only   # prints the Claude Desktop block
-```
-
-The ``uxarray-mcp`` CLI exposes:
-
-| subcommand          | what it does                                             |
-| ------------------- | -------------------------------------------------------- |
-| ``serve``           | run the MCP server on stdio (Claude / FastMCP transport) |
-| ``setup``           | write a starter config to ``~/.config/uxarray-mcp/``     |
-| ``endpoints add``   | register a named Globus Compute endpoint                 |
-| ``endpoints list``  | show configured endpoints + discovery path               |
-| ``doctor``          | validate auth, endpoint health, optional remote probes   |
-| ``install-claude``  | print or merge the Claude Desktop ``mcpServers`` block   |
-
-Config is discovered in this order: ``$UXARRAY_MCP_CONFIG`` →
-``./config.yaml`` in the current working directory →
-``~/.config/uxarray-mcp/config.yaml`` → the editable-install repo config
-fallback. The project-local file wins inside a checkout so development
-endpoints are not shadowed by an empty user config.
-
-## Most Users Should Read These in Order
-
-1. [GETTING_STARTED.md](GETTING_STARTED.md) for the short setup path
-2. [docs/getting-started.md](docs/getting-started.md) for the full walkthrough
-3. [docs/globus-compute.md](docs/globus-compute.md) if you are new to Globus Compute
-4. [docs/hpc.md](docs/hpc.md) for generic cluster bring-up
-5. [docs/improv.md](docs/improv.md) if you are on Argonne Improv
-6. [docs/ucar.md](docs/ucar.md) if you are on NCAR Casper
-7. [docs/chrysalis.md](docs/chrysalis.md) if you are on Argonne Chrysalis
-6. [docs/workflows.md](docs/workflows.md) for sequential remote workflows
-
-## MCP Front-Door Tools
-
-The MCP surface is intentionally small. Low-level UXarray functions are still
-available as Python APIs inside `uxarray_mcp.tools`, but MCP clients see
-intent-shaped tools:
-
-- `get_capabilities` — discover topology, variables, applicable operations,
-  and next steps.
-- `analyze_dataset` — deterministic first-look pipeline: inspect, validate,
-  area, zonal mean, and plots where possible.
-- `run_analysis` — one-operation dispatcher for inspection, validation,
-  area/zonal statistics, subsetting, vector calculus, comparison, remapping,
-  temporal/ensemble summaries, and export.
-- `plot_dataset` — mesh, geographic mesh, variable, or zonal-mean plots.
-- `diagnose_endpoint` and `probe_path_access` — endpoint status, setup
-  validation, and exact path readability checks.
-- `run_workflow`, `resume_workflow`, `get_status`, `get_result`, and
-  `manage_session` — persisted sessions, workflows, operation status, and
-  result handles.
-
-`analyze_dataset`, `run_analysis`, `plot_dataset`, and `probe_path_access`
-accept ``use_remote: bool`` and ``endpoint: str | None`` where remote execution
-applies. When ``use_remote=True`` the dispatcher submits to the configured (or
-named) Globus Compute endpoint and falls back to local execution if the endpoint
-is missing or unhealthy. There are no separate ``*_hpc`` tool names on the MCP
-surface.
-
-Full parameter and return details live in [docs/tools.md](docs/tools.md).
-
-## Helper Scripts
-
-- `scripts/hpc_doctor.py`
-  First-pass CLI doctor for local auth, endpoint status, remote no-op
-  execution, and optional real-path probing.
-- `scripts/improv_endpoint.sh`
-  Writes Improv endpoint templates for single-host validation or PBS debug.
-- `scripts/agentic_hpc_loop.py`
-  Example submit/poll/branch workflow using Globus Compute futures directly.
-
-## HPC in One Paragraph
-
-Remote execution has three separate layers:
-
-1. the local machine running this repository
-2. the endpoint running on the HPC machine
-3. the remote worker environment that must also have `uxarray`, `xarray`,
-   `netCDF4`, and `h5netcdf`
-
-Most confusing failures happen because only one or two of those layers are set
-up. Start with [docs/globus-compute.md](docs/globus-compute.md) and use
-`diagnose_endpoint(action="validate")` before real remote jobs.
-
-## Configuration
-
-Use the CLI for the common case:
+### Step 2 — Write a starter config
 
 ```bash
 uxarray-mcp setup
-uxarray-mcp endpoints add improv <your-endpoint-uuid> --path-prefix /lus/ --set-default
 ```
 
-This writes ``~/.config/uxarray-mcp/config.yaml`` with the canonical
-multi-endpoint schema. For dev clones, ``./config.yaml`` at the repo root
-still works (and is gitignored). The full schema:
+Creates `~/.config/uxarray-mcp/config.yaml` with sensible defaults. Local mode
+needs nothing more.
 
-```yaml
-hpc:
-  default_endpoint: "ucar"
-  endpoints:
-    ucar:
-      endpoint_id: "your-ucar-endpoint-uuid"
-      path_prefixes: ["/glade/"]
-    improv:
-      endpoint_id: "your-improv-endpoint-uuid"
-      path_prefixes: ["/gpfs/fs1/", "/home/jain/"]
-  execution_mode: "auto"
-  timeout_seconds: 300
-```
+### Step 3 — Connect your AI client
 
-Remote tools accept `endpoint="ucar"` or `endpoint="improv"`; when omitted,
-the server routes by path prefix before falling back to `default_endpoint`.
-
-## Development Checks
+**Claude Desktop**
 
 ```bash
+uxarray-mcp install-claude        # merges the mcpServers block into your config
+# or
+uxarray-mcp install-claude --print-only   # prints the JSON to paste manually
+```
+
+Restart Claude Desktop. The `uxarray` server should appear in Settings →
+Developer.
+
+**Claude Code**
+
+```bash
+claude mcp add uxarray --transport stdio -- uxarray-mcp serve
+```
+
+Then `/mcp` in Claude Code; pick `uxarray`.
+
+**Cursor / other MCP clients**
+
+Add an MCP server entry pointing at `uxarray-mcp serve` over stdio. See your
+client's MCP docs.
+
+### Step 4 — Sanity check
+
+```bash
+uxarray-mcp doctor
+```
+
+Should print `local execution: ok` and (if no endpoints configured) skip the
+remote checks.
+
+### Step 5 — Ask the AI to do something
+
+In your client, try:
+
+> "Open `<path to a UGRID/MPAS/SCRIP grid file>` and plot the mesh."
+
+That's it for local use.
+
+---
+
+## Going beyond your laptop
+
+If you have an HPC account at a national lab or university cluster with
+[Globus Compute](https://www.globus.org/compute) available:
+
+| You want to … | Read this |
+|---|---|
+| Connect to an endpoint someone else set up | **[docs/remote-hpc.md](docs/remote-hpc.md)** |
+| Stand up your own endpoint | **[docs/operating-an-endpoint.md](docs/operating-an-endpoint.md)** |
+| Understand the security model first | **[SECURITY.md](SECURITY.md)** |
+
+Both paths assume you've finished local install above.
+
+---
+
+## What the MCP exposes
+
+Intent-shaped tools, not raw UXarray bindings:
+
+- `get_capabilities` — what can I do with this mesh?
+- `analyze_dataset` — deterministic first-look: inspect, validate, area, zonal mean, plots.
+- `run_analysis` — one operation at a time (gradient, curl, subset, remap, …).
+- `plot_dataset` — mesh, geographic, variable, or zonal-mean plots.
+- `diagnose_endpoint`, `probe_path_access` — endpoint health + file readability.
+- `run_workflow`, `resume_workflow`, `get_status`, `get_result`, `manage_session` —
+  persisted sessions and multi-step workflows.
+
+Tools that can run remotely take `use_remote: bool` and optional `endpoint: str`.
+The dispatcher falls back to local if the endpoint is unhealthy.
+
+Full schema: [docs/tools.md](docs/tools.md).
+
+---
+
+## CLI reference
+
+| Command | Purpose |
+|---|---|
+| `uxarray-mcp serve` | Run the MCP server (used by your AI client) |
+| `uxarray-mcp setup` | Write a starter config |
+| `uxarray-mcp endpoints add NAME UUID` | Register a Globus Compute endpoint |
+| `uxarray-mcp endpoints list` | Show configured endpoints |
+| `uxarray-mcp doctor` | Validate local + (optionally) remote setup |
+| `uxarray-mcp install-claude` | Merge or print the Claude Desktop config block |
+
+---
+
+## Risks (read before relying on output)
+
+AI agents can misread prompts, pick the wrong file, get units wrong (e.g.,
+sphere-radius scaling on derivatives), or run long jobs on your HPC
+allocation. uxarray-mcp does **not** guarantee correctness of agent-driven
+analysis. You are responsible for:
+
+- Verifying numerical results before publishing.
+- Reviewing what files the agent opens.
+- Monitoring HPC job submissions against your allocation.
+
+For the security model (what the agent and the endpoint operator can access),
+see **[SECURITY.md](SECURITY.md)**.
+
+---
+
+## Development
+
+```bash
+uv sync --extra hpc --extra docs --dev
 uv run pre-commit run --all-files
 uv run pytest tests/ --ignore=tests/test_remote_agent.py
-uv sync --extra docs --dev
 uv run sphinx-build -b html docs docs/_build/html
 ```
 
-## Publishing
+Release process: [docs/release.md](docs/release.md).
 
-Releases follow the UXarray pattern: publish a GitHub Release from a version tag
-such as `v0.1.0`; the release workflow builds and publishes to PyPI with trusted
-publishing. Conda packages are handled through a separate conda-forge feedstock;
-`conda/recipe/meta.yaml` is a seed recipe for `uxarray-mcp-feedstock`.
+## License
 
-```bash
-uv build
-uv tool install dist/uxarray_mcp-*.whl --force
-uxarray-mcp --help
-```
-
-See [docs/release.md](docs/release.md) for the full PyPI and Conda workflow.
-
-## Documentation Index
-
-- [GETTING_STARTED.md](GETTING_STARTED.md)
-- [docs/getting-started.md](docs/getting-started.md)
-- [docs/globus-compute.md](docs/globus-compute.md)
-- [docs/hpc.md](docs/hpc.md)
-- [docs/improv.md](docs/improv.md)
-- [docs/ucar.md](docs/ucar.md)
-- [docs/chrysalis.md](docs/chrysalis.md)
-- [docs/tools.md](docs/tools.md)
-- [docs/workflows.md](docs/workflows.md)
-- [docs/scientific-agent.md](docs/scientific-agent.md)
+See [LICENSE](LICENSE).
