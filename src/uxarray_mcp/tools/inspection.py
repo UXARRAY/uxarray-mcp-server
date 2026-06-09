@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import numpy as np
-import uxarray as ux
 
 from uxarray_mcp.domain import (
     compute_area_stats,
     compute_variable_info,
     compute_zonal_mean_stats,
+    load_dataset,
     load_grid,
 )
 from uxarray_mcp.provenance import attach_provenance
@@ -77,7 +77,7 @@ def _inspect_mesh_local(file_path: str) -> Dict[str, Any]:
     file_size_mb = path.stat().st_size / (1024 * 1024)
 
     try:
-        grid = ux.open_grid(file_path)
+        grid = load_grid(file_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load mesh file: {str(e)}")
 
@@ -151,7 +151,7 @@ def _inspect_variable_local(
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     try:
-        uxds = ux.open_dataset(grid_path, data_path)
+        uxds = load_dataset(grid_path, data_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
@@ -291,7 +291,7 @@ def _calculate_zonal_mean_local(
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     try:
-        uxds = ux.open_dataset(grid_path, data_path)
+        uxds = load_dataset(grid_path, data_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
@@ -367,7 +367,7 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     try:
-        uxds = ux.open_dataset(grid_path, data_path)
+        uxds = load_dataset(grid_path, data_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 

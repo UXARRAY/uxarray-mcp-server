@@ -5,10 +5,9 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-import uxarray as ux
 from mcp.types import ImageContent, TextContent
 
-from uxarray_mcp.domain.mesh import load_grid
+from uxarray_mcp.domain.mesh import load_dataset, load_grid
 from uxarray_mcp.domain.plotting import (
     render_mesh,
     render_mesh_geo,
@@ -616,7 +615,7 @@ def _plot_variable_local(
             "The file may not have been written correctly."
         )
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    uxds = load_dataset(grid_path, data_path)
 
     if variable_name is None:
         for var in uxds.data_vars:
@@ -794,7 +793,7 @@ def _plot_zonal_mean_local(
             "The file may not have been written correctly."
         )
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    uxds = load_dataset(grid_path, data_path)
 
     zonal_result = compute_zonal_mean_stats(
         uxds, variable_name, lat_spec=lat_spec, conservative=conservative

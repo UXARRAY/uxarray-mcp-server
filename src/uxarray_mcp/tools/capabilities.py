@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import uxarray as ux
 
+from uxarray_mcp.domain import load_dataset, load_grid
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.config import load_config
 
@@ -74,7 +75,7 @@ def get_capabilities(
         if not grid_file.exists():
             raise FileNotFoundError(f"Grid file not found: {grid_path}")
         try:
-            grid = ux.open_grid(grid_path)
+            grid = load_grid(grid_path)
         except Exception as e:
             raise RuntimeError(f"Failed to load grid file: {e}") from e
         grid_format = str(getattr(grid, "source_grid_spec", "Unknown"))
@@ -110,7 +111,7 @@ def get_capabilities(
         if not data_file.exists():
             raise FileNotFoundError(f"Data file not found: {data_path}")
         try:
-            uxds = ux.open_dataset(grid_path, data_path)
+            uxds = load_dataset(grid_path, data_path)
         except Exception as e:
             raise RuntimeError(f"Failed to load dataset: {e}") from e
 
