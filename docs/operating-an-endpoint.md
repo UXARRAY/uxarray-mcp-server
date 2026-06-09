@@ -57,13 +57,24 @@ Slurm account or PBS project ID, and the site's conda/module convention.
 ```bash
 # 1. On the HPC machine, in your account
 module load conda                       # or whatever your site provides
-conda create -n gce python=3.11 -c conda-forge -y
+conda create -n gce python=3.12 -c conda-forge -y
 conda activate gce
 pip install globus-compute-endpoint uxarray xarray netCDF4 h5netcdf
 
 # 2. Configure the endpoint
 globus-compute-endpoint configure uxarray
 ```
+
+> **Pick the worker Python version deliberately.** Globus Compute serialization
+> tolerates same-minor skew (e.g. 3.12.10 ↔ 3.12.13) but breaks across minor
+> versions (3.12 ↔ 3.13). The packaged MCP tools route through
+> `AllCodeStrategies` and survive minor differences for simple payloads, but
+> raw `Executor.submit()` calls and any user code dropping down to the SDK
+> directly will hit pickle protocol errors and `WorkerLost`. The simplest
+> rule: pick a Python on the worker (3.12 is broadly available across HPC
+> sites today) and match it on the submitter side with
+> `uv tool install --python 3.12 uxarray-mcp`. `uxarray-mcp doctor` will
+> surface a warning at probe time when versions differ.
 
 Edit `~/.globus_compute/uxarray/config.yaml` and set the scheduler block.
 Minimum diff from the generated template (PBS example shown — see Step 3
