@@ -42,6 +42,7 @@ are effectively free.
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 import warnings
@@ -311,25 +312,67 @@ def probe_endpoint_worker(
         elapsed = round(time.monotonic() - t0, 1)
         pythonpath = result.get("pythonpath") or ""
         yac_pythonpath = _is_expected_yac_pythonpath(pythonpath)
+        worker_python = result.get("python", "")
         payload = {
             "status": "active",
             **_endpoint_public_fields(config),
             "node": result.get("node", ""),
-            "python": result.get("python", ""),
+            "python": worker_python,
             "slurm_job_id": result.get("slurm_job_id") or None,
             "pbs_job_id": result.get("pbs_job_id") or None,
             "pythonpath_set": bool(pythonpath),
             "pythonpath_expected_yac_runtime": yac_pythonpath,
             "elapsed_seconds": elapsed,
         }
+
+        warnings_list: list[str] = []
+
+        # Python-minor-version mismatch between submitter and worker is a
+        # subtle footgun: high-level MCP tools route through AllCodeStrategies
+        # and tolerate skew, but raw Executor.submit() with default
+        # serialization will hit pickle protocol differences and raise
+        # WorkerLost. Surface this at probe time so users see it before they
+        # build something that breaks in production.
+        if worker_python:
+            try:
+                worker_major, worker_minor = (
+                    int(p) for p in worker_python.split(".")[:2]
+                )
+            except (ValueError, IndexError):
+                worker_major, worker_minor = None, None
+            if (
+                worker_major is not None
+                and worker_minor is not None
+                and (
+                    worker_major != sys.version_info.major
+                    or worker_minor != sys.version_info.minor
+                )
+            ):
+                warnings_list.append(
+                    f"Python minor-version mismatch: SDK "
+                    f"{sys.version_info.major}.{sys.version_info.minor}, worker "
+                    f"{worker_major}.{worker_minor}. The packaged MCP tools work "
+                    f"because they ship function source via AllCodeStrategies, "
+                    f"but raw Executor.submit(fn) using default serialization "
+                    f"may raise WorkerLost. Reinstall locally on the worker's "
+                    f"Python: `uv tool install --python "
+                    f"{worker_major}.{worker_minor} uxarray-mcp` or, in a dev "
+                    f"clone, `uv sync --python {worker_major}.{worker_minor}`."
+                )
+
         # Warn on arbitrary PYTHONPATH leaks, but allow endpoint-side YAC paths.
         if pythonpath and not yac_pythonpath:
-            payload["warning"] = (
+            warnings_list.append(
                 "PYTHONPATH is set on the worker. This can cause pydantic/dill "
                 "conflicts. Add 'unset PYTHONPATH' to worker_init in the endpoint "
                 "config, and only set narrow runtime paths such as the YAC "
                 "Python bindings when they are required."
             )
+
+        if warnings_list:
+            payload["warnings"] = warnings_list
+            # Back-compat: keep singular `warning` populated with the first.
+            payload["warning"] = warnings_list[0]
         return payload
 
     except TimeoutError:
