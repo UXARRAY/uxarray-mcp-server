@@ -49,6 +49,38 @@ class TestInspectMeshFormat:
             result = inspect_mesh("/path/to/scrip.nc")
             assert result["format"] == "SCRIP"
 
+    def test_inspect_shapefile_mesh(self, base_grid):
+        """Test inspection of a Shapefile mesh."""
+        base_grid.source_grid_spec = "Shapefile"
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.Grid.from_file", return_value=base_grid) as mock_from_file,
+        ):
+            MockPath.return_value.exists.return_value = True
+            MockPath.return_value.stat.return_value.st_size = 1024 * 1024
+
+            result = inspect_mesh("/path/to/shapefile.shp")
+            mock_from_file.assert_called_once_with(
+                "/path/to/shapefile.shp", backend="geopandas"
+            )
+            assert result["format"] == "Shapefile"
+
+    def test_inspect_geojson_mesh(self, base_grid):
+        """Test inspection of a GeoJSON mesh."""
+        base_grid.source_grid_spec = "GeoJSON"
+        with (
+            patch("uxarray_mcp.tools.inspection.Path") as MockPath,
+            patch("uxarray.Grid.from_file", return_value=base_grid) as mock_from_file,
+        ):
+            MockPath.return_value.exists.return_value = True
+            MockPath.return_value.stat.return_value.st_size = 1024 * 1024
+
+            result = inspect_mesh("/path/to/geojson.geojson")
+            mock_from_file.assert_called_once_with(
+                "/path/to/geojson.geojson", backend="geopandas"
+            )
+            assert result["format"] == "GeoJSON"
+
     def test_inspect_healpix_mesh(self, base_grid):
         """Test inspection of a HEALPix mesh generation."""
         # Mock grid returned by from_healpix

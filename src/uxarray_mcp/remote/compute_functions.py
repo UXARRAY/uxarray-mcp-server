@@ -9,6 +9,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+# NOTE on the inline branching below: Globus Compute serializes each remote_*
+# function body and ships it to the worker. Closures over module-level helpers
+# such as _remote_load_grid don't survive serialization reliably across SDK
+# versions, so each function inlines the same ~6 lines of extension dispatch
+# (HEALPix spec, .shp / .geojson via geopandas, else default open_grid /
+# open_dataset). If you change one, change them all.
+
 
 def remote_runtime_probe() -> Dict[str, Any]:
     """Return lightweight runtime diagnostics from the remote worker."""
@@ -138,11 +145,14 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
     This function executes on the HPC endpoint, not locally.
     All imports must be within function scope for serialization.
     """
+    import os
+
     import uxarray as ux
 
     if file_path.startswith("healpix:"):
-        zoom = int(file_path.split(":")[1])
-        grid = ux.Grid.from_healpix(zoom)
+        grid = ux.Grid.from_healpix(int(file_path.split(":")[1]))
+    elif os.path.splitext(file_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(file_path, backend="geopandas")
     else:
         grid = ux.open_grid(file_path)
 
@@ -172,12 +182,15 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
     This function executes on the HPC endpoint, not locally.
     All imports must be within function scope for serialization.
     """
+    import os
+
     import numpy as np
     import uxarray as ux
 
     if file_path.startswith("healpix:"):
-        zoom = int(file_path.split(":")[1])
-        grid = ux.Grid.from_healpix(zoom)
+        grid = ux.Grid.from_healpix(int(file_path.split(":")[1]))
+    elif os.path.splitext(file_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(file_path, backend="geopandas")
     else:
         grid = ux.open_grid(file_path)
 
@@ -218,10 +231,19 @@ def remote_inspect_variable(
     -----
     This function executes on the HPC endpoint, not locally.
     """
+    import os
+
     import numpy as np
     import uxarray as ux
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
 
     face_dims = {"n_face", "nCells"}
     node_dims = {"n_node", "nVertices"}
@@ -312,12 +334,15 @@ def remote_plot_mesh(
     import matplotlib
 
     matplotlib.use("Agg")
+    import os
+
     import matplotlib.pyplot as plt
     import uxarray as ux
 
     if grid_path.startswith("healpix:"):
-        zoom = int(grid_path.split(":")[1])
-        grid = ux.Grid.from_healpix(zoom)
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
     else:
         grid = ux.open_grid(grid_path)
 
@@ -402,10 +427,19 @@ def remote_plot_variable(
     import matplotlib
 
     matplotlib.use("Agg")
+    import os
+
     import matplotlib.pyplot as plt
     import uxarray as ux
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
 
     face_dims = {"n_face", "nCells"}
 
@@ -531,10 +565,19 @@ def remote_plot_zonal_mean(
     import matplotlib
 
     matplotlib.use("Agg")
+    import os
+
     import matplotlib.pyplot as plt
     import uxarray as ux
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
 
     if variable_name not in uxds:
         raise ValueError(f"Variable '{variable_name}' not found")
@@ -612,9 +655,18 @@ def remote_calculate_zonal_mean(
     -----
     This function executes on the HPC endpoint, not locally.
     """
+    import os
+
     import uxarray as ux
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
 
     if variable_name not in uxds:
         raise ValueError(f"Variable '{variable_name}' not found")
@@ -704,10 +756,17 @@ def remote_subset_bbox_plot(
     import matplotlib
 
     matplotlib.use("Agg")
+    import os
+
     import matplotlib.pyplot as plt
     import uxarray as ux
 
-    grid = ux.open_grid(grid_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+    else:
+        grid = ux.open_grid(grid_path)
     n_face_total = int(grid.n_face)
 
     # full-mesh mean area
@@ -979,10 +1038,19 @@ def remote_calculate_gradient(
     grid_path: str, data_path: str, variable_name: str
 ) -> Dict[str, Any]:
     """Compute the spatial gradient of a face-centered scalar field on HPC."""
+    import os
+
     import numpy as np
     import uxarray as ux
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
     if variable_name not in uxds.data_vars:
         raise ValueError(
             f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
@@ -1024,10 +1092,19 @@ def remote_calculate_curl(
 
     zeta = dv/dx - du/dy
     """
+    import os
+
     import numpy as np
     import uxarray as ux
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
     for name in (u_variable, v_variable):
         if name not in uxds.data_vars:
             raise ValueError(
@@ -1070,10 +1147,19 @@ def remote_calculate_divergence(
 
     divergence = du/dx + dv/dy
     """
+    import os
+
     import numpy as np
     import uxarray as ux
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
     for name in (u_variable, v_variable):
         if name not in uxds.data_vars:
             raise ValueError(
@@ -1119,9 +1205,18 @@ def remote_calculate_azimuthal_mean(
     radius_step: float,
 ) -> Dict[str, Any]:
     """Compute the azimuthal (radial) mean around a centre point on HPC."""
+    import os
+
     import uxarray as ux
 
-    uxds = ux.open_dataset(grid_path, data_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
     if variable_name not in uxds.data_vars:
         raise ValueError(
             f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"

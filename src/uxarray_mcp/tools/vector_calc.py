@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from uxarray_mcp.domain.mesh import load_dataset
 from uxarray_mcp.state import OperationTracker
 
 from .remote_tools import (
@@ -120,7 +121,6 @@ def calculate_gradient(
     >>> calculate_gradient("grid.nc", "data.nc", "temperature")
     {"components": ["d_temperature_d_x", "d_temperature_d_y"], ...}
     """
-    import uxarray as ux
 
     from uxarray_mcp.domain.vector_calc import compute_gradient
     from uxarray_mcp.provenance import attach_provenance
@@ -132,7 +132,7 @@ def calculate_gradient(
     }
 
     def _local():
-        uxds = ux.open_dataset(grid_path, data_path)
+        uxds = load_dataset(grid_path, data_path)
         return attach_provenance(
             compute_gradient(uxds, variable_name),
             tool="calculate_gradient",
@@ -203,7 +203,6 @@ def calculate_curl(
     >>> calculate_curl("/hpc/grid.nc", "/hpc/data.nc", "u", "v", use_remote=True)
     {"stats": {...}, "_provenance": {"execution_venue": "hpc:...", ...}}
     """
-    import uxarray as ux
 
     from uxarray_mcp.domain.vector_calc import compute_curl
     from uxarray_mcp.provenance import attach_provenance
@@ -216,7 +215,7 @@ def calculate_curl(
     }
 
     def _local():
-        uxds = ux.open_dataset(grid_path, data_path)
+        uxds = load_dataset(grid_path, data_path)
         return attach_provenance(
             compute_curl(uxds, u_variable, v_variable),
             tool="calculate_curl",
@@ -287,7 +286,6 @@ def calculate_divergence(
     ... )
     {"interpretation": "horizontal divergence du/dx + dv/dy", ...}
     """
-    import uxarray as ux
 
     from uxarray_mcp.domain.vector_calc import compute_divergence
     from uxarray_mcp.provenance import attach_provenance
@@ -300,7 +298,7 @@ def calculate_divergence(
     }
 
     def _local():
-        uxds = ux.open_dataset(grid_path, data_path)
+        uxds = load_dataset(grid_path, data_path)
         return attach_provenance(
             compute_divergence(uxds, u_variable, v_variable),
             tool="calculate_divergence",
@@ -386,7 +384,6 @@ def calculate_azimuthal_mean(
     ... )
     {"radii_deg": [0.0, 0.5, 1.0, ...], "azimuthal_mean_values": [...], ...}
     """
-    import uxarray as ux
 
     from uxarray_mcp.domain.vector_calc import compute_azimuthal_mean
     from uxarray_mcp.provenance import attach_provenance
@@ -402,7 +399,7 @@ def calculate_azimuthal_mean(
     }
 
     def _local():
-        uxds = ux.open_dataset(grid_path, data_path)
+        uxds = load_dataset(grid_path, data_path)
         return attach_provenance(
             compute_azimuthal_mean(
                 uxds, variable_name, center_lon, center_lat, outer_radius, radius_step
