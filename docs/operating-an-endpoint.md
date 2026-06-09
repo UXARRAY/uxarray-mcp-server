@@ -70,11 +70,12 @@ globus-compute-endpoint configure uxarray
 > versions (3.12 ↔ 3.13). The packaged MCP tools route through
 > `AllCodeStrategies` and survive minor differences for simple payloads, but
 > raw `Executor.submit()` calls and any user code dropping down to the SDK
-> directly will hit pickle protocol errors and `WorkerLost`. The simplest
-> rule: pick a Python on the worker (3.12 is broadly available across HPC
-> sites today) and match it on the submitter side with
-> `uv tool install --python 3.12 uxarray-mcp`. `uxarray-mcp doctor` will
-> surface a warning at probe time when versions differ.
+> directly will hit pickle protocol errors and `WorkerLost`. **uxarray-mcp
+> pins to Python 3.12 today** ([globus/globus-compute#2139](https://github.com/globus/globus-compute/issues/2139)
+> tracks the upstream fix that will let us broaden this). Stand up your
+> endpoint on 3.12 and your submitter install will already match;
+> `uxarray-mcp doctor` will surface a warning at probe time if anything is
+> off.
 
 Edit `~/.globus_compute/uxarray/config.yaml` and set the scheduler block.
 Minimum diff from the generated template (PBS example shown — see Step 3
@@ -214,7 +215,7 @@ home is small):
 # Use the site's recommended conda or module first
 module load conda    # or whatever your site provides
 
-conda create -n gce python=3.11 -c conda-forge -y
+conda create -n gce python=3.12 -c conda-forge -y
 conda activate gce
 pip install globus-compute-endpoint
 ```

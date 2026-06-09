@@ -67,8 +67,16 @@ If not:
 ## Step 2 — Install the HPC extras locally (1 min)
 
 ```bash
-uv tool install "uxarray-mcp[hpc]"      # or `uv tool upgrade --extra hpc uxarray-mcp`
+uv tool install --python 3.12 "uxarray-mcp[hpc]"
+# or to upgrade an existing install:
+# uv tool upgrade --python 3.12 --extra hpc uxarray-mcp
 ```
+
+The `--python 3.12` flag matters: most HPC endpoints today (chrysalis,
+Casper, Improv) run Python 3.12 conda stacks, and Globus Compute's serializer
+is fragile across Python minor versions. Mismatch raises `WorkerLost` on
+non-trivial payloads. Tracked upstream at
+[globus/globus-compute#2139](https://github.com/globus/globus-compute/issues/2139).
 
 This adds the `globus-compute-sdk` to your local install. Verify:
 

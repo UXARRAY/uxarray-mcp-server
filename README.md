@@ -51,12 +51,20 @@ Pick one. `uv` is the easiest; `pip` works too.
 
 ```bash
 # Recommended
-uv tool install uxarray-mcp
+uv tool install --python 3.12 uxarray-mcp
 
 # Or from a fresh clone (developer path)
 git clone https://github.com/UXARRAY/uxarray-mcp-server.git
-cd uxarray-mcp-server && uv sync
+cd uxarray-mcp-server && uv sync --python 3.12
 ```
+
+> **Why `--python 3.12`?** The server uses Globus Compute to submit work to
+> HPC endpoints, and Globus Compute's serializer is fragile across Python
+> minor versions — a 3.13 submitter against a 3.12 endpoint worker raises
+> `WorkerLost` on non-trivial payloads. HPC sites broadly ship 3.12 conda
+> stacks today, so we pin the install to match. Tracking removal of this pin
+> at [globus/globus-compute#2139](https://github.com/globus/globus-compute/issues/2139).
+> `uv` downloads 3.12 automatically if your system doesn't have it.
 
 ### Step 2 — Write a starter config
 

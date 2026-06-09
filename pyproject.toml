@@ -10,9 +10,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: Apache Software License",
 ]
 authors = [
@@ -20,7 +18,12 @@ authors = [
     { name = "Dayan Abdulla", email = "dayanabdulla000@gmail.com" },
 ]
 license = { file = "LICENSE" }
-requires-python = ">=3.11"
+# Pinned to 3.12 until globus/globus-compute#2139 lands a published submitter ↔
+# worker compatibility story. HPC sites broadly ship Python 3.12 conda stacks
+# today; matching that minor version on the submitter side avoids WorkerLost
+# from pickle protocol skew. Revisit when upstream confirms multi-version
+# support and broaden requires-python back to >=3.11.
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastmcp>=3.4.0",
     "holoviews>=1.19.0",
