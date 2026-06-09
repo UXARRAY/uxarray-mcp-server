@@ -60,6 +60,9 @@ Documentation: `docs/` (Sphinx, built to ReadTheDocs).
   and check for empty PNG bytes after rendering. Raise `ValueError` with a
   clear message pointing to the likely cause.
 
+- **Upfront remote expectation setting** — before invoking any tool with `use_remote=True`, the AI agent must inform the user right upfront in the text response about the target HPC endpoint, potential queue wait times, and the active timeout configuration. This ensures transparency when jobs are queued on batch schedulers (Slurm/PBS).
+
+
 ## Repository layout
 
 ```

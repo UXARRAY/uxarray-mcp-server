@@ -298,12 +298,15 @@ def probe_endpoint_worker(
                 message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
                 category=UserWarning,
             )
-            with Executor(
+            ex = Executor(
                 endpoint_id=endpoint_id,
                 serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
-            ) as ex:
+            )
+            try:
                 fut = ex.submit(_worker_probe)
                 result = fut.result(timeout=timeout_seconds)
+            finally:
+                ex.shutdown(wait=False)
 
         elapsed = round(time.monotonic() - t0, 1)
         pythonpath = result.get("pythonpath") or ""

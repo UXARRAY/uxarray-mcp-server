@@ -1,9 +1,17 @@
 # Operating an Endpoint
 
-This page is for the person who stands up the Globus Compute endpoint on
-the HPC machine. That might be you (for personal use) or a sysadmin / PI
-(for a group). **Read [SECURITY.md](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/SECURITY.md) first** — operating an
-endpoint is shell-equivalent delegation, not a casual config change.
+This page covers two related cases:
+
+- **You want a personal endpoint** that only you submit to. Skip to
+  [Solo personal endpoint quickstart](#solo-personal-endpoint-quickstart) below
+  (~30 min). The full 8-step section is overkill for this case.
+- **You're standing up a shared endpoint** for a team, project, or lab. Use the
+  full [eight-step setup](#the-eight-steps) including a service account and the
+  function allowlist (~1 hr+).
+
+**Read [SECURITY.md](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/SECURITY.md) first** — even a personal endpoint is shell-equivalent access for
+whoever can submit to it (which includes a stolen refresh token from your laptop),
+so the hardening basics still apply.
 
 > **Prerequisites:**
 > 1. Shell access to the HPC machine.
@@ -34,6 +42,90 @@ Total: **~1 hour first time**, including hardening.
 
 You are giving **arbitrary Python execution as your HPC user** to anyone in
 the endpoint's Globus Auth allow-list. Do this with eyes open.
+
+---
+
+## Solo personal endpoint quickstart
+
+If only **you** will submit to this endpoint, you can skip the service-account
+ticket, the multi-user setup, and the function allowlist. The minimum viable
+personal endpoint is six commands and one config edit.
+
+**Prereqs:** shell on the HPC machine, a Globus identity, your project's
+Slurm account or PBS project ID, and the site's conda/module convention.
+
+```bash
+# 1. On the HPC machine, in your account
+module load conda                       # or whatever your site provides
+conda create -n gce python=3.11 -c conda-forge -y
+conda activate gce
+pip install globus-compute-endpoint uxarray xarray netCDF4 h5netcdf
+
+# 2. Configure the endpoint
+globus-compute-endpoint configure uxarray
+```
+
+Edit `~/.globus_compute/uxarray/config.yaml` and set the scheduler block.
+Minimum diff from the generated template (PBS example shown — see Step 3
+below for Slurm):
+
+```yaml
+display_name: uxarray
+engine:
+  type: GlobusComputeEngine
+  provider:
+    type: PBSProProvider
+    queue: casper                       # or your site's queue
+    account: YOUR_PROJECT_ID            # critical — without this, jobs reject
+    nodes_per_block: 1
+    init_blocks: 1
+    min_blocks: 0
+    max_blocks: 1
+    walltime: "01:00:00"
+    worker_init: |
+      unset PYTHONPATH                  # critical — see Step 3 for why
+      module load conda
+      conda activate gce
+```
+
+Lock down the auth so only **your** Globus identity can submit (find your
+identity UUID at <https://app.globus.org/account/identities>):
+
+```yaml
+authentication_policy:
+  high_assurance: true                  # recent MFA required
+  allowed_identities:
+    - your-globus-identity-uuid
+```
+
+Then:
+
+```bash
+# 3. Start the endpoint (opens a browser tab for OAuth on first run)
+globus-compute-endpoint start uxarray
+# → registers and prints your endpoint UUID. Save it.
+
+# 4. Lock down credential storage
+chmod 700 ~/.globus_compute ~/.globus
+```
+
+**Test from your laptop:**
+
+```bash
+uxarray-mcp endpoints add mine <UUID> --path-prefix /glade/   # or /lcrc/, /gpfs/...
+uxarray-mcp doctor --endpoint mine
+```
+
+If `doctor` reports `active`, you're done. Total time: ~30 min the first time.
+
+**You should still do the full hardening eventually:**
+
+- If anyone else will ever submit (collaborator, student, agent on a shared
+  laptop) → migrate to a service account ([Step 1](#step-1--pick-the-user-account)).
+- For long-running endpoints → add the function allowlist
+  ([MEP allowlist](#mep-allowlist)) and the audit cron
+  ([Step 7](#step-7--harden)).
+- Rotate credentials every 90 days ([Day-2 ops](#day-2-operations)).
 
 ---
 
@@ -267,7 +359,7 @@ Restart:
 globus-compute-endpoint restart uxarray
 ```
 
-#### MEP allowlist
+### MEP allowlist
 
 For the strongest protection, convert to a **Multi-User Endpoint** with a
 function allowlist. Pre-register the ~20 functions uxarray-mcp uses; the

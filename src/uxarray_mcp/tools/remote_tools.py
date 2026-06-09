@@ -142,7 +142,22 @@ def _run_with_optional_hpc(
     tracker.stage(
         "submitted", f"Submitting {tool_name} to the HPC endpoint {endpoint_label}."
     )
-    result = remote_call(agent)
+    try:
+        result = remote_call(agent)
+    except (TimeoutError, concurrent.futures.TimeoutError) as exc:
+        msg = (
+            f"Remote execution of {tool_name} timed out after {agent.config.timeout_seconds} seconds. "
+            f"This usually means the job was submitted to the remote queue on endpoint '{endpoint_label}' but is "
+            "waiting in the scheduler queue (Slurm/PBS), or the compute nodes are busy. "
+            "You can increase the timeout in config.yaml or wait and try again."
+        )
+        tracker.fail(msg)
+        raise RuntimeError(msg) from exc
+    except Exception as exc:
+        msg = f"Remote execution of {tool_name} failed: {exc}"
+        tracker.fail(msg)
+        raise
+
     result["_provenance"]["operation_id"] = tracker.operation_id
     tracker.succeed(f"{tool_name} completed with remote execution.")
     return result

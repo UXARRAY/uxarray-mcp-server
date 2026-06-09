@@ -30,10 +30,15 @@ You are most likely one of:
 2. **HPC user, endpoint already exists** — someone at your lab gave you a
    Globus Compute endpoint UUID. → [Local install](#local-install), then
    [docs/remote-hpc.md](docs/remote-hpc.md) (15 min).
-3. **HPC user, no endpoint yet** — you have shell access to ANL, NCAR, NERSC,
-   etc., and need to stand one up. → [Local install](#local-install),
-   then [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md) (~1 hr,
-   site-dependent).
+3. **HPC user, your own personal endpoint** — you have a Globus identity and
+   shell access to an HPC machine, and want to stand up an endpoint just for
+   yourself. → [Local install](#local-install), then
+   [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md#solo-personal-endpoint-quickstart)
+   (~30 min).
+4. **Group / shared endpoint operator** — you're standing one up for a team,
+   project, or lab. → [Local install](#local-install), then the full
+   [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md) including
+   service-account migration and the MEP allowlist (~1 hr+, site-dependent).
 
 ---
 
