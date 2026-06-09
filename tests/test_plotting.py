@@ -160,8 +160,8 @@ class TestPlotVariableMocked:
     """Tests for plot_variable tool using mocks."""
 
     @patch("uxarray_mcp.tools.plotting.render_variable", return_value=b"\x89PNG_var")
-    @patch("uxarray_mcp.tools.plotting.ux")
-    def test_plot_variable_auto_select(self, mock_ux, mock_render):
+    @patch("uxarray_mcp.tools.plotting.load_dataset")
+    def test_plot_variable_auto_select(self, mock_load_dataset, mock_render):
         mock_var = MagicMock()
         mock_var.dims = ("n_face",)
         mock_uxds = MagicMock()
@@ -170,7 +170,7 @@ class TestPlotVariableMocked:
         mock_uxds.uxgrid.n_face = 100
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
-        mock_ux.open_dataset.return_value = mock_uxds
+        mock_load_dataset.return_value = mock_uxds
 
         with patch("uxarray_mcp.tools.plotting.Path") as MockPath:
             MockPath.return_value.exists.return_value = True
@@ -201,8 +201,8 @@ class TestPlotVariableMocked:
             Path(empty_path).unlink(missing_ok=True)
 
     @patch("uxarray_mcp.tools.plotting.render_variable", return_value=b"\x89PNG_var")
-    @patch("uxarray_mcp.tools.plotting.ux")
-    def test_plot_variable_vmin_vmax(self, mock_ux, mock_render):
+    @patch("uxarray_mcp.tools.plotting.load_dataset")
+    def test_plot_variable_vmin_vmax(self, mock_load_dataset, mock_render):
         """vmin/vmax are passed through to render_variable."""
         mock_var = MagicMock()
         mock_var.dims = ("n_face",)
@@ -212,7 +212,7 @@ class TestPlotVariableMocked:
         mock_uxds.uxgrid.n_face = 100
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
-        mock_ux.open_dataset.return_value = mock_uxds
+        mock_load_dataset.return_value = mock_uxds
 
         with patch("uxarray_mcp.tools.plotting.Path") as MockPath:
             MockPath.return_value.exists.return_value = True
@@ -226,8 +226,8 @@ class TestPlotVariableMocked:
             assert kwargs["vmax"] == 5.0
 
     @patch("uxarray_mcp.tools.plotting.render_variable", return_value=b"\x89PNG_var")
-    @patch("uxarray_mcp.tools.plotting.ux")
-    def test_plot_variable_custom_title(self, mock_ux, mock_render):
+    @patch("uxarray_mcp.tools.plotting.load_dataset")
+    def test_plot_variable_custom_title(self, mock_load_dataset, mock_render):
         """title is passed through to render_variable."""
         mock_var = MagicMock()
         mock_var.dims = ("n_face",)
@@ -237,7 +237,7 @@ class TestPlotVariableMocked:
         mock_uxds.uxgrid.n_face = 100
         mock_uxds.uxgrid.n_node = 200
         mock_uxds.uxgrid.n_edge = 300
-        mock_ux.open_dataset.return_value = mock_uxds
+        mock_load_dataset.return_value = mock_uxds
 
         with patch("uxarray_mcp.tools.plotting.Path") as MockPath:
             MockPath.return_value.exists.return_value = True
@@ -258,10 +258,10 @@ class TestPlotZonalMeanMocked:
     """Tests for plot_zonal_mean tool using mocks."""
 
     @patch("uxarray_mcp.tools.plotting.render_zonal_mean", return_value=b"\x89PNG_zm")
-    @patch("uxarray_mcp.tools.plotting.ux")
-    def test_plot_zonal_mean_basic(self, mock_ux, mock_render):
+    @patch("uxarray_mcp.tools.plotting.load_dataset")
+    def test_plot_zonal_mean_basic(self, mock_load_dataset, mock_render):
         mock_uxds = MagicMock()
-        mock_ux.open_dataset.return_value = mock_uxds
+        mock_load_dataset.return_value = mock_uxds
 
         zonal_stats = {
             "latitudes": [-90.0, 0.0, 90.0],
@@ -291,10 +291,10 @@ class TestPlotZonalMeanMocked:
             assert prov["_provenance"]["tool"] == "plot_zonal_mean"
 
     @patch("uxarray_mcp.tools.plotting.render_zonal_mean", return_value=b"\x89PNG_zm")
-    @patch("uxarray_mcp.tools.plotting.ux")
-    def test_plot_zonal_mean_line_color_and_title(self, mock_ux, mock_render):
+    @patch("uxarray_mcp.tools.plotting.load_dataset")
+    def test_plot_zonal_mean_line_color_and_title(self, mock_load_dataset, mock_render):
         """line_color and title are passed through to render_zonal_mean."""
-        mock_ux.open_dataset.return_value = MagicMock()
+        mock_load_dataset.return_value = MagicMock()
         zonal_stats = {
             "latitudes": [-90.0, 0.0, 90.0],
             "zonal_mean_values": [270.0, 300.0, 270.0],

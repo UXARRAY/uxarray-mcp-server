@@ -12,7 +12,7 @@ import uxarray as ux
 import xarray as xr
 from matplotlib.path import Path as MplPath
 
-from uxarray_mcp.domain.mesh import load_grid
+from uxarray_mcp.domain.mesh import load_dataset, load_grid
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.state import (
     OperationTracker,
@@ -58,7 +58,7 @@ def _load_dataarray(
     data_path: str,
     variable_name: str | None,
 ) -> tuple[ux.UxDataset, ux.UxDataArray, str]:
-    uxds = ux.open_dataset(grid_path, data_path)
+    uxds = load_dataset(grid_path, data_path)
     selected = variable_name
     if selected is None:
         for name, var in uxds.data_vars.items():
@@ -434,8 +434,8 @@ def _load_comparison_arrays(
     variable_name: str,
 ) -> tuple[xr.DataArray, xr.DataArray]:
     if grid_path:
-        first = ux.open_dataset(grid_path, data_path_a)[variable_name].to_xarray()
-        second = ux.open_dataset(grid_path, data_path_b)[variable_name].to_xarray()
+        first = load_dataset(grid_path, data_path_a)[variable_name].to_xarray()
+        second = load_dataset(grid_path, data_path_b)[variable_name].to_xarray()
     else:
         first = xr.open_dataset(data_path_a)[variable_name]
         second = xr.open_dataset(data_path_b)[variable_name]
@@ -702,7 +702,7 @@ def regrid_dataset(
     if resolved_data is None:
         raise ValueError("data_path is required to regrid a dataset.")
 
-    uxds = ux.open_dataset(resolved_grid, resolved_data)
+    uxds = load_dataset(resolved_grid, resolved_data)
     target_grid = load_grid(target_grid_path)
     if not hasattr(uxds[next(iter(uxds.data_vars))].remap, method):
         raise ValueError(
