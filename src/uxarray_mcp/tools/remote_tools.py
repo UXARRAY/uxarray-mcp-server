@@ -285,7 +285,7 @@ def inspect_variable(
     endpoint: str | None = None,
     session_id: str | None = None,
 ) -> Dict[str, Any]:
-    """Inspect data variables with optional HPC execution.
+    """List the data variables in a dataset and report their dimensions, shape, units, and metadata. Optional HPC execution.
 
     Parameters
     ----------
@@ -409,7 +409,7 @@ def plot_mesh(
     session_id: str | None = None,
     dataset_handle: str | None = None,
 ) -> list[Any]:
-    """Render a mesh wireframe PNG with optional HPC execution.
+    """Show the mesh as a plain wireframe plot — render mesh edges and cell outlines as a PNG, no geographic context. Optional HPC execution.
 
     When use_remote=True the mesh is rendered on the HPC endpoint and only
     the base64-encoded PNG is transferred back to the client — no large
@@ -496,7 +496,7 @@ def plot_variable(
     session_id: str | None = None,
     dataset_handle: str | None = None,
 ) -> list[Any]:
-    """Render a face-centered variable as a filled-polygon PNG with optional HPC execution.
+    """Plot a face-centered variable as a colored map / choropleth — filled-polygon PNG of the variable's value per cell. Optional HPC execution.
 
     Parameters
     ----------

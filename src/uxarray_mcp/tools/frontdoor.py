@@ -391,7 +391,7 @@ def diagnose_endpoint(
     inspect_netcdf: bool = True,
     probe_timeout_seconds: int = 60,
 ) -> dict[str, Any]:
-    """Diagnose endpoint status, setup, or path readability."""
+    """Check whether the HPC Globus Compute endpoint is healthy, active, and reachable — endpoint status, worker setup validation, and remote file readability."""
     from uxarray_mcp.tools.execution_control import (
         endpoint_status,
         probe_path_access,
