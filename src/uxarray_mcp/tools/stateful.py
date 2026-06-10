@@ -35,7 +35,7 @@ from uxarray_mcp.state import (
 
 
 def create_session(name: str | None = None) -> dict[str, Any]:
-    """Create a persistent scientific session for datasets and results."""
+    """Start a new analysis session that persists datasets, results, and workflow state across tool calls."""
     session = create_session_record(name)
     return attach_provenance(
         {

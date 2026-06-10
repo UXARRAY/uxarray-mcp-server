@@ -14,7 +14,7 @@ def get_capabilities(
     grid_path: str,
     data_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Discover applicable tools and UXarray capabilities for a mesh and dataset.
+    """Recommend which MCP tools and UXarray API methods are applicable for a given mesh and dataset.
 
     Inspects the grid topology and data variable locations to determine which
     MCP server tools and native UXarray API methods can be applied to this
