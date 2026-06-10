@@ -143,7 +143,7 @@ def plot_mesh_geo(
     session_id: Optional[str] = None,
     dataset_handle: Optional[str] = None,
 ) -> list[Any]:
-    """Render a mesh with geographic context: coastlines, borders, lakes, and optional terrain.
+    """Make a geographic map with coastlines, borders, lakes, and optional terrain overlaid on the cell outlines.
 
     This tool produces a Cartopy-backed geographic plot that shows the mesh
     topology overlaid on a proper map with natural geographic features.

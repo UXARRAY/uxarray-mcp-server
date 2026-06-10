@@ -767,7 +767,7 @@ def calculate_temporal_mean(
     session_id: str | None = None,
     result_name: str | None = None,
 ) -> dict[str, Any]:
-    """Calculate a temporal mean from a time-aware dataset."""
+    """Take the time average of a variable over the time dimension (temporal mean / time-mean climatology, optionally grouped by month or season)."""
     tracker = OperationTracker("calculate_temporal_mean", session_id=session_id)
     ds = xr.open_dataset(data_path)
     if variable_name not in ds:
@@ -877,7 +877,7 @@ def calculate_ensemble_mean(
     session_id: str | None = None,
     result_name: str | None = None,
 ) -> dict[str, Any]:
-    """Calculate an ensemble mean across multiple files."""
+    """Average a variable across multiple ensemble members (one file per member) — the ensemble mean / multi-model mean."""
     tracker = OperationTracker("calculate_ensemble_mean", session_id=session_id)
     ensemble = _load_ensemble(variable_name, data_paths)
     result_data = ensemble.mean(dim="ensemble_member")
