@@ -328,34 +328,25 @@ class TestCalculateAzimuthalMeanTool:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_vector_calc_operations_available_through_run_analysis():
-    from uxarray_mcp.server import mcp
+def test_vector_calc_operations_available_through_run_analysis():
+    """run_analysis must advertise vector calc operations in its description."""
+    from uxarray_mcp.server import make_registry
 
-    if hasattr(mcp, "get_tools"):
-        tools = await mcp.get_tools()
-    else:
-        tools_list = await mcp.list_tools()
-        tools = {t.name: t for t in tools_list}
-
-    assert "run_analysis" in tools
+    registry = make_registry(profile="core")
+    tool = registry.get_tool("run_analysis")
+    assert tool is not None
     for name in ("gradient", "curl", "divergence", "azimuthal_mean"):
-        assert name in tools["run_analysis"].description
+        assert name in tool.description, (
+            f"{name!r} not mentioned in run_analysis description"
+        )
 
 
-@pytest.mark.asyncio
-async def test_prompts_registered():
-    from uxarray_mcp.server import mcp
+def test_prompts_registered_as_tools():
+    """Former @mcp.prompt() decorators are now prompt/ namespace tools."""
+    from uxarray_mcp.server import make_registry
 
-    if hasattr(mcp, "get_prompts"):
-        prompts = await mcp.get_prompts()
-    else:
-        try:
-            prompts_list = await mcp.list_prompts()
-            prompts = {p.name: p for p in prompts_list}
-        except Exception:
-            pytest.skip("MCP client does not support prompt listing")
-            return
-
+    registry = make_registry(profile="core")
+    tools = registry.list_tools()
+    sep = registry._name_sep
     for name in ("first_look", "vorticity_analysis", "hpc_diagnose"):
-        assert name in prompts, f"Prompt '{name}' not registered"
+        assert f"prompt{sep}{name}" in tools, f"prompt tool {name} missing"

@@ -60,8 +60,8 @@ CI must be green before a PR is merged.
 - Type checker: `mypy` (enforced by pre-commit).
 - Annotate all new public functions.
 - Comments explain *why*, not *what*.
-- No `domain/` imports of `mcp` or `fastmcp` — domain functions run on remote
-  HPC workers that do not have `uxarray_mcp` installed.
+- No `domain/` imports of `mcp` or `toolregistry` — domain functions run on
+  remote HPC workers that do not have `uxarray_mcp` installed.
 
 ## Adding Dependencies
 

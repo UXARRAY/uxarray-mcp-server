@@ -25,7 +25,8 @@ license = { file = "LICENSE" }
 # support and broaden requires-python back to >=3.11.
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "fastmcp>=3.4.0",
+    "toolregistry>=0.11.0",
+    "toolregistry-server[mcp]>=0.3.3",
     "holoviews>=1.19.0",
     "matplotlib>=3.9.0",
     "pyyaml>=6.0",
@@ -33,6 +34,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+openapi = [
+    "toolregistry-server[openapi]>=0.3.3",
+]
 hpc = [
     "academy-py>=0.3.1",
     "globus-compute-sdk>=4.5.0",
