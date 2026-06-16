@@ -213,14 +213,16 @@ def test_set_execution_mode_is_file_system():
     from toolregistry.tool import ToolTag
 
     registry = build_registry(profile="core")
-    tool = registry.get_tool("hpc-set_execution_mode")
+    sep = registry._name_sep
+    tool = registry.get_tool(f"hpc{sep}set_execution_mode")
     assert tool is not None
     assert ToolTag.FILE_SYSTEM.value in tool.metadata.all_tags
 
 
 def test_scientific_agent_is_experimental_and_deferred():
     registry = build_registry(profile="deferred-full")
-    tool = registry.get_tool("agent-run_scientific_agent")
+    sep = registry._name_sep
+    tool = registry.get_tool(f"agent{sep}run_scientific_agent")
     assert tool is not None
     assert "experimental" in tool.metadata.custom_tags
     assert tool.metadata.defer is True
@@ -234,12 +236,13 @@ def test_scientific_agent_is_experimental_and_deferred():
 def test_live_call_through_registry():
     """Side-effect-free tool round-trips through the registry."""
     registry = make_registry(profile="core")
+    sep = registry._name_sep
     result = registry.execute_tool_calls(
         [
             {
                 "id": "call_1",
                 "function": {
-                    "name": "hpc-get_execution_mode",
+                    "name": f"hpc{sep}get_execution_mode",
                     "arguments": "{}",
                 },
             }
