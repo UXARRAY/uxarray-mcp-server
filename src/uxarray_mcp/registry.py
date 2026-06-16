@@ -160,19 +160,20 @@ def first_look(path: str) -> str:
 
 
 def vorticity_analysis(grid_path: str, data_path: str, u_var: str, v_var: str) -> str:
-    """Generate a step-by-step prompt for vorticity and divergence analysis.
+    """Generate a multi-step analysis plan for rotation and divergence fields.
 
-    Returns a text plan instructing the LLM to compute curl (relative
-    vorticity) and divergence and interpret the results.
+    Returns instructional text (not results) that guides the LLM through
+    calling ``run_analysis`` twice and interpreting the output.  Use this
+    when you need a structured walkthrough rather than a single operation.
 
     Args:
         grid_path: Path to the mesh grid file.
-        data_path: Path to the data file with wind components.
-        u_var: Zonal (east-west) wind variable name.
-        v_var: Meridional (north-south) wind variable name.
+        data_path: Path to the data file with vector components.
+        u_var: Zonal (east-west) component variable name.
+        v_var: Meridional (north-south) component variable name.
 
     Returns:
-        Multi-step vorticity analysis prompt as a string.
+        Multi-step analysis plan as a string.
     """
     return (
         f"Analyse vorticity and divergence for `{data_path}`.\n\n"
@@ -328,11 +329,11 @@ def _apply_tags(
 # ---------------------------------------------------------------------------
 
 _SEARCH_HINTS: dict[str, str] = {
-    "calculate_curl": "vorticity rotation circulation",
-    "calculate_divergence": "compression expansion source sink",
-    "calculate_gradient": "spatial derivative slope",
-    "calculate_azimuthal_mean": "radial profile cyclone storm",
-    "calculate_zonal_mean": "latitudinal average belt",
+    "calculate_curl": "vorticity rotation circulation wind curl cross product compute vector field zeta",
+    "calculate_divergence": "compression expansion source sink wind divergence",
+    "calculate_gradient": "spatial derivative slope field gradient",
+    "calculate_azimuthal_mean": "radial profile cyclone storm azimuthal",
+    "calculate_zonal_mean": "latitudinal average belt zonal",
     "calculate_temporal_mean": "time average climatology",
     "calculate_anomaly": "deviation departure climatology",
     "calculate_ensemble_mean": "model average multi-member",

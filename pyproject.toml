@@ -1,6 +1,6 @@
 [project]
 name = "uxarray-mcp"
-version = "0.1.1"
+version = "0.2.0"
 description = "MCP server for analyzing unstructured meshes with UXarray"
 readme = "README.md"
 keywords = ["uxarray", "mcp", "unstructured grids", "scientific computing", "globus compute"]

@@ -48,7 +48,7 @@ def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
     """
     try:
         asyncio.get_running_loop()
-        # Inside async context (e.g. FastMCP) — run in a new thread
+        # Inside async context (e.g. MCP server) — run in a new thread
         with concurrent.futures.ThreadPoolExecutor() as pool:
             return pool.submit(asyncio.run, async_call()).result()
     except RuntimeError:
