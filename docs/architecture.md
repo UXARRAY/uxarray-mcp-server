@@ -11,8 +11,8 @@ The UXarray MCP Server is organized into three layers:
   </div>
   <div class="arch-arrow">↓</div>
   <div class="arch-box">
-    <strong>FastMCP Server</strong><br>
-    Registers tools from <code>uxarray_mcp.server</code> and exposes them to the client
+    <strong>ToolRegistry Server</strong><br>
+    Registers tools via <code>uxarray_mcp.registry</code> and exposes them over MCP / OpenAPI
   </div>
   <div class="arch-arrow">↓</div>
   <div class="arch-box">
@@ -77,7 +77,7 @@ transport itself. Globus Compute is still the actual remote execution system.
 
 ## Tools Layer (`tools/`)
 
-The FastMCP server exposes a small front-door tool surface. Those tools route
+The server exposes a small front-door tool surface. Those tools route
 to lower-level implementation functions in `tools/`, which handle input
 validation, domain calls, remote dispatch, provenance, and structured results.
 

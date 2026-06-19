@@ -64,10 +64,15 @@ def _ensure_hpc_block(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    """Run the MCP server on stdio."""
-    from uxarray_mcp.server import mcp
+    """Run the MCP server."""
+    from uxarray_mcp.server import run
 
-    mcp.run()
+    run(
+        profile=getattr(args, "profile", "core"),
+        transport=getattr(args, "transport", "stdio"),
+        host=getattr(args, "host", "127.0.0.1"),
+        port=getattr(args, "port", 8001),
+    )
     return 0
 
 
@@ -280,7 +285,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True)
 
-    serve = sub.add_parser("serve", help="Run the MCP server on stdio.")
+    serve = sub.add_parser("serve", help="Run the MCP server.")
+    serve.add_argument(
+        "--profile",
+        choices=("core", "deferred-full"),
+        default="core",
+        help=(
+            "core: gateway + control + list_datasets + prompts (~27 tools). "
+            "deferred-full: also load 30 raw tools as deferred, gated "
+            "behind discover_tools / admin promotion."
+        ),
+    )
+    serve.add_argument(
+        "--transport",
+        choices=("stdio", "sse", "http"),
+        default="stdio",
+        help="MCP transport. stdio for Claude Desktop subprocess use.",
+    )
+    serve.add_argument("--host", default="127.0.0.1", help="Bind host for SSE/HTTP.")
+    serve.add_argument("--port", type=int, default=8001, help="Port for SSE/HTTP.")
     serve.set_defaults(func=cmd_serve)
 
     setup = sub.add_parser("setup", help="Write a starter user config.")
