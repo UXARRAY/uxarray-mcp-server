@@ -219,6 +219,41 @@ def test_set_execution_mode_is_file_system():
     assert ToolTag.FILE_SYSTEM.value in tool.metadata.all_tags
 
 
+def test_session_tools_are_file_system():
+    from toolregistry.tool import ToolTag
+
+    registry = build_registry(profile="core")
+    sep = registry._name_sep
+    # Session tools persist/read records on disk, so they must carry
+    # FILE_SYSTEM in addition to stateful / read-only.
+    for name in (
+        "create_session",
+        "register_dataset",
+        "reset_session_state",
+        "get_session_state",
+        "get_result_handle",
+        "get_operation_status",
+        "list_operations",
+        "get_workflow_status",
+    ):
+        tool = registry.get_tool(f"session{sep}{name}")
+        assert tool is not None, name
+        assert ToolTag.FILE_SYSTEM.value in tool.metadata.all_tags, name
+
+
+def test_get_execution_mode_is_file_system_and_network():
+    from toolregistry.tool import ToolTag
+
+    registry = build_registry(profile="core")
+    sep = registry._name_sep
+    # Reads config from disk and queries the Globus Compute endpoint when one
+    # is configured, so it touches both the filesystem and the network.
+    tool = registry.get_tool(f"hpc{sep}get_execution_mode")
+    assert tool is not None
+    assert ToolTag.FILE_SYSTEM.value in tool.metadata.all_tags
+    assert ToolTag.NETWORK.value in tool.metadata.all_tags
+
+
 def test_scientific_agent_is_experimental_and_deferred():
     registry = build_registry(profile="deferred-full")
     sep = registry._name_sep

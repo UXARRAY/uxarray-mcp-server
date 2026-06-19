@@ -231,19 +231,24 @@ _PROMPT_FUNCS: dict[str, object] = {
 # ---------------------------------------------------------------------------
 
 _TAG_OVERRIDES: dict[str, tuple[set[ToolTag], set[str]]] = {
-    # Session state mutators
-    "create_session": (set(), {"stateful"}),
-    "register_dataset": (set(), {"stateful"}),
-    "reset_session_state": (set(), {"stateful"}),
-    # Session/control read-only
-    "get_session_state": ({ToolTag.READ_ONLY}, set()),
-    "get_result_handle": ({ToolTag.READ_ONLY}, set()),
-    "get_operation_status": ({ToolTag.READ_ONLY}, set()),
-    "list_operations": ({ToolTag.READ_ONLY}, set()),
-    "get_workflow_status": ({ToolTag.READ_ONLY}, set()),
+    # Session state mutators — persist records to disk via state._write_json
+    "create_session": ({ToolTag.FILE_SYSTEM}, {"stateful"}),
+    "register_dataset": ({ToolTag.FILE_SYSTEM}, {"stateful"}),
+    "reset_session_state": ({ToolTag.FILE_SYSTEM}, {"stateful"}),
+    # Session/control read-only — read persisted records via state._read_json
+    "get_session_state": ({ToolTag.READ_ONLY, ToolTag.FILE_SYSTEM}, set()),
+    "get_result_handle": ({ToolTag.READ_ONLY, ToolTag.FILE_SYSTEM}, set()),
+    "get_operation_status": ({ToolTag.READ_ONLY, ToolTag.FILE_SYSTEM}, set()),
+    "list_operations": ({ToolTag.READ_ONLY, ToolTag.FILE_SYSTEM}, set()),
+    "get_workflow_status": ({ToolTag.READ_ONLY, ToolTag.FILE_SYSTEM}, set()),
     # HPC control
     "endpoint_status": ({ToolTag.READ_ONLY, ToolTag.NETWORK}, set()),
-    "get_execution_mode": ({ToolTag.READ_ONLY}, set()),
+    # Reads config from disk; queries the Globus Compute endpoint when one
+    # is configured (check_endpoint_manager_status), so it can hit the network.
+    "get_execution_mode": (
+        {ToolTag.READ_ONLY, ToolTag.FILE_SYSTEM, ToolTag.NETWORK},
+        set(),
+    ),
     "validate_hpc_setup": ({ToolTag.READ_ONLY, ToolTag.NETWORK}, set()),
     "set_execution_mode": ({ToolTag.FILE_SYSTEM}, set()),
     # IO
@@ -401,7 +406,7 @@ def build_registry(
         func = getattr(_tools_mod, raw, None)
         if func is None:
             raise RuntimeError(
-                f"server.py registers {raw!r} via mcp.tool() but it is "
+                f"build_registry expects front-door tool {raw!r} but it is "
                 f"not exported from uxarray_mcp.tools."
             )
         registry.register(func)
