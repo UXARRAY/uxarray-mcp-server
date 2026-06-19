@@ -84,4 +84,4 @@ intersphinx_mapping = {
 
 autodoc_member_order = "bysource"
 autodoc_typehints = "description"
-autodoc_mock_imports = ["fastmcp"]
+autodoc_mock_imports = []

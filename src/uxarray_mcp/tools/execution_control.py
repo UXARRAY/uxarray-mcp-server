@@ -142,7 +142,7 @@ def _exception_details(exc: Exception) -> Dict[str, Any]:
 
 
 def _run_sync(awaitable_factory) -> Dict[str, Any]:
-    """Run an async call from sync code in CLI and FastMCP contexts."""
+    """Run an async call from sync code in CLI and server contexts."""
     try:
         asyncio.get_running_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
