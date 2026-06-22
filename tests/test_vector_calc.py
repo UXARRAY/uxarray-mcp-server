@@ -330,7 +330,7 @@ class TestCalculateAzimuthalMeanTool:
 
 def test_vector_calc_operations_available_through_run_analysis():
     """run_analysis must advertise vector calc operations in its description."""
-    from uxarray_mcp.server import make_registry
+    from uxarray_mcp.app import make_registry
 
     registry = make_registry(profile="core")
     tool = registry.get_tool("run_analysis")
@@ -343,7 +343,7 @@ def test_vector_calc_operations_available_through_run_analysis():
 
 def test_prompts_registered_as_tools():
     """Former @mcp.prompt() decorators are now prompt/ namespace tools."""
-    from uxarray_mcp.server import make_registry
+    from uxarray_mcp.app import make_registry
 
     registry = make_registry(profile="core")
     tools = registry.list_tools()
