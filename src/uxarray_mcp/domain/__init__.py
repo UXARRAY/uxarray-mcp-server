@@ -13,7 +13,7 @@ from .vector_calc import (
     compute_divergence,
     compute_gradient,
 )
-from .zonal import compute_zonal_mean_stats
+from .zonal import compute_zonal_anomaly_stats, compute_zonal_mean_stats
 
 __all__ = [
     "load_grid",
@@ -21,6 +21,7 @@ __all__ = [
     "compute_area_stats",
     "compute_variable_info",
     "compute_zonal_mean_stats",
+    "compute_zonal_anomaly_stats",
     "compute_gradient",
     "compute_curl",
     "compute_divergence",

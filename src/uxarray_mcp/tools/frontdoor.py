@@ -46,6 +46,11 @@ def run_analysis(
     session_id: str | None = None,
     dataset_handle: str | None = None,
     result_name: str | None = None,
+    scale_by_radius: bool = False,
+    lat_spec: Any = None,
+    conservative: bool = False,
+    target_lon: list[float] | None = None,
+    target_lat: list[float] | None = None,
     use_remote: bool = False,
     endpoint: str | None = None,
 ) -> dict[str, Any]:
@@ -53,12 +58,17 @@ def run_analysis(
 
     Supported operations:
     ``inspect_mesh``, ``inspect_variable``, ``validate_dataset``,
-    ``calculate_area``, ``calculate_zonal_mean``, ``gradient``, ``curl``,
-    ``divergence``, ``azimuthal_mean``, ``subset_bbox``, ``subset_polygon``,
-    ``cross_section``, ``compare_fields``, ``bias``, ``rmse``,
-    ``pattern_correlation``, ``remap_variable``, ``regrid_dataset``,
-    ``temporal_mean``, ``anomaly``, ``ensemble_mean``, ``ensemble_spread``,
-    and ``export``.
+    ``calculate_area``, ``calculate_zonal_mean``, ``zonal_anomaly``,
+    ``gradient``, ``curl``, ``divergence``, ``azimuthal_mean``,
+    ``subset_bbox``, ``subset_polygon``, ``cross_section``, ``compare_fields``,
+    ``bias``, ``rmse``, ``pattern_correlation``, ``remap_variable``,
+    ``regrid_dataset``, ``remap_to_rectilinear``, ``temporal_mean``,
+    ``anomaly``, ``ensemble_mean``, ``ensemble_spread``, and ``export``.
+
+    ``gradient`` and ``curl`` accept ``scale_by_radius`` (default False keeps the
+    historical unit-sphere result). ``zonal_anomaly`` accepts ``lat_spec`` and
+    ``conservative``. ``remap_to_rectilinear`` accepts ``target_lon`` and
+    ``target_lat`` (1-D coordinate arrays).
     """
     from uxarray_mcp.tools.advanced import (
         calculate_anomaly,
@@ -71,12 +81,13 @@ def run_analysis(
         compare_fields,
         extract_cross_section,
         regrid_dataset,
+        remap_to_rectilinear,
         remap_variable,
         subset_bbox,
         subset_polygon,
         write_result,
     )
-    from uxarray_mcp.tools.inspection import validate_dataset
+    from uxarray_mcp.tools.inspection import calculate_zonal_anomaly, validate_dataset
     from uxarray_mcp.tools.remote_tools import (
         calculate_area,
         calculate_zonal_mean,
@@ -129,11 +140,20 @@ def run_analysis(
             endpoint=endpoint,
             session_id=session_id,
         )
+    if op == "zonal_anomaly":
+        return calculate_zonal_anomaly(
+            _require(grid_path, "grid_path", op),
+            _require(data_path, "data_path", op),
+            _require(variable_name, "variable_name", op),
+            lat_spec=lat_spec,
+            conservative=conservative,
+        )
     if op == "gradient":
         return calculate_gradient(
             _require(grid_path, "grid_path", op),
             _require(data_path, "data_path", op),
             _require(variable_name, "variable_name", op),
+            scale_by_radius=scale_by_radius,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -144,6 +164,7 @@ def run_analysis(
             _require(data_path, "data_path", op),
             _require(u_variable, "u_variable", op),
             _require(v_variable, "v_variable", op),
+            scale_by_radius=scale_by_radius,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -253,6 +274,17 @@ def run_analysis(
             variable_names=[variable_name] if variable_name else None,
             method=method,
             remap_to=remap_to,
+            session_id=session_id,
+            dataset_handle=dataset_handle,
+            result_name=result_name,
+        )
+    if op == "remap_to_rectilinear":
+        return remap_to_rectilinear(
+            variable_name=_require(variable_name, "variable_name", op),
+            target_lon=_require(target_lon, "target_lon", op),
+            target_lat=_require(target_lat, "target_lat", op),
+            grid_path=grid_path,
+            data_path=data_path,
             session_id=session_id,
             dataset_handle=dataset_handle,
             result_name=result_name,

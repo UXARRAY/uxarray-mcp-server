@@ -102,6 +102,7 @@ _DEFERRED_TOOLS: dict[str, tuple[str, ...]] = {
         "calculate_ensemble_spread",
         "calculate_area",
         "calculate_zonal_mean",
+        "calculate_zonal_anomaly",
     ),
     "shape": (
         "subset_bbox",
@@ -109,6 +110,7 @@ _DEFERRED_TOOLS: dict[str, tuple[str, ...]] = {
         "extract_cross_section",
         "remap_variable",
         "regrid_dataset",
+        "remap_to_rectilinear",
     ),
     "inspect": (
         "inspect_mesh",
@@ -189,6 +191,196 @@ def vorticity_analysis(grid_path: str, data_path: str, u_var: str, v_var: str) -
     )
 
 
+def cyclone_structure(
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+    center_lon: float,
+    center_lat: float,
+    u_var: str = "",
+    v_var: str = "",
+    outer_radius: float = 10.0,
+) -> str:
+    """Generate a guided plan to characterise a cyclone / vortex structure.
+
+    Builds a radial picture of a storm or vortex around a centre point using the
+    azimuthal (radial) mean, optionally adding the rotational field. Returns
+    instructional text — the LLM runs the operations and interprets them.
+
+    Args:
+        grid_path: Path to the mesh grid file.
+        data_path: Path to the data file.
+        variable_name: Field to profile radially (e.g. wind speed, pressure).
+        center_lon: Longitude of the storm centre (degrees).
+        center_lat: Latitude of the storm centre (degrees).
+        u_var: Optional zonal wind component for a vorticity check.
+        v_var: Optional meridional wind component for a vorticity check.
+        outer_radius: Maximum radius in great-circle degrees.
+
+    Returns:
+        Multi-step cyclone-structure analysis plan as a string.
+    """
+    steps = [
+        "1. Call `run_analysis` with "
+        f'operation="azimuthal_mean", grid_path="{grid_path}", '
+        f'data_path="{data_path}", variable_name="{variable_name}", '
+        f"center_lon={center_lon}, center_lat={center_lat}, "
+        f"outer_radius={outer_radius}, radius_step=0.5 to build the radial "
+        "profile.",
+        "2. Call `run_analysis` with "
+        f'operation="subset_bbox", grid_path="{grid_path}", '
+        f'data_path="{data_path}", variable_name="{variable_name}", '
+        f"lon_bounds=[{center_lon - outer_radius}, {center_lon + outer_radius}], "
+        f"lat_bounds=[{center_lat - outer_radius}, {center_lat + outer_radius}] "
+        "to isolate the storm region.",
+    ]
+    if u_var and v_var:
+        steps.append(
+            "3. Call `run_analysis` with "
+            f'operation="curl", grid_path="{grid_path}", data_path="{data_path}", '
+            f'u_variable="{u_var}", v_variable="{v_var}" to confirm the '
+            "rotational signature (relative vorticity)."
+        )
+    steps.append(
+        f"{len(steps) + 1}. Interpret the radial profile: locate the radius of "
+        "maximum wind / minimum pressure, the storm's radial extent, and any "
+        'asymmetry. Plot the subset with `plot_dataset(plot_type="variable")`.'
+    )
+    return (
+        f"Characterise the cyclone/vortex near ({center_lon}, {center_lat}) in "
+        f"`{data_path}`.\n\n" + "\n".join(steps)
+    )
+
+
+def eddy_activity(
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+) -> str:
+    """Generate a guided plan to assess eddy / wave activity.
+
+    Quantifies departures from the latitudinal background state — the signature
+    of eddies, stationary waves, and storm tracks — using the zonal anomaly and
+    its gradient. Returns instructional text.
+
+    Args:
+        grid_path: Path to the mesh grid file.
+        data_path: Path to the data file.
+        variable_name: Face-centered field to analyse (e.g. geopotential height,
+            temperature).
+
+    Returns:
+        Multi-step eddy-activity analysis plan as a string.
+    """
+    return (
+        f"Assess eddy/wave activity for `{variable_name}` in `{data_path}`.\n\n"
+        "1. Call `run_analysis` with "
+        f'operation="calculate_zonal_mean", grid_path="{grid_path}", '
+        f'data_path="{data_path}", variable_name="{variable_name}" to establish '
+        "the latitudinal background state.\n"
+        "2. Call `run_analysis` with "
+        f'operation="zonal_anomaly", grid_path="{grid_path}", '
+        f'data_path="{data_path}", variable_name="{variable_name}" to isolate '
+        "departures from each latitude band (the eddy field).\n"
+        "3. Call `run_analysis` with "
+        f'operation="gradient", grid_path="{grid_path}", data_path="{data_path}", '
+        f'variable_name="{variable_name}" to highlight sharp gradients and '
+        "fronts associated with the waves.\n"
+        "4. Interpret the anomaly amplitude (std/max) as eddy strength, note "
+        "where activity concentrates, and plot the anomaly field with "
+        '`plot_dataset(plot_type="variable")`.'
+    )
+
+
+def model_evaluation(
+    grid_path: str,
+    data_path_a: str,
+    data_path_b: str,
+    variable_name: str,
+) -> str:
+    """Generate a guided plan to evaluate a model field against a reference.
+
+    Computes the standard verification triple — bias, RMSE, and pattern
+    correlation — between two same-grid fields and guides interpretation.
+    Returns instructional text.
+
+    Args:
+        grid_path: Path to the shared mesh grid file.
+        data_path_a: Model / candidate dataset.
+        data_path_b: Reference / observation dataset.
+        variable_name: Field to compare.
+
+    Returns:
+        Multi-step model-evaluation plan as a string.
+    """
+    return (
+        f"Evaluate `{variable_name}` in `{data_path_a}` against reference "
+        f"`{data_path_b}`.\n\n"
+        "1. Call `run_analysis` with "
+        f'operation="bias", grid_path="{grid_path}", '
+        f'data_path_a="{data_path_a}", data_path_b="{data_path_b}", '
+        f'variable_name="{variable_name}" for the mean signed error.\n'
+        "2. Call `run_analysis` with "
+        f'operation="rmse", grid_path="{grid_path}", '
+        f'data_path_a="{data_path_a}", data_path_b="{data_path_b}", '
+        f'variable_name="{variable_name}" for the magnitude of the error.\n'
+        "3. Call `run_analysis` with "
+        f'operation="pattern_correlation", grid_path="{grid_path}", '
+        f'data_path_a="{data_path_a}", data_path_b="{data_path_b}", '
+        f'variable_name="{variable_name}" for spatial-pattern skill.\n'
+        "4. Interpret together: bias = systematic offset, RMSE = typical error "
+        "size, pattern correlation = structural agreement (1.0 = perfect). Call "
+        "out whether errors are a uniform offset or a structural mismatch."
+    )
+
+
+def climatology_anomaly(
+    data_path: str,
+    variable_name: str,
+    grid_path: str = "",
+) -> str:
+    """Generate a guided plan for a climatology and anomaly analysis.
+
+    Establishes the time-mean state and the departures from it over a time
+    series, then summarises the anomaly latitudinally. Returns instructional
+    text.
+
+    Args:
+        data_path: Path to a time-series data file.
+        variable_name: Field to analyse.
+        grid_path: Optional mesh grid file (needed for the zonal summary).
+
+    Returns:
+        Multi-step climatology/anomaly plan as a string.
+    """
+    grid_arg = f'grid_path="{grid_path}", ' if grid_path else ""
+    last = (
+        "4. Call `run_analysis` with "
+        f'operation="calculate_zonal_mean", grid_path="{grid_path}", '
+        f'data_path="{data_path}", variable_name="{variable_name}" to summarise '
+        "the anomaly by latitude.\n"
+        if grid_path
+        else ""
+    )
+    return (
+        f"Build a climatology and anomalies for `{variable_name}` in "
+        f"`{data_path}`.\n\n"
+        "1. Call `run_analysis` with "
+        f'operation="temporal_mean", data_path="{data_path}", '
+        f'variable_name="{variable_name}" to compute the time-mean climatology.\n'
+        "2. Call `run_analysis` with "
+        f'operation="anomaly", {grid_arg}data_path="{data_path}", '
+        f'variable_name="{variable_name}" to compute departures from the mean '
+        "state.\n"
+        f'3. Plot the anomaly with `plot_dataset(plot_type="variable")`'
+        + (".\n" + last if last else " and interpret the spatial structure.\n")
+        + (
+            f"{5 if grid_arg and last else 4}. Interpret where and when the "
+            "field departs most from its climatology."
+        )
+    )
+
+
 def hpc_diagnose(endpoint: str = "") -> str:
     """Generate a step-by-step prompt for HPC endpoint diagnosis.
 
@@ -214,7 +406,15 @@ def hpc_diagnose(endpoint: str = "") -> str:
 
 
 _PROMPT_TOOLS: dict[str, tuple[str, ...]] = {
-    "prompt": ("first_look", "vorticity_analysis", "hpc_diagnose"),
+    "prompt": (
+        "first_look",
+        "vorticity_analysis",
+        "cyclone_structure",
+        "eddy_activity",
+        "model_evaluation",
+        "climatology_anomaly",
+        "hpc_diagnose",
+    ),
 }
 
 # Map prompt tool names to their implementing functions (defined above
@@ -222,6 +422,10 @@ _PROMPT_TOOLS: dict[str, tuple[str, ...]] = {
 _PROMPT_FUNCS: dict[str, object] = {
     "first_look": first_look,
     "vorticity_analysis": vorticity_analysis,
+    "cyclone_structure": cyclone_structure,
+    "eddy_activity": eddy_activity,
+    "model_evaluation": model_evaluation,
+    "climatology_anomaly": climatology_anomaly,
     "hpc_diagnose": hpc_diagnose,
 }
 
@@ -261,6 +465,10 @@ _TAG_OVERRIDES: dict[str, tuple[set[ToolTag], set[str]]] = {
     # Prompt tools are always read-only (they just return text)
     "first_look": ({ToolTag.READ_ONLY}, set()),
     "vorticity_analysis": ({ToolTag.READ_ONLY}, set()),
+    "cyclone_structure": ({ToolTag.READ_ONLY}, set()),
+    "eddy_activity": ({ToolTag.READ_ONLY}, set()),
+    "model_evaluation": ({ToolTag.READ_ONLY}, set()),
+    "climatology_anomaly": ({ToolTag.READ_ONLY}, set()),
     "hpc_diagnose": ({ToolTag.READ_ONLY}, set()),
 }
 
@@ -271,6 +479,7 @@ _SLOW_TOOL_NAMES: frozenset[str] = frozenset(
         "calculate_gradient",
         "calculate_azimuthal_mean",
         "calculate_zonal_mean",
+        "calculate_zonal_anomaly",
         "calculate_temporal_mean",
         "calculate_anomaly",
         "calculate_ensemble_mean",
@@ -281,6 +490,7 @@ _SLOW_TOOL_NAMES: frozenset[str] = frozenset(
         "calculate_pattern_correlation",
         "remap_variable",
         "regrid_dataset",
+        "remap_to_rectilinear",
         "subset_polygon",
         "extract_cross_section",
         "plot_mesh",
@@ -339,6 +549,7 @@ _SEARCH_HINTS: dict[str, str] = {
     "calculate_gradient": "spatial derivative slope field gradient",
     "calculate_azimuthal_mean": "radial profile cyclone storm azimuthal",
     "calculate_zonal_mean": "latitudinal average belt zonal",
+    "calculate_zonal_anomaly": "zonal anomaly deviation latitude band eddy wave departure",
     "calculate_temporal_mean": "time average climatology",
     "calculate_anomaly": "deviation departure climatology",
     "calculate_ensemble_mean": "model average multi-member",
@@ -353,6 +564,7 @@ _SEARCH_HINTS: dict[str, str] = {
     "extract_cross_section": "transect slice latitude longitude",
     "remap_variable": "interpolation target grid",
     "regrid_dataset": "interpolation target grid all variables",
+    "remap_to_rectilinear": "remap rectilinear regular lon lat structured grid interpolation",
     "inspect_mesh": "topology nodes faces edges grid summary",
     "inspect_variable": "data variable metadata stats",
     "validate_dataset": "data quality NaN Inf fill check",
