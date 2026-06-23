@@ -760,6 +760,127 @@ def regrid_dataset(
     return result
 
 
+def remap_to_rectilinear(
+    variable_name: str,
+    target_lon: Sequence[float],
+    target_lat: Sequence[float],
+    grid_path: str | None = None,
+    data_path: str | None = None,
+    backend: str = "uxarray",
+    session_id: str | None = None,
+    dataset_handle: str | None = None,
+    result_name: str | None = None,
+) -> dict[str, Any]:
+    """Remap a face-centered variable onto a regular lon/lat (rectilinear) grid.
+
+    Uses ``UxDataArray.remap.to_rectilinear`` to interpolate unstructured data
+    onto 1-D longitude/latitude coordinate arrays, producing a structured grid
+    suitable for downstream lon/lat workflows.
+
+    Parameters
+    ----------
+    variable_name : str
+        Face-centered variable to remap.
+    target_lon, target_lat : sequence of float
+        1-D longitude and latitude cell-center coordinates in degrees.
+    grid_path, data_path : str, optional
+        Source grid and data files (or resolve from session/dataset handle).
+    backend : str
+        Remapping backend: ``"uxarray"`` (default) or ``"yac"``.
+    session_id, dataset_handle, result_name : optional
+        Session/result-handle plumbing.
+
+    Returns
+    -------
+    dict
+        Keys: ``variable_name``, ``backend``, ``target_shape`` (n_lat, n_lon),
+        ``stats`` (min/max/mean of the remapped field), ``result_handle``, and
+        ``_provenance``.
+
+    Raises
+    ------
+    NotImplementedError
+        If the installed UXarray lacks ``remap.to_rectilinear``.
+    """
+    tracker = OperationTracker("remap_to_rectilinear", session_id=session_id)
+    resolved_grid, resolved_data = _resolve_paths(
+        session_id=session_id,
+        dataset_handle=dataset_handle,
+        grid_path=grid_path,
+        data_path=data_path,
+    )
+    if resolved_data is None:
+        raise ValueError("data_path is required for remapping.")
+
+    _, uxda, selected = _load_dataarray(resolved_grid, resolved_data, variable_name)
+
+    if not hasattr(uxda.remap, "to_rectilinear"):
+        raise NotImplementedError(
+            "remap_to_rectilinear requires a UXarray release that provides "
+            "remap.to_rectilinear. Upgrade uxarray to use this operation."
+        )
+
+    lon = list(target_lon)
+    lat = list(target_lat)
+    tracker.stage("remapping", f"Remapping {selected} to {len(lat)}x{len(lon)} grid.")
+    remapped = uxda.remap.to_rectilinear(lon, lat, backend=backend)
+
+    # remapped is a plain xarray.DataArray with lat/lon axes.
+    remapped_ds = remapped.to_dataset(name=selected)
+    result_handle = _persist_dataset_result(
+        dataset=remapped_ds,
+        session_id=session_id,
+        name=result_name or f"rectilinear:{selected}",
+        kind="rectilinear_variable",
+        summary=summarize_dataset(remapped_ds),
+        metadata={
+            "source_grid": resolved_grid,
+            "variable_name": selected,
+            "backend": backend,
+            "n_lon": len(lon),
+            "n_lat": len(lat),
+        },
+    )
+
+    vals = np.asarray(remapped.values, dtype=float)
+    finite = vals[np.isfinite(vals)]
+    stats = (
+        {
+            "min": float(finite.min()),
+            "max": float(finite.max()),
+            "mean": float(finite.mean()),
+        }
+        if finite.size > 0
+        else {"min": None, "max": None, "mean": None}
+    )
+
+    tracker.succeed("Rectilinear remap complete.")
+    result: dict[str, Any] = {
+        "variable_name": selected,
+        "backend": backend,
+        "target_shape": [len(lat), len(lon)],
+        "stats": stats,
+        "result_handle": result_handle,
+    }
+    result = attach_provenance(
+        result,
+        tool="remap_to_rectilinear",
+        inputs={
+            "variable_name": variable_name,
+            "target_lon": lon,
+            "target_lat": lat,
+            "grid_path": grid_path,
+            "data_path": data_path,
+            "backend": backend,
+            "session_id": session_id,
+            "dataset_handle": dataset_handle,
+        },
+        selected_variable=selected,
+    )
+    result["_provenance"]["operation_id"] = tracker.operation_id
+    return result
+
+
 def calculate_temporal_mean(
     data_path: str,
     variable_name: str,

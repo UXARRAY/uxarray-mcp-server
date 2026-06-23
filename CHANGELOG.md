@@ -5,6 +5,27 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+### Added
+- Guided science workflows as `prompt/` tools, each composing existing
+  operations around a scientific question: `cyclone_structure` (storm radial
+  structure), `eddy_activity` (departures from the zonal mean),
+  `model_evaluation` (bias/RMSE/pattern correlation vs a reference), and
+  `climatology_anomaly` (time-mean state and anomalies). These join the existing
+  `vorticity_analysis` workflow.
+- `run_analysis` operation `zonal_anomaly` — per-face deviation from the zonal
+  mean of each latitude band (`UxDataArray.zonal_anomaly`).
+- `run_analysis` operation `remap_to_rectilinear` — remap an unstructured
+  variable onto a regular lon/lat grid (`UxDataArray.remap.to_rectilinear`).
+- `gradient` and `curl` operations now accept a `scale_by_radius` flag. It
+  defaults to `False` to preserve unit-sphere results; set it to `True` to
+  divide by `uxgrid.sphere_radius` for physical units.
+
+### Changed
+- Bumped the `uxarray` floor to `>=2026.6.0` for the new zonal-anomaly,
+  rectilinear-remap, and radius-scaled gradient/curl APIs.
+
+## 0.2.0 — 2026-06-19
+
 ### Changed
 - **Server engine**: replaced FastMCP with
   [toolregistry](https://github.com/Oaklight/ToolRegistry) +
@@ -31,6 +52,14 @@ uses Semantic Versioning for public releases.
 ### Removed
 - `fastmcp` dependency.
 - `@mcp.prompt()` decorators (replaced by `prompt/` namespace tools).
+
+## 0.1.1 — 2026-06-11
+
+### Changed
+- Pinned Python to `>=3.12,<3.13` to match the supported runtime and avoid
+  Globus Compute pickle version-mismatch failures.
+- Aligned the published package metadata with the current PyPI release for the
+  conda-forge recipe.
 
 ## 0.1.0 — 2026-06-04
 

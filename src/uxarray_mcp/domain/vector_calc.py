@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 
-def compute_gradient(uxds: Any, variable_name: str) -> dict:
+def compute_gradient(
+    uxds: Any, variable_name: str, scale_by_radius: bool = False
+) -> dict:
     """Compute the gradient of a face-centered scalar field.
 
     Uses UXarray's Green-Gauss finite-volume gradient, which forms a closed
@@ -18,6 +20,10 @@ def compute_gradient(uxds: Any, variable_name: str) -> dict:
         Loaded UXarray dataset.
     variable_name : str
         Face-centered scalar variable to differentiate.
+    scale_by_radius : bool, default False
+        When ``True``, divide the unit-sphere derivatives by
+        ``uxgrid.sphere_radius`` to return physical units (requires a grid with
+        ``sphere_radius``). The default ``False`` keeps the unit-sphere result.
 
     Returns
     -------
@@ -38,8 +44,8 @@ def compute_gradient(uxds: Any, variable_name: str) -> dict:
 
     import numpy as np
 
-    grad = var.gradient()
-    # gradient() returns a UxDataset with two variables
+    # gradient() returns a UxDataset with zonal and meridional components.
+    grad = var.gradient(scale_by_radius=scale_by_radius)
     comp_names = list(grad.data_vars)
 
     def _stats(arr: Any) -> dict:
@@ -60,11 +66,14 @@ def compute_gradient(uxds: Any, variable_name: str) -> dict:
         "components": comp_names,
         "component_stats": components,
         "n_face": int(uxds.uxgrid.n_face),
+        "scale_by_radius": bool(scale_by_radius),
         "interpretation": "zonal (∂/∂x) and meridional (∂/∂y) components of the gradient",
     }
 
 
-def compute_curl(uxds: Any, u_variable: str, v_variable: str) -> dict:
+def compute_curl(
+    uxds: Any, u_variable: str, v_variable: str, scale_by_radius: bool = False
+) -> dict:
     """Compute the curl (relative vorticity) of a 2-D vector field (u, v).
 
     The curl is the vertical component of ∇ × (u, v):
@@ -80,6 +89,10 @@ def compute_curl(uxds: Any, u_variable: str, v_variable: str) -> dict:
         Zonal (east–west) component variable name.
     v_variable : str
         Meridional (north–south) component variable name.
+    scale_by_radius : bool, default False
+        When ``True``, divide the unit-sphere result by ``uxgrid.sphere_radius``
+        to return physical units (``1/s`` for wind in ``m/s``; requires a grid
+        with ``sphere_radius``). The default ``False`` keeps the unit sphere.
 
     Returns
     -------
@@ -102,7 +115,7 @@ def compute_curl(uxds: Any, u_variable: str, v_variable: str) -> dict:
 
     import numpy as np
 
-    result = u.curl(v)
+    result = u.curl(v, scale_by_radius=scale_by_radius)
     vals = result.values
     finite = vals[np.isfinite(vals)]
 
@@ -122,6 +135,7 @@ def compute_curl(uxds: Any, u_variable: str, v_variable: str) -> dict:
         "v_variable": v_variable,
         "interpretation": "relative vorticity ζ = ∂v/∂x − ∂u/∂y",
         "n_face": int(uxds.uxgrid.n_face),
+        "scale_by_radius": bool(scale_by_radius),
         "stats": stats,
     }
 

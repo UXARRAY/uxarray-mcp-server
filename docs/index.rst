@@ -11,6 +11,7 @@ via Globus Compute.
    :caption: User Guide
 
    getting-started
+   serving
    remote-hpc
    operating-an-endpoint
    globus-compute

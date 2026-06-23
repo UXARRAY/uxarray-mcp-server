@@ -85,6 +85,7 @@ def calculate_gradient(
     grid_path: str,
     data_path: str,
     variable_name: str,
+    scale_by_radius: bool = False,
     use_remote: bool = False,
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
@@ -102,6 +103,11 @@ def calculate_gradient(
         Path to the data file containing the variable.
     variable_name : str
         Name of the face-centered scalar variable.
+    scale_by_radius : bool
+        If True, divide unit-sphere derivatives by ``uxgrid.sphere_radius`` for
+        physical units (requires a UXarray release that supports it and a grid
+        with ``sphere_radius``). Default False preserves the unit-sphere result.
+        Applies to local execution; remote execution uses the unit sphere.
     use_remote : bool
         If True and an HPC endpoint is configured, execute remotely.
     endpoint : str, optional
@@ -129,12 +135,13 @@ def calculate_gradient(
         "grid_path": grid_path,
         "data_path": data_path,
         "variable_name": variable_name,
+        "scale_by_radius": scale_by_radius,
     }
 
     def _local():
         uxds = load_dataset(grid_path, data_path)
         return attach_provenance(
-            compute_gradient(uxds, variable_name),
+            compute_gradient(uxds, variable_name, scale_by_radius=scale_by_radius),
             tool="calculate_gradient",
             inputs=inputs,
         )
@@ -157,6 +164,7 @@ def calculate_curl(
     data_path: str,
     u_variable: str,
     v_variable: str,
+    scale_by_radius: bool = False,
     use_remote: bool = False,
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
@@ -181,6 +189,11 @@ def calculate_curl(
         Zonal (east-west) component, e.g. ``"uReconstructZonal"``.
     v_variable : str
         Meridional (north-south) component, e.g. ``"uReconstructMeridional"``.
+    scale_by_radius : bool
+        If True, divide the unit-sphere result by ``uxgrid.sphere_radius`` for
+        physical units (requires a UXarray release that supports it and a grid
+        with ``sphere_radius``). Default False preserves the unit-sphere result.
+        Applies to local execution; remote execution uses the unit sphere.
     use_remote : bool
         If True and an HPC endpoint is configured, execute remotely.
     endpoint : str, optional
@@ -212,12 +225,13 @@ def calculate_curl(
         "data_path": data_path,
         "u_variable": u_variable,
         "v_variable": v_variable,
+        "scale_by_radius": scale_by_radius,
     }
 
     def _local():
         uxds = load_dataset(grid_path, data_path)
         return attach_provenance(
-            compute_curl(uxds, u_variable, v_variable),
+            compute_curl(uxds, u_variable, v_variable, scale_by_radius=scale_by_radius),
             tool="calculate_curl",
             inputs=inputs,
         )
