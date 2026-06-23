@@ -73,6 +73,12 @@ divide by `uxgrid.sphere_radius` for physical units; the grid must define
 `UxDataArray.zonal_anomaly` and `UxDataArray.remap.to_rectilinear`, available in
 the pinned UXarray (`>=2026.6.0`).
 
+> **Local-only:** `zonal_anomaly` and `remap_to_rectilinear` currently run on the
+> local machine and do not have a remote (Globus Compute) execution path yet, so
+> they cannot operate on files that live only on an HPC filesystem. The other
+> compute operations accept `use_remote=True`. Uniform HPC routing across all
+> operations is tracked as a design item.
+
 Examples:
 
 ```python
