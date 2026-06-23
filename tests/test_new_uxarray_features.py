@@ -90,6 +90,44 @@ class TestScaleByRadius:
             )
         assert result["scale_by_radius"] is True
 
+    def test_remote_gradient_threads_scale_by_radius(self):
+        """The remote dispatch must forward scale_by_radius to the agent."""
+        from unittest.mock import MagicMock, patch
+
+        from uxarray_mcp.tools import vector_calc
+
+        agent = MagicMock()
+        agent.config.endpoint_id = "fake-endpoint"
+        agent.config.endpoint_name = "fake"
+        agent.config.timeout_seconds = 60
+        agent.calculate_gradient_remote.return_value = {
+            "components": [],
+            "component_stats": {},
+            "n_face": 1,
+            "scale_by_radius": True,
+            "_provenance": {"warnings": []},
+        }
+
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent", return_value=agent),
+            patch.object(
+                vector_calc, "_endpoint_manager_is_up", return_value=(True, "ok")
+            ),
+            patch.object(vector_calc, "_run_sync", side_effect=lambda f: f()),
+        ):
+            vector_calc.calculate_gradient(
+                "/hpc/grid.nc",
+                "/hpc/data.nc",
+                "t",
+                scale_by_radius=True,
+                use_remote=True,
+                endpoint="improv",
+            )
+
+        # The agent method must have been called with scale_by_radius=True.
+        args, kwargs = agent.calculate_gradient_remote.call_args
+        assert (True in args) or (kwargs.get("scale_by_radius") is True)
+
 
 # ---------------------------------------------------------------------------
 # zonal_anomaly
