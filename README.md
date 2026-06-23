@@ -16,6 +16,13 @@ remotely on an HPC system you have access to.
 > / vorticity / divergence, subset, remap, plot, and run multi-step workflows.
 > All as natural-language prompts.
 
+> **Local by default; HPC is opt-in.** Everything runs on your machine unless
+> you configure a [Globus Compute](https://www.globus.org/compute) endpoint.
+> The remote option only becomes available once such an endpoint exists —
+> running one requires an account and allocation on that HPC system, though a
+> shared/service-account endpoint can let authorized users submit without their
+> own login.
+
 > **⚠️ What the AI can access.** Any file you (or your HPC account) can read.
 > Any compute the configured endpoint can submit. Outputs are written to your
 > disk. **See [SECURITY.md](SECURITY.md) before connecting any remote endpoint.**
