@@ -107,7 +107,8 @@ def calculate_gradient(
         If True, divide unit-sphere derivatives by ``uxgrid.sphere_radius`` for
         physical units (requires a UXarray release that supports it and a grid
         with ``sphere_radius``). Default False preserves the unit-sphere result.
-        Applies to local execution; remote execution uses the unit sphere.
+        Honored on both local and remote execution when the active UXarray
+        supports it; otherwise the result stays on the unit sphere.
     use_remote : bool
         If True and an HPC endpoint is configured, execute remotely.
     endpoint : str, optional
@@ -154,7 +155,9 @@ def calculate_gradient(
         session_id=session_id,
         local_call=_local,
         remote_call=lambda agent: _run_sync(
-            lambda: agent.calculate_gradient_remote(grid_path, data_path, variable_name)
+            lambda: agent.calculate_gradient_remote(
+                grid_path, data_path, variable_name, scale_by_radius
+            )
         ),
     )
 
@@ -193,7 +196,8 @@ def calculate_curl(
         If True, divide the unit-sphere result by ``uxgrid.sphere_radius`` for
         physical units (requires a UXarray release that supports it and a grid
         with ``sphere_radius``). Default False preserves the unit-sphere result.
-        Applies to local execution; remote execution uses the unit sphere.
+        Honored on both local and remote execution when the active UXarray
+        supports it; otherwise the result stays on the unit sphere.
     use_remote : bool
         If True and an HPC endpoint is configured, execute remotely.
     endpoint : str, optional
@@ -245,7 +249,7 @@ def calculate_curl(
         local_call=_local,
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_curl_remote(
-                grid_path, data_path, u_variable, v_variable
+                grid_path, data_path, u_variable, v_variable, scale_by_radius
             )
         ),
     )

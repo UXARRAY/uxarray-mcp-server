@@ -1035,9 +1035,10 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
 
 
 def remote_calculate_gradient(
-    grid_path: str, data_path: str, variable_name: str
+    grid_path: str, data_path: str, variable_name: str, scale_by_radius: bool = False
 ) -> Dict[str, Any]:
     """Compute the spatial gradient of a face-centered scalar field on HPC."""
+    import inspect as _inspect
     import os
 
     import numpy as np
@@ -1062,7 +1063,14 @@ def remote_calculate_gradient(
             "Gradient requires face-centered data."
         )
 
-    grad = var.gradient()
+    # Honor scale_by_radius when the worker's UXarray supports it; otherwise
+    # fall back to the unit-sphere call so older workers keep working.
+    applied_scale = False
+    if "scale_by_radius" in _inspect.signature(var.gradient).parameters:
+        grad = var.gradient(scale_by_radius=scale_by_radius)
+        applied_scale = bool(scale_by_radius)
+    else:
+        grad = var.gradient()
     comp_names = list(grad.data_vars)
 
     def _stats(arr: Any) -> Dict[str, Any]:
@@ -1081,17 +1089,23 @@ def remote_calculate_gradient(
         "components": comp_names,
         "component_stats": {name: _stats(grad[name]) for name in comp_names},
         "n_face": int(uxds.uxgrid.n_face),
+        "scale_by_radius": applied_scale,
         "interpretation": "zonal (d/dx) and meridional (d/dy) components of the gradient",
     }
 
 
 def remote_calculate_curl(
-    grid_path: str, data_path: str, u_variable: str, v_variable: str
+    grid_path: str,
+    data_path: str,
+    u_variable: str,
+    v_variable: str,
+    scale_by_radius: bool = False,
 ) -> Dict[str, Any]:
     """Compute relative vorticity (curl) of a 2-D wind field on HPC.
 
     zeta = dv/dx - du/dy
     """
+    import inspect as _inspect
     import os
 
     import numpy as np
@@ -1118,7 +1132,12 @@ def remote_calculate_curl(
                 "Curl requires face-centered vector components."
             )
 
-    result = u.curl(v)
+    applied_scale = False
+    if "scale_by_radius" in _inspect.signature(u.curl).parameters:
+        result = u.curl(v, scale_by_radius=scale_by_radius)
+        applied_scale = bool(scale_by_radius)
+    else:
+        result = u.curl(v)
     vals = result.values
     finite = vals[np.isfinite(vals)]
     stats: Dict[str, Any] = (
@@ -1136,6 +1155,7 @@ def remote_calculate_curl(
         "v_variable": v_variable,
         "interpretation": "relative vorticity zeta = dv/dx - du/dy",
         "n_face": int(uxds.uxgrid.n_face),
+        "scale_by_radius": applied_scale,
         "stats": stats,
     }
 
