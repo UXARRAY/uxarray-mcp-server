@@ -16,7 +16,7 @@ which provide:
   Code, and any MCP-compatible client.
 - **OpenAPI / REST** (optional extra) for curl, OpenAI Assistants,
   Anthropic Messages API, Gemini, LangChain, plain scripts.
-- **Python API** — `from uxarray_mcp.server import make_registry`.
+- **Python API** — `from uxarray_mcp.app import make_registry`.
 
 It supports local execution and optional remote execution on HPC clusters via
 [Globus Compute](https://globus-compute.readthedocs.io/).

@@ -2,7 +2,7 @@
 
 These tests replace the previous FastMCP-based assertions. They
 exercise ``uxarray_mcp.registry.build_registry`` and
-``uxarray_mcp.server.make_registry`` to confirm the tool surface
+``uxarray_mcp.app.make_registry`` to confirm the tool surface
 matches the agreed design spec.
 """
 
@@ -13,6 +13,7 @@ import json
 
 import pytest
 
+from uxarray_mcp.app import make_mcp_server, make_registry
 from uxarray_mcp.registry import (
     _CONTROL_TOOLS,
     _CORE_EXTRA_TOOLS,
@@ -21,7 +22,6 @@ from uxarray_mcp.registry import (
     FRONTDOOR_NAMES,
     build_registry,
 )
-from uxarray_mcp.server import make_mcp_server, make_registry
 
 EXPECTED_FRONTDOOR = 11
 EXPECTED_CONTROL = 12  # 8 session + 4 hpc
@@ -298,4 +298,4 @@ def test_live_call_through_registry():
 async def test_mcp_server_constructs():
     """make_mcp_server() returns a working MCP Server object."""
     server = make_mcp_server(profile="core")
-    assert server.name == "uxarray-mcp-server"
+    assert server.name == "UXarray MCP"

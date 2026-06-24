@@ -65,13 +65,29 @@ def _ensure_hpc_block(data: dict[str, Any]) -> dict[str, Any]:
 
 def cmd_serve(args: argparse.Namespace) -> int:
     """Run the MCP server."""
-    from uxarray_mcp.server import run
+    from uxarray_mcp.app import UXarrayApp
 
-    run(
-        profile=getattr(args, "profile", "core"),
-        transport=getattr(args, "transport", "stdio"),
+    app = UXarrayApp()
+    transport = getattr(args, "transport", "stdio")
+    mcp_transport = "streamable-http" if transport == "http" else transport
+    app.serve_mcp(
+        transport=mcp_transport,
         host=getattr(args, "host", "127.0.0.1"),
         port=getattr(args, "port", 8001),
+        profile=getattr(args, "profile", "core"),
+    )
+    return 0
+
+
+def cmd_openapi(args: argparse.Namespace) -> int:
+    """Run the OpenAPI/REST server."""
+    from uxarray_mcp.app import UXarrayApp
+
+    app = UXarrayApp()
+    app.serve_openapi(
+        host=getattr(args, "host", "0.0.0.0"),
+        port=getattr(args, "port", 8000),
+        profile=getattr(args, "profile", "core"),
     )
     return 0
 
@@ -285,6 +301,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True)
 
+    # --- serve (MCP) ---
     serve = sub.add_parser("serve", help="Run the MCP server.")
     serve.add_argument(
         "--profile",
@@ -305,6 +322,24 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1", help="Bind host for SSE/HTTP.")
     serve.add_argument("--port", type=int, default=8001, help="Port for SSE/HTTP.")
     serve.set_defaults(func=cmd_serve)
+
+    # --- openapi ---
+    openapi = sub.add_parser("openapi", help="Run the OpenAPI/REST server.")
+    openapi.add_argument(
+        "--profile",
+        choices=("core", "deferred-full"),
+        default="core",
+        help=(
+            "core: gateway + control + list_datasets + prompts (~27 tools). "
+            "deferred-full: also load 30 raw tools as deferred, gated "
+            "behind discover_tools / admin promotion."
+        ),
+    )
+    openapi.add_argument(
+        "--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)."
+    )
+    openapi.add_argument("--port", type=int, default=8000, help="Port (default: 8000).")
+    openapi.set_defaults(func=cmd_openapi)
 
     setup = sub.add_parser("setup", help="Write a starter user config.")
     setup.add_argument("--path", default=None, help="Override target path.")
