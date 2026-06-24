@@ -47,7 +47,7 @@ def run_analysis(
     dataset_handle: str | None = None,
     result_name: str | None = None,
     scale_by_radius: bool = False,
-    lat_spec: Any = None,
+    lat_spec: tuple | float | list[Any] | None = None,
     conservative: bool = False,
     target_lon: list[float] | None = None,
     target_lat: list[float] | None = None,
