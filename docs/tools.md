@@ -7,6 +7,11 @@ clients should use the intent-shaped tools below.
 Most tools return structured dictionaries with a `_provenance` block. Plotting
 returns MCP content blocks: an inline PNG plus JSON metadata.
 
+The visible tool set depends on the profile (`core` by default, or
+`deferred-full`), and the server can expose these tools over MCP stdio/SSE/HTTP
+or OpenAPI/REST. See {doc}`serving` for profiles, transports, and tool
+discovery.
+
 ## Front-Door Tools
 
 ### `get_capabilities`
@@ -43,10 +48,12 @@ Supported operations:
 | `validate_dataset` | NaN/Inf/fill-value checks |
 | `calculate_area` | Face area statistics |
 | `calculate_zonal_mean` | Latitude-band mean for a face-centered variable |
+| `zonal_anomaly` | Per-face deviation from its latitude-band zonal mean |
 | `gradient`, `curl`, `divergence`, `azimuthal_mean` | Vector/radial diagnostics |
 | `subset_bbox`, `subset_polygon`, `cross_section` | Spatial selections |
 | `compare_fields`, `bias`, `rmse`, `pattern_correlation` | Same-grid comparisons |
 | `remap_variable`, `regrid_dataset` | UXarray-backed remapping |
+| `remap_to_rectilinear` | Remap a variable onto a regular lon/lat grid |
 | `temporal_mean`, `anomaly` | Time-dimension summaries |
 | `ensemble_mean`, `ensemble_spread` | Multi-file ensemble summaries |
 | `export` | Write a persisted result or dataset to NetCDF/CSV |
@@ -57,11 +64,40 @@ Common parameters include `grid_path`, `data_path`, `variable_name`,
 `endpoint`. Each operation validates the parameters it requires and returns a
 clear error if one is missing.
 
+`gradient` and `curl` accept `scale_by_radius` (default `False`). When `False`,
+results stay on the unit sphere (the historical behavior). Set it to `True` to
+divide by `uxgrid.sphere_radius` for physical units; the grid must define
+`sphere_radius`.
+
+`zonal_anomaly` and `remap_to_rectilinear` are backed by
+`UxDataArray.zonal_anomaly` and `UxDataArray.remap.to_rectilinear`, available in
+the pinned UXarray (`>=2026.6.0`).
+
+> **Local-only:** `zonal_anomaly` and `remap_to_rectilinear` currently run on the
+> local machine and do not have a remote (Globus Compute) execution path yet, so
+> they cannot operate on files that live only on an HPC filesystem. The other
+> compute operations accept `use_remote=True`. Uniform HPC routing across all
+> operations is tracked as a design item.
+
 Examples:
 
 ```python
 run_analysis(operation="inspect_mesh", grid_path="healpix:4")
 run_analysis(operation="calculate_area", grid_path="/path/grid.nc")
+run_analysis(
+    operation="zonal_anomaly",
+    grid_path="/path/grid.nc",
+    data_path="/path/data.nc",
+    variable_name="temperature",
+)
+run_analysis(
+    operation="remap_to_rectilinear",
+    grid_path="/path/grid.nc",
+    data_path="/path/data.nc",
+    variable_name="temperature",
+    target_lon=[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330],
+    target_lat=[-60, -30, 0, 30, 60],
+)
 run_analysis(
     operation="calculate_zonal_mean",
     grid_path="/path/grid.nc",
@@ -134,13 +170,29 @@ dispatcher either falls back locally or reports a structured readiness error.
 
 ## MCP Prompts
 
-Prompts are user-invokable slash commands. In Claude Code or Claude Desktop
-they appear as `/first_look`, `/vorticity_analysis`, and `/hpc_diagnose`.
+Prompts are user-invokable slash commands that return a guided, multi-step
+analysis plan (instruction text, not results) — the assistant then runs the
+chained operations and interprets them. In Claude Code or Claude Desktop they
+appear as `/first_look`, `/vorticity_analysis`, etc.
+
+General:
 
 - `/first_look path` calls `get_capabilities` and `analyze_dataset`.
-- `/vorticity_analysis grid_path data_path u_var v_var` calls
-  `run_analysis(operation="curl")` and
-  `run_analysis(operation="divergence")`.
-- `/hpc_diagnose [endpoint]` calls
-  `diagnose_endpoint(action="status")` and
+- `/hpc_diagnose [endpoint]` calls `diagnose_endpoint(action="status")` and
   `diagnose_endpoint(action="validate")`.
+
+Science workflows (each composes existing `run_analysis` operations around a
+scientific question):
+
+- `/vorticity_analysis grid_path data_path u_var v_var` — rotation and
+  divergence of a wind field (`curl` + `divergence`).
+- `/cyclone_structure grid_path data_path variable_name center_lon center_lat [u_var v_var outer_radius]`
+  — radial structure of a storm/vortex (`azimuthal_mean` + `subset_bbox`,
+  optionally `curl`).
+- `/eddy_activity grid_path data_path variable_name` — departures from the
+  latitudinal background state (`calculate_zonal_mean` + `zonal_anomaly` +
+  `gradient`).
+- `/model_evaluation grid_path data_path_a data_path_b variable_name` — verify a
+  field against a reference (`bias` + `rmse` + `pattern_correlation`).
+- `/climatology_anomaly data_path variable_name [grid_path]` — time-mean state
+  and departures (`temporal_mean` + `anomaly`, optionally `calculate_zonal_mean`).

@@ -1,6 +1,7 @@
 import sys
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 # Mock uxarray if it's not installed, so we can run logic tests without heavy dependencies
@@ -244,3 +245,47 @@ def ensemble_data_files(tmp_path):
         coords={"sample": [0, 1]},
     ).to_netcdf(second)
     return [str(first), str(second)]
+
+
+@pytest.fixture
+def healpix_field_dataset():
+    """HEALPix UxDataset with face-centered u, v, and a temperature field."""
+    grid = ux.Grid.from_healpix(zoom=2)
+    n = grid.n_face
+    rng = np.random.default_rng(7)
+    return ux.UxDataset(
+        {
+            "u": ux.UxDataArray(
+                xr.DataArray(rng.standard_normal(n), dims=["n_face"]), uxgrid=grid
+            ),
+            "v": ux.UxDataArray(
+                xr.DataArray(rng.standard_normal(n), dims=["n_face"]), uxgrid=grid
+            ),
+            "temperature": ux.UxDataArray(
+                xr.DataArray(250 + 30 * rng.standard_normal(n), dims=["n_face"]),
+                uxgrid=grid,
+            ),
+        },
+        uxgrid=grid,
+    )
+
+
+@pytest.fixture
+def structured_mesh_files(tmp_path):
+    """Coarse global UGRID grid + face-centered data written to disk.
+
+    ``Grid.from_structured`` produces node coordinates that survive a NetCDF
+    round-trip, making it a reliable file-based fixture for remapping.
+    """
+    lon = np.arange(0, 360, 20.0)
+    lat = np.arange(-80, 81, 20.0)
+    grid = ux.Grid.from_structured(lon=lon, lat=lat)
+    grid_file = tmp_path / "grid.nc"
+    data_file = tmp_path / "data.nc"
+    grid.to_xarray().to_netcdf(grid_file)
+
+    rng = np.random.default_rng(11)
+    xr.Dataset(
+        {"temperature": (["n_face"], 250 + 30 * rng.random(grid.n_face))}
+    ).to_netcdf(data_file)
+    return str(grid_file), str(data_file)

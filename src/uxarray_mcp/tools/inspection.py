@@ -10,6 +10,7 @@ import numpy as np
 from uxarray_mcp.domain import (
     compute_area_stats,
     compute_variable_info,
+    compute_zonal_anomaly_stats,
     compute_zonal_mean_stats,
     load_dataset,
     load_grid,
@@ -311,6 +312,62 @@ def _calculate_zonal_mean_local(
     return attach_provenance(
         result,
         tool="calculate_zonal_mean",
+        inputs={
+            "grid_path": grid_path,
+            "data_path": data_path,
+            "variable_name": variable_name,
+            "lat_spec": lat_spec,
+            "conservative": conservative,
+        },
+    )
+
+
+def calculate_zonal_anomaly(
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+    lat_spec: Optional[tuple | float | list] = None,
+    conservative: bool = False,
+) -> Dict[str, Any]:
+    """Compute the zonal anomaly of a face-centered variable.
+
+    The zonal anomaly is each face value minus the zonal mean of its latitude
+    band, highlighting departures from the latitudinal background state
+    (e.g. waves, eddies, stationary anomalies).
+
+    Args:
+        grid_path: Path to the mesh grid file.
+        data_path: Path to the data file with variables.
+        variable_name: Name of the face-centered variable.
+        lat_spec: Latitude band specification. ``None`` uses the UXarray default
+            ``(-90, 90, 10)``; a ``(start, end, step)`` tuple or explicit band
+            edges are also accepted.
+        conservative: If True, use area-weighted band means.
+
+    Returns:
+        Dictionary with ``variable_name``, ``conservative``, ``n_face``,
+        ``stats`` (min/max/mean/std of the anomaly field), ``grid_info``, and
+        ``_provenance``.
+
+    Raises:
+        NotImplementedError: If the installed UXarray lacks
+            ``UxDataArray.zonal_anomaly``.
+
+    Example:
+        >>> calculate_zonal_anomaly("grid.nc", "data.nc", "temperature")
+        {"stats": {"min": -12.4, "max": 9.8, ...}, ...}
+    """
+    if not Path(grid_path).exists():
+        raise FileNotFoundError(f"Grid file not found: {grid_path}")
+    if not Path(data_path).exists():
+        raise FileNotFoundError(f"Data file not found: {data_path}")
+
+    uxds = load_dataset(grid_path, data_path)
+    result = compute_zonal_anomaly_stats(uxds, variable_name, lat_spec, conservative)
+
+    return attach_provenance(
+        result,
+        tool="calculate_zonal_anomaly",
         inputs={
             "grid_path": grid_path,
             "data_path": data_path,

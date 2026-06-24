@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+import warnings
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -321,6 +322,64 @@ class TestCalculateAzimuthalMeanTool:
         assert "use_remote" in sig.parameters
         assert "endpoint" in sig.parameters
         assert "session_id" in sig.parameters
+
+
+# ---------------------------------------------------------------------------
+# scale_by_radius opt-in
+# ---------------------------------------------------------------------------
+
+
+class TestScaleByRadius:
+    def test_gradient_default_keeps_unit_sphere(self, healpix_wind_dataset):
+        result = compute_gradient(healpix_wind_dataset, "temperature")
+        assert result["scale_by_radius"] is False
+
+    def test_curl_default_keeps_unit_sphere(self, healpix_wind_dataset):
+        result = compute_curl(healpix_wind_dataset, "u", "v")
+        assert result["scale_by_radius"] is False
+
+    def test_gradient_records_scale_by_radius_flag(self, healpix_wind_dataset):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # grid has no sphere_radius
+            result = compute_gradient(
+                healpix_wind_dataset, "temperature", scale_by_radius=True
+            )
+        assert result["scale_by_radius"] is True
+
+    def test_remote_gradient_threads_scale_by_radius(self):
+        """The remote dispatch must forward scale_by_radius to the agent."""
+        from uxarray_mcp.tools import vector_calc
+
+        agent = MagicMock()
+        agent.config.endpoint_id = "fake-endpoint"
+        agent.config.endpoint_name = "fake"
+        agent.config.timeout_seconds = 60
+        agent.calculate_gradient_remote.return_value = {
+            "components": [],
+            "component_stats": {},
+            "n_face": 1,
+            "scale_by_radius": True,
+            "_provenance": {"warnings": []},
+        }
+
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent", return_value=agent),
+            patch.object(
+                vector_calc, "_endpoint_manager_is_up", return_value=(True, "ok")
+            ),
+            patch.object(vector_calc, "_run_sync", side_effect=lambda f: f()),
+        ):
+            vector_calc.calculate_gradient(
+                "/hpc/grid.nc",
+                "/hpc/data.nc",
+                "t",
+                scale_by_radius=True,
+                use_remote=True,
+                endpoint="improv",
+            )
+
+        args, kwargs = agent.calculate_gradient_remote.call_args
+        assert (True in args) or (kwargs.get("scale_by_radius") is True)
 
 
 # ---------------------------------------------------------------------------
