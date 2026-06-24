@@ -105,10 +105,12 @@ def calculate_gradient(
         Name of the face-centered scalar variable.
     scale_by_radius : bool
         If True, divide unit-sphere derivatives by ``uxgrid.sphere_radius`` for
-        physical units (requires a UXarray release that supports it and a grid
-        with ``sphere_radius``). Default False preserves the unit-sphere result.
-        Honored on both local and remote execution when the active UXarray
-        supports it; otherwise the result stays on the unit sphere.
+        physical units (requires a grid with ``sphere_radius``). Default False
+        preserves the unit-sphere result. Local execution passes this to the
+        pinned UXarray directly. The remote worker, which may run an older
+        UXarray, applies it capability-safely and falls back to the unit sphere
+        if unsupported; the result reports the ``scale_by_radius`` actually
+        applied.
     use_remote : bool
         If True and an HPC endpoint is configured, execute remotely.
     endpoint : str, optional
@@ -194,10 +196,12 @@ def calculate_curl(
         Meridional (north-south) component, e.g. ``"uReconstructMeridional"``.
     scale_by_radius : bool
         If True, divide the unit-sphere result by ``uxgrid.sphere_radius`` for
-        physical units (requires a UXarray release that supports it and a grid
-        with ``sphere_radius``). Default False preserves the unit-sphere result.
-        Honored on both local and remote execution when the active UXarray
-        supports it; otherwise the result stays on the unit sphere.
+        physical units (requires a grid with ``sphere_radius``). Default False
+        preserves the unit-sphere result. Local execution passes this to the
+        pinned UXarray directly. The remote worker, which may run an older
+        UXarray, applies it capability-safely and falls back to the unit sphere
+        if unsupported; the result reports the ``scale_by_radius`` actually
+        applied.
     use_remote : bool
         If True and an HPC endpoint is configured, execute remotely.
     endpoint : str, optional
