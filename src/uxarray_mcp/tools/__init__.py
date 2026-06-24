@@ -11,6 +11,7 @@ from .advanced import (
     export_to_netcdf,
     extract_cross_section,
     regrid_dataset,
+    remap_to_rectilinear,
     remap_variable,
     subset_bbox,
     subset_polygon,
@@ -33,7 +34,7 @@ from .frontdoor import (
     plot_dataset,
     run_analysis,
 )
-from .inspection import validate_dataset
+from .inspection import calculate_zonal_anomaly, validate_dataset
 from .orchestration import analyze_dataset
 
 # Public tool surface for inspection and plotting. Each function is a
@@ -90,6 +91,7 @@ __all__ = [
     "inspect_variable",
     "calculate_area",
     "calculate_zonal_mean",
+    "calculate_zonal_anomaly",
     "validate_dataset",
     "plot_mesh",
     "plot_mesh_geo",
@@ -104,6 +106,7 @@ __all__ = [
     "calculate_pattern_correlation",
     "remap_variable",
     "regrid_dataset",
+    "remap_to_rectilinear",
     "calculate_temporal_mean",
     "calculate_anomaly",
     "calculate_ensemble_mean",

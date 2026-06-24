@@ -10,6 +10,30 @@ from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.config import load_config
 
 
+def _uxarray_supports(attr_path: str) -> bool:
+    """Return True if ``UxDataArray`` provides the given (possibly dotted) attr.
+
+    Used to advertise capability-gated operations only when the installed
+    UXarray actually ships the underlying method (e.g. ``zonal_anomaly`` or
+    ``remap.to_rectilinear``).
+    """
+    obj: Any = ux.UxDataArray
+    for part in attr_path.split("."):
+        if part == "remap":
+            # The remap accessor class holds the remap methods.
+            try:
+                from uxarray.remap.accessor import RemapAccessor
+
+                obj = RemapAccessor
+            except Exception:
+                return False
+            continue
+        if not hasattr(obj, part):
+            return False
+        obj = getattr(obj, part)
+    return True
+
+
 def get_capabilities(
     grid_path: str,
     data_path: Optional[str] = None,
@@ -154,6 +178,14 @@ def get_capabilities(
                     "run_analysis:ensemble_spread",
                     "run_analysis:export",
                 ]
+                # Capability-gated operations: only advertise when the installed
+                # UXarray actually provides the underlying method.
+                if _uxarray_supports("zonal_anomaly"):
+                    applicable_mcp.append("run_analysis:zonal_anomaly")
+                    applicable_uxarray.append("var.zonal_anomaly()")
+                if _uxarray_supports("remap.to_rectilinear"):
+                    applicable_mcp.append("run_analysis:remap_to_rectilinear")
+                    applicable_uxarray.append("var.remap.to_rectilinear(lon, lat)")
                 applicable_uxarray += [
                     "var.zonal_mean()",
                     "var.integrate()",

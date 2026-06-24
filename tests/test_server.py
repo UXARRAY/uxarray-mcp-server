@@ -26,8 +26,9 @@ from uxarray_mcp.registry import (
 EXPECTED_FRONTDOOR = 11
 EXPECTED_CONTROL = 12  # 8 session + 4 hpc
 EXPECTED_CORE_EXTRA = 1  # list_datasets
-EXPECTED_PROMPTS = 3  # first_look, vorticity_analysis, hpc_diagnose
-EXPECTED_DEFERRED = 30
+EXPECTED_PROMPTS = 7  # first_look, vorticity_analysis, cyclone_structure,
+# eddy_activity, model_evaluation, climatology_anomaly, hpc_diagnose
+EXPECTED_DEFERRED = 32  # +zonal_anomaly, +remap_to_rectilinear
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +181,15 @@ def test_prompt_tools_registered_in_core():
     registry = make_registry(profile="core")
     tools = registry.list_tools()
     sep = registry._name_sep
-    for name in ("first_look", "vorticity_analysis", "hpc_diagnose"):
+    for name in (
+        "first_look",
+        "vorticity_analysis",
+        "cyclone_structure",
+        "eddy_activity",
+        "model_evaluation",
+        "climatology_anomaly",
+        "hpc_diagnose",
+    ):
         assert f"prompt{sep}{name}" in tools, f"prompt tool {name} missing"
 
 
@@ -202,6 +211,39 @@ def test_prompt_tool_returns_text():
     text = result["call_1"]
     assert "first-look analysis" in text.lower()
     assert "/tmp/test.nc" in text
+
+
+def test_science_workflow_prompts_reference_real_operations():
+    """Each guided science prompt should chain real run_analysis operations."""
+    from uxarray_mcp.registry import (
+        climatology_anomaly,
+        cyclone_structure,
+        eddy_activity,
+        model_evaluation,
+    )
+
+    cyclone = cyclone_structure(
+        "g.nc", "d.nc", "wind", 280.0, 25.0, u_var="u", v_var="v"
+    )
+    assert 'operation="azimuthal_mean"' in cyclone
+    assert 'operation="curl"' in cyclone  # wind components present
+
+    # Without wind, the vorticity step is omitted.
+    cyclone_no_wind = cyclone_structure("g.nc", "d.nc", "pressure", 280.0, 25.0)
+    assert 'operation="curl"' not in cyclone_no_wind
+
+    eddy = eddy_activity("g.nc", "d.nc", "z500")
+    assert 'operation="zonal_anomaly"' in eddy
+    assert 'operation="gradient"' in eddy
+
+    evaluation = model_evaluation("g.nc", "model.nc", "ref.nc", "t2m")
+    for op in ("bias", "rmse", "pattern_correlation"):
+        assert f'operation="{op}"' in evaluation
+
+    clim = climatology_anomaly("d.nc", "t2m", grid_path="g.nc")
+    assert 'operation="temporal_mean"' in clim
+    assert 'operation="anomaly"' in clim
+    assert 'operation="calculate_zonal_mean"' in clim  # grid_path provided
 
 
 # ---------------------------------------------------------------------------

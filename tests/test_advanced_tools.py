@@ -1,6 +1,10 @@
 """Tests for subsetting, comparison, remapping, temporal, and export tools."""
 
+import warnings
 from pathlib import Path
+
+import numpy as np
+import pytest
 
 from uxarray_mcp.tools import (
     calculate_anomaly,
@@ -23,6 +27,7 @@ from uxarray_mcp.tools import (
     subset_polygon,
     write_result,
 )
+from uxarray_mcp.tools.frontdoor import run_analysis
 
 
 def test_spatial_subset_tools_persist_results(state_dir, synthetic_mesh_with_data):
@@ -223,3 +228,35 @@ def test_export_tools_support_result_handles_and_dataset_handles(
     assert Path(exported_netcdf["output_path"]).exists()
     assert Path(exported_csv["output_path"]).exists()
     assert Path(written["output_path"]).exists()
+
+
+def test_remap_to_rectilinear_dispatch(state_dir, structured_mesh_files):
+    """remap_to_rectilinear returns a regular grid with a result handle."""
+    grid_file, data_file = structured_mesh_files
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = run_analysis(
+            operation="remap_to_rectilinear",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            target_lon=list(np.arange(0, 360, 30.0)),
+            target_lat=list(np.arange(-60, 61, 30.0)),
+        )
+    assert result["target_shape"] == [5, 12]
+    assert set(result["stats"]) == {"min", "max", "mean"}
+    assert result["result_handle"]
+    assert "_provenance" in result
+
+
+def test_remap_to_rectilinear_missing_target_coords_raises(
+    state_dir, structured_mesh_files
+):
+    grid_file, data_file = structured_mesh_files
+    with pytest.raises(ValueError):
+        run_analysis(
+            operation="remap_to_rectilinear",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+        )

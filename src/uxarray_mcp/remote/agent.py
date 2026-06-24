@@ -214,20 +214,38 @@ class UXarrayComputeAgent(_AcademyAgent):
 
     @action
     async def calculate_gradient_remote(
-        self, grid_path: str, data_path: str, variable_name: str
+        self,
+        grid_path: str,
+        data_path: str,
+        variable_name: str,
+        scale_by_radius: bool = False,
     ) -> Dict[str, Any]:
         """Compute spatial gradient on HPC."""
         return await self._run_on_hpc(
-            remote_calculate_gradient, grid_path, data_path, variable_name
+            remote_calculate_gradient,
+            grid_path,
+            data_path,
+            variable_name,
+            scale_by_radius,
         )
 
     @action
     async def calculate_curl_remote(
-        self, grid_path: str, data_path: str, u_variable: str, v_variable: str
+        self,
+        grid_path: str,
+        data_path: str,
+        u_variable: str,
+        v_variable: str,
+        scale_by_radius: bool = False,
     ) -> Dict[str, Any]:
         """Compute relative vorticity (curl) on HPC."""
         return await self._run_on_hpc(
-            remote_calculate_curl, grid_path, data_path, u_variable, v_variable
+            remote_calculate_curl,
+            grid_path,
+            data_path,
+            u_variable,
+            v_variable,
+            scale_by_radius,
         )
 
     @action

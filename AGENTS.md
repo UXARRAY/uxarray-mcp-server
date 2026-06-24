@@ -25,9 +25,9 @@ It supports local execution and optional remote execution on HPC clusters via
 
 The tool surface is built by `uxarray_mcp.registry.build_registry()`:
 
-- **`core` (default, ~27 tools)** — 11 front-door gateway tools at the
+- **`core` (default, ~31 tools)** — 11 front-door gateway tools at the
   top level, 12 control/status tools under `session/` and `hpc/`
-  namespaces, `io-list_datasets`, and 3 prompt helpers under `prompt/`.
+  namespaces, `io-list_datasets`, and 7 prompt helpers under `prompt/`.
   No deferred tools, no BM25 discovery.  This is what clients see by
   default when running `uxarray-mcp serve`.
 
@@ -54,7 +54,8 @@ HPC control (`hpc/`): `endpoint_status`, `get_execution_mode`,
 IO (`io/`): `list_datasets`.
 
 Prompt helpers (`prompt/`): `first_look`, `vorticity_analysis`,
-`hpc_diagnose`.
+`cyclone_structure`, `eddy_activity`, `model_evaluation`,
+`climatology_anomaly`, `hpc_diagnose`.
 
 Low-level implementation functions such as `inspect_mesh`, `calculate_area`,
 `plot_mesh`, and `calculate_curl` remain importable from `uxarray_mcp.tools`

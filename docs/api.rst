@@ -24,6 +24,10 @@ These modules contain the pure computation logic, separate from MCP and I/O.
    :members:
    :undoc-members:
 
+.. automodule:: uxarray_mcp.domain.vector_calc
+   :members:
+   :undoc-members:
+
 .. automodule:: uxarray_mcp.domain.plotting
    :members:
    :undoc-members:
@@ -33,7 +37,15 @@ Tools
 
 MCP tool functions that are exposed to AI agents.
 
+.. automodule:: uxarray_mcp.tools.frontdoor
+   :members:
+   :undoc-members:
+
 .. automodule:: uxarray_mcp.tools.inspection
+   :members:
+   :undoc-members:
+
+.. automodule:: uxarray_mcp.tools.vector_calc
    :members:
    :undoc-members:
 
