@@ -86,6 +86,6 @@ State
 Server
 ------
 
-.. automodule:: uxarray_mcp.server
+.. automodule:: uxarray_mcp.app
    :members:
    :undoc-members:
