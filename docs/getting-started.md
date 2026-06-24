@@ -161,7 +161,7 @@ Edit the config:
         "run",
         "python",
         "-m",
-        "uxarray_mcp.server"
+        "uxarray_mcp"
       ]
     }
   }
