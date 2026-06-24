@@ -1,11 +1,13 @@
-"""Tests for the calculate_zonal_mean tool."""
+"""Tests for the calculate_zonal_mean and zonal_anomaly tools."""
 
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
+from uxarray_mcp.domain.zonal import compute_zonal_anomaly_stats
 from uxarray_mcp.tools import calculate_zonal_mean
+from uxarray_mcp.tools.frontdoor import run_analysis
 
 
 class TestCalculateZonalMeanUnit:
@@ -369,3 +371,44 @@ class TestCalculateZonalMeanIntegration:
         assert len(result["latitudes"]) == len(result["zonal_mean_values"])
         assert result["conservative"] is False
         assert result["grid_info"]["n_face"] == 1
+
+
+class TestZonalAnomaly:
+    """Tests for the zonal_anomaly operation (per-band departure)."""
+
+    def test_domain_returns_stats(self, healpix_field_dataset):
+        result = compute_zonal_anomaly_stats(healpix_field_dataset, "temperature")
+        assert result["variable_name"] == "temperature"
+        assert set(result["stats"]) == {"min", "max", "mean", "std"}
+        assert result["n_face"] == int(healpix_field_dataset.uxgrid.n_face)
+
+    def test_anomaly_mean_near_zero(self, healpix_field_dataset):
+        result = compute_zonal_anomaly_stats(healpix_field_dataset, "temperature")
+        assert abs(result["stats"]["mean"]) < 1.0
+
+    def test_missing_variable_raises(self, healpix_field_dataset):
+        with pytest.raises(ValueError):
+            compute_zonal_anomaly_stats(healpix_field_dataset, "nope")
+
+    def test_run_analysis_dispatch(self, structured_mesh_files):
+        grid_file, data_file = structured_mesh_files
+        result = run_analysis(
+            operation="zonal_anomaly",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+        )
+        assert "stats" in result
+        assert "_provenance" in result
+
+    def test_capability_guard_when_unsupported(
+        self, healpix_field_dataset, monkeypatch
+    ):
+        """The domain layer raises a clear error if zonal_anomaly is absent."""
+        monkeypatch.delattr(
+            type(healpix_field_dataset["temperature"]), "zonal_anomaly", raising=False
+        )
+        if hasattr(healpix_field_dataset["temperature"], "zonal_anomaly"):
+            pytest.skip("could not remove zonal_anomaly for negative test")
+        with pytest.raises(NotImplementedError):
+            compute_zonal_anomaly_stats(healpix_field_dataset, "temperature")

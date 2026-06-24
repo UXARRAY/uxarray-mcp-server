@@ -22,14 +22,19 @@ With no flags, `uxarray-mcp serve` starts MCP over stdio with the `core`
 profile — the same behavior earlier releases had. Existing Claude Desktop
 configurations work unchanged.
 
+The server is assembled by `UXarrayApp`, an `App` subclass from
+toolregistry-server that carries a single `ServerIdentity` (name, version,
+description) shared by every transport. The same object also drives the
+`openapi` command below.
+
 ## Profiles
 
 The visible tool surface is selected by `--profile`:
 
 | Profile | Visible tools | Use when |
 |---|---|---|
-| `core` (default) | ~27 | Most clients. Front-door gateway tools, session/HPC control, `list_datasets`, and prompts. Predictable, conservative. |
-| `deferred-full` | ~28 visible (+30 deferred) | You want the full low-level surface. The 30 raw implementation tools load with `defer=True`, so they do not appear in the initial list; agents find them with `discover_tools`. |
+| `core` (default) | ~31 | Most clients. Front-door gateway tools, session/HPC control, `list_datasets`, and prompts. Predictable, conservative. |
+| `deferred-full` | ~31 visible (+32 deferred) | You want the full low-level surface. The raw implementation tools load with `defer=True`, so they do not appear in the initial list; agents find them with `discover_tools`. |
 
 ```bash
 uxarray-mcp serve --profile deferred-full
@@ -57,14 +62,18 @@ uxarray-mcp serve --transport http --port 8000
 
 The same tools can be exposed as an OpenAPI/REST service for clients that speak
 HTTP rather than MCP — curl, cloud assistants, chat UIs, or scripts. Install the
-optional extra:
+optional extra and start the `openapi` command:
 
 ```bash
 pip install "uxarray-mcp[openapi]"
+
+uxarray-mcp openapi [--profile {core,deferred-full}] [--host HOST] [--port PORT]
 ```
 
 The tool implementations, provenance, and HPC dispatch are shared across MCP and
-REST; only the protocol adapter differs.
+REST; only the protocol adapter differs. MCP and OpenAPI can run as separate
+processes from the same install — for example `uxarray-mcp serve` for AI clients
+and `uxarray-mcp openapi` for HTTP clients, behind a reverse proxy if needed.
 
 ## Tool discovery (`deferred-full`)
 
@@ -84,7 +93,7 @@ from uxarray_mcp.tools import inspect_mesh
 result = inspect_mesh(file_path="grid.nc")  # dict with a _provenance block
 
 # Or call by name through the same registry the server uses:
-from uxarray_mcp.server import make_registry
+from uxarray_mcp.app import make_registry
 reg = make_registry(profile="core")
 run_analysis = reg.get_callable("run_analysis")
 stats = run_analysis(operation="calculate_area", grid_path="grid.nc")
