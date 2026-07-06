@@ -5,9 +5,9 @@ Two profiles are supported:
 * ``"core"`` (default) — small, predictable surface visible to LLMs.
   Mirrors the original MCP server's 11 front-door tools, adds 12
   control/status tools, the ``list_datasets`` discovery helper, and
-  three prompt-as-tool helpers (former ``@mcp.prompt()`` decorators).
+  seven prompt-as-tool helpers (former ``@mcp.prompt()`` decorators).
 * ``"deferred-full"`` — loads every public function with the core set
-  enabled and 30 raw implementation tools marked ``defer=True``.
+  enabled and 32 raw implementation tools marked ``defer=True``.
   Includes ``discover_tools`` (BM25 search) so LLMs find deferred
   tools by intent.
 
@@ -592,9 +592,9 @@ def build_registry(
     """Build a ``ToolRegistry`` for the chosen profile.
 
     Args:
-        profile: ``"core"`` for the small default surface (~27 tools),
+        profile: ``"core"`` for the small default surface (~31 tools),
             ``"deferred-full"`` for the complete pool (core visible,
-            30 raw tools deferred, ``discover_tools`` added).
+            32 raw tools deferred, ``discover_tools`` added).
         registry_name: Identifier for server titles and labels.
 
     Returns:
