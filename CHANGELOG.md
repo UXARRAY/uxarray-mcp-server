@@ -5,6 +5,8 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+## 0.1.2 — 2026-07-05
+
 ### Added
 - Guided science workflows as `prompt/` tools, each composing existing
   operations around a scientific question: `cyclone_structure` (storm radial
@@ -23,16 +25,12 @@ uses Semantic Versioning for public releases.
 ### Changed
 - Bumped the `uxarray` floor to `>=2026.6.0` for the new zonal-anomaly,
   rectilinear-remap, and radius-scaled gradient/curl APIs.
-
-## 0.2.0 — 2026-06-19
-
-### Changed
 - **Server engine**: replaced FastMCP with
   [toolregistry](https://github.com/Oaklight/ToolRegistry) +
   [toolregistry-server](https://github.com/Oaklight/toolregistry-server).
   `fastmcp` is no longer a dependency.
-- **Two-profile tool surface**: `core` (~27 tools, conservative default) and
-  `deferred-full` (all tools loaded, 30 deferred behind BM25 discovery).
+- **Two-profile tool surface**: `core` (~31 tools, conservative default) and
+  `deferred-full` (all tools loaded, 32 deferred behind BM25 discovery).
 - **Namespace grouping**: control tools under `session/` and `hpc/`, IO under
   `io/`, prompts under `prompt/`.
 - **Policy tags**: every tool carries `ToolTag` metadata (`READ_ONLY`,

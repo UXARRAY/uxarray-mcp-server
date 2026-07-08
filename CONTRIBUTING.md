@@ -33,8 +33,8 @@ Full coding conventions and architecture notes are in [AGENTS.md](AGENTS.md).
 
 - Work on a feature branch (`git checkout -b your-name/short-description`).
 - Keep changes focused — one logical change per PR.
-- All new tools must call `attach_provenance()` and be registered in
-  `server.py` and exported from `tools/__init__.py`.
+- All new tools must call `attach_provenance()`, be assigned to a bucket in
+  `registry.py`, and be exported from `tools/__init__.py`.
 - All new tool functions need tests (see `tests/` for patterns).
 - Run the full check suite before pushing:
 

@@ -37,9 +37,11 @@ If you want HPC support too:
 uv sync --extra hpc
 ```
 
-## Claude Desktop Example
+## MCP Client Example
 
-Use absolute paths in your Claude Desktop MCP config:
+The server speaks standard MCP over stdio, so it works with any MCP-compatible
+client (Claude Desktop, Claude Code, Cursor, Continue, or your own). Most
+clients accept an `mcpServers` block like the one below — use absolute paths:
 
 ```json
 {
@@ -52,14 +54,14 @@ Use absolute paths in your Claude Desktop MCP config:
         "run",
         "python",
         "-m",
-        "uxarray_mcp.server"
+        "uxarray_mcp"
       ]
     }
   }
 }
 ```
 
-Then fully quit and reopen Claude Desktop.
+Then restart your MCP client so it picks up the new server.
 
 ## If You Want HPC
 

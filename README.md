@@ -114,8 +114,9 @@ client's MCP docs.
 uxarray-mcp doctor
 ```
 
-Should print `local execution: ok` and (if no endpoints configured) skip the
-remote checks.
+Prints a JSON diagnostic report. With no endpoints configured it reports a
+passing local setup and skips the remote checks; the process exits `0` when
+`passed` is true.
 
 ### Step 5 — Ask the AI to do something
 
