@@ -84,8 +84,8 @@ This adds the `globus-compute-sdk` to your local install. Verify:
 uxarray-mcp doctor
 ```
 
-You should see the SDK listed. (No endpoint health checks yet — that's
-Step 4.)
+The JSON report should show the Globus Compute SDK as available. (No endpoint
+health checks yet — that's Step 4.)
 
 ---
 
@@ -202,7 +202,7 @@ back. Reasons appear in the response's `warnings` and in
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `globus_compute_sdk not installed` | Missing HPC extras | `uv tool upgrade --extra hpc uxarray-mcp` |
-| Browser doesn't open on first auth | Headless laptop / SSH session | Run `uxarray-mcp doctor` with `--no-browser`, paste the URL into a local browser |
+| Browser doesn't open on first auth | Headless laptop / SSH session | The Globus login prints an auth URL to the terminal — copy it into a local browser and paste the code back. |
 | `endpoint status: registered, probe timed out` | Worker isn't responding | Operator's problem. Ask them. May be scheduler backlog. |
 | `endpoint status: not found` | Wrong UUID or you've been removed | Re-check UUID with operator. Globus Auth identity must match endpoint's allow-list. |
 | Tool returns `execution_venue: local` when you asked for remote | Auto-fallback fired | Check `warnings` in response. Common: path didn't match `path_prefix`, or endpoint unhealthy. |

@@ -31,11 +31,11 @@ The tool surface is built by `uxarray_mcp.registry.build_registry()`:
   No deferred tools, no BM25 discovery.  This is what clients see by
   default when running `uxarray-mcp serve`.
 
-- **`deferred-full` (~58 loaded, ~28 visible)** — core set stays visible.
-  30 raw implementation tools are loaded with `defer=True` so they don't
-  appear in the initial tool list.  Agents discover them via
-  `discover_tools` (BM25 search), and operators promote them from the
-  admin panel.
+- **`deferred-full` (~64 loaded, ~32 visible)** — core set stays visible.
+  32 raw implementation tools are loaded with `defer=True` so they don't
+  appear in the initial tool list, plus `discover_tools`.  Agents discover
+  the deferred tools via `discover_tools` (BM25 search), and operators
+  promote them from the admin panel.
 
 ### Core tools
 
@@ -68,7 +68,7 @@ Documentation: `docs/` (Sphinx, built to ReadTheDocs).
 ## Key design decisions
 
 - **Domain/tool separation** — pure computation lives in `domain/`, server
-  wiring lives in `registry.py` + `server.py`.  The same domain functions
+  wiring lives in `registry.py` + `app.py`.  The same domain functions
   run locally or get serialized and sent to an HPC worker via Globus
   Compute.  Never put MCP, provenance, or I/O logic in `domain/`.
 
@@ -120,7 +120,7 @@ Documentation: `docs/` (Sphinx, built to ReadTheDocs).
 ```
 src/uxarray_mcp/
   registry.py             # build_registry() — namespace plan, tags, prompt-as-tool
-  server.py               # make_registry(), make_mcp_server(), run() — multi-transport
+  app.py                  # UXarrayApp, make_registry(), make_mcp_server() — multi-transport
   cli.py                  # uxarray-mcp serve/setup/doctor/endpoints/install-claude
   provenance.py           # attach_provenance() used by all tools
   domain/                 # Pure computation — no MCP, no I/O
@@ -173,8 +173,8 @@ config.yaml.example       # Template — private config is normally written by t
 
 - **Python** ≥ 3.12, < 3.13 (pinned for Globus Compute pickle compat)
 - **toolregistry** ≥ 0.11.0 — tool registration, schema generation, policy tags
-- **toolregistry-server** ≥ 0.3.3 — MCP + OpenAPI adapters
-- **UXarray** ≥ 2025.12.0 — unstructured mesh analysis
+- **toolregistry-server** ≥ 0.4.0 — MCP + OpenAPI adapters
+- **UXarray** ≥ 2026.6.0 — unstructured mesh analysis
 - **Matplotlib** ≥ 3.9.0 + **Holoviews** ≥ 1.19.0 — visualization
 - **PyYAML** ≥ 6.0 — config file parsing
 - **uv** — package management and script runner (not conda, not pip directly)

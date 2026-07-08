@@ -26,8 +26,8 @@ Every tool result includes a `_provenance` block that records what ran, when, wh
     "inputs": { "file_path": "healpix:4", "data_path": null, "variable_name": null },
     "execution_venue": "local",
     "timestamp_utc": "2026-03-18T...",
-    "uxarray_version": "2025.12.0",
-    "python_version": "3.13.0",
+    "uxarray_version": "2026.6.0",
+    "python_version": "3.12.0",
     "warnings": [],
     "artifacts": [
       { "type": "mesh_topology", "n_face": 3072, "n_node": 3074, "format": "HEALPix" },

@@ -308,8 +308,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("core", "deferred-full"),
         default="core",
         help=(
-            "core: gateway + control + list_datasets + prompts (~27 tools). "
-            "deferred-full: also load 30 raw tools as deferred, gated "
+            "core: gateway + control + list_datasets + prompts (~31 tools). "
+            "deferred-full: also load 32 raw tools as deferred, gated "
             "behind discover_tools / admin promotion."
         ),
     )
@@ -317,7 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--transport",
         choices=("stdio", "sse", "http"),
         default="stdio",
-        help="MCP transport. stdio for Claude Desktop subprocess use.",
+        help="MCP transport. stdio for subprocess use by MCP clients.",
     )
     serve.add_argument("--host", default="127.0.0.1", help="Bind host for SSE/HTTP.")
     serve.add_argument("--port", type=int, default=8001, help="Port for SSE/HTTP.")
@@ -330,8 +330,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("core", "deferred-full"),
         default="core",
         help=(
-            "core: gateway + control + list_datasets + prompts (~27 tools). "
-            "deferred-full: also load 30 raw tools as deferred, gated "
+            "core: gateway + control + list_datasets + prompts (~31 tools). "
+            "deferred-full: also load 32 raw tools as deferred, gated "
             "behind discover_tools / admin promotion."
         ),
     )
