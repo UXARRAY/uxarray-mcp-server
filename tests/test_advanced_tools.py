@@ -260,3 +260,75 @@ def test_remap_to_rectilinear_missing_target_coords_raises(
             data_path=data_file,
             variable_name="temperature",
         )
+
+
+# ---------------------------------------------------------------------------
+# Remote remap dispatch (mocked agent — no real HPC call)
+# ---------------------------------------------------------------------------
+
+
+class _MockAgent:
+    """Minimal agent stub whose _run_on_hpc returns synthetic remote results."""
+
+    def __init__(self, payload):
+        from types import SimpleNamespace
+
+        self.config = SimpleNamespace(endpoint_id="ep-123", endpoint_name="chrysalis")
+        self._payload = payload
+
+    async def _run_on_hpc(self, func, *args, **kwargs):
+        result = dict(self._payload)
+        result.setdefault("_provenance", {})["execution_venue"] = "hpc:chrysalis"
+        return result
+
+
+def test_remap_variable_remote_dispatch(monkeypatch):
+    """remap_variable(use_remote=True) returns the remote summary result."""
+    from uxarray_mcp.remote import agent as agent_mod
+    from uxarray_mcp.tools import remote_tools
+
+    payload = {
+        "variable_name": "temperature",
+        "method": "nearest_neighbor",
+        "result_shape": [42],
+        "stats": {"min": 1.0, "max": 2.0, "mean": 1.5, "std": 0.1},
+        "_provenance": {"execution_venue": "hpc:chrysalis"},
+    }
+    monkeypatch.setattr(agent_mod, "get_agent", lambda **kw: _MockAgent(payload))
+    monkeypatch.setattr(
+        remote_tools, "_endpoint_manager_is_up", lambda agent: (True, "ok")
+    )
+
+    result = remap_variable(
+        target_grid_path="/lus/only/on/hpc/target.nc",
+        variable_name="temperature",
+        grid_path="/lus/only/on/hpc/grid.nc",
+        data_path="/lus/only/on/hpc/data.nc",
+        use_remote=True,
+        endpoint="chrysalis",
+    )
+    assert result["_provenance"]["execution_venue"] == "hpc:chrysalis"
+    assert result["stats"]["mean"] == 1.5
+
+
+def test_remap_remote_raises_when_endpoint_down_and_path_remote(monkeypatch):
+    """Remote-only path + dead endpoint must raise clearly, not FileNotFound."""
+    from uxarray_mcp.remote import agent as agent_mod
+    from uxarray_mcp.tools import remote_tools
+
+    monkeypatch.setattr(agent_mod, "get_agent", lambda **kw: _MockAgent({}))
+    monkeypatch.setattr(
+        remote_tools,
+        "_endpoint_manager_is_up",
+        lambda agent: (False, "offline"),
+    )
+
+    with pytest.raises(RuntimeError, match="not readable locally"):
+        remap_variable(
+            target_grid_path="/lus/only/on/hpc/target.nc",
+            variable_name="temperature",
+            grid_path="/lus/only/on/hpc/grid.nc",
+            data_path="/lus/only/on/hpc/data.nc",
+            use_remote=True,
+            endpoint="chrysalis",
+        )

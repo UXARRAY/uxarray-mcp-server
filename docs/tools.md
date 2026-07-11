@@ -64,20 +64,31 @@ Common parameters include `grid_path`, `data_path`, `variable_name`,
 `endpoint`. Each operation validates the parameters it requires and returns a
 clear error if one is missing.
 
-`gradient` and `curl` accept `scale_by_radius` (default `False`). When `False`,
-results stay on the unit sphere (the historical behavior). Set it to `True` to
-divide by `uxgrid.sphere_radius` for physical units; the grid must define
-`sphere_radius`.
+`gradient`, `curl`, and `divergence` echo the `scale_by_radius` convention in
+their result and provenance. `gradient` and `curl` accept `scale_by_radius`
+(default `False`). When `False`, results stay on the unit sphere (the historical
+behavior). Set it to `True` to divide by `uxgrid.sphere_radius` for physical
+units; the grid must define `sphere_radius`.
+
+`curl` and `divergence` also emit **vector-component warnings**: if the two
+inputs are the same field, or neither carries a velocity/flux-like `units`
+attribute, a warning is added to `_provenance.warnings`. The computation still
+runs (the math is valid), but the result is flagged as possibly non-physical.
 
 `zonal_anomaly` and `remap_to_rectilinear` are backed by
 `UxDataArray.zonal_anomaly` and `UxDataArray.remap.to_rectilinear`, available in
 the pinned UXarray (`>=2026.6.0`).
 
-> **Local-only:** `zonal_anomaly` and `remap_to_rectilinear` currently run on the
-> local machine and do not have a remote (Globus Compute) execution path yet, so
-> they cannot operate on files that live only on an HPC filesystem. The other
-> compute operations accept `use_remote=True`. Uniform HPC routing across all
-> operations is tracked as a design item.
+`remap_variable`, `regrid_dataset`, and `remap_to_rectilinear` accept
+`use_remote=True` and `endpoint="name"`. When run remotely the remap executes on
+the HPC worker and compact summary statistics are returned (for
+`remap_to_rectilinear`, the small rectilinear array is returned and persisted
+locally); large source meshes never cross the network.
+
+> **Still local-only:** `zonal_anomaly` currently runs on the local machine and
+> does not yet have a remote execution path, so it cannot operate on files that
+> live only on an HPC filesystem. All other compute and remapping operations
+> accept `use_remote=True`.
 
 Examples:
 

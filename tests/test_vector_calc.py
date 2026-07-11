@@ -27,21 +27,27 @@ from uxarray_mcp.tools.vector_calc import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
-def healpix_wind_dataset():
-    """Return a small HEALPix UxDataset with synthetic u and v wind fields."""
+def _make_wind_dataset(with_units: bool = False):
+    """Build a small HEALPix UxDataset with synthetic u, v, temperature fields."""
+    import xarray as xr
+
     grid = ux.Grid.from_healpix(zoom=2)
     n = grid.n_face
     rng = np.random.default_rng(42)
-    import xarray as xr
+    u_attrs = {"units": "m/s"} if with_units else {}
+    v_attrs = {"units": "m/s"} if with_units else {}
 
-    u_data = xr.DataArray(rng.standard_normal(n).astype(np.float64), dims=["n_face"])
-    v_data = xr.DataArray(rng.standard_normal(n).astype(np.float64), dims=["n_face"])
+    u_data = xr.DataArray(
+        rng.standard_normal(n).astype(np.float64), dims=["n_face"], attrs=u_attrs
+    )
+    v_data = xr.DataArray(
+        rng.standard_normal(n).astype(np.float64), dims=["n_face"], attrs=v_attrs
+    )
     scalar = xr.DataArray(
         np.abs(rng.standard_normal(n).astype(np.float64)), dims=["n_face"]
     )
 
-    ds = ux.UxDataset(
+    return ux.UxDataset(
         {
             "u": ux.UxDataArray(u_data, uxgrid=grid),
             "v": ux.UxDataArray(v_data, uxgrid=grid),
@@ -49,7 +55,12 @@ def healpix_wind_dataset():
         },
         uxgrid=grid,
     )
-    return ds
+
+
+@pytest.fixture()
+def healpix_wind_dataset():
+    """Return a small HEALPix UxDataset with synthetic u and v wind fields."""
+    return _make_wind_dataset(with_units=False)
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +150,48 @@ class TestComputeDivergence:
     def test_missing_variable_raises(self, healpix_wind_dataset):
         with pytest.raises(ValueError, match="not found"):
             compute_divergence(healpix_wind_dataset, "u", "bad_v")
+
+
+# ---------------------------------------------------------------------------
+# Domain: vector-component semantic guardrail (curl / divergence)
+# ---------------------------------------------------------------------------
+
+
+class TestVectorComponentGuardrail:
+    """curl/divergence should warn (not block) on suspicious vector inputs."""
+
+    def test_same_field_warns_curl(self, healpix_wind_dataset):
+        result = compute_curl(healpix_wind_dataset, "u", "u")
+        warns = result["component_warnings"]
+        assert any("same field" in w for w in warns)
+        # Result is still computed (math is valid), just flagged.
+        assert result["stats"] is not None
+
+    def test_same_field_warns_divergence(self, healpix_wind_dataset):
+        result = compute_divergence(healpix_wind_dataset, "u", "u")
+        assert any("same field" in w for w in result["component_warnings"])
+
+    def test_missing_units_warns(self, healpix_wind_dataset):
+        # Synthetic fields carry no 'units' attr → non-velocity warning.
+        result = compute_curl(healpix_wind_dataset, "u", "v")
+        assert any("velocity" in w for w in result["component_warnings"])
+
+    def test_velocity_units_suppress_warning(self):
+        # Fields with velocity units set at creation time → no warnings.
+        ds = _make_wind_dataset(with_units=True)
+        result = compute_curl(ds, "u", "v")
+        assert result["component_warnings"] == []
+
+    def test_curl_warning_reaches_provenance(self, monkeypatch):
+        """The tool layer surfaces component warnings into _provenance.warnings."""
+        from uxarray_mcp.tools import vector_calc as vc_tools
+
+        # Avoid file I/O round-trips: feed the tool the in-memory dataset.
+        ds = _make_wind_dataset(with_units=False)
+        monkeypatch.setattr(vc_tools, "load_dataset", lambda *a, **k: ds)
+
+        result = vc_tools.calculate_curl("grid.nc", "data.nc", "u", "u")
+        assert any("same field" in w for w in result["_provenance"]["warnings"])
 
 
 # ---------------------------------------------------------------------------

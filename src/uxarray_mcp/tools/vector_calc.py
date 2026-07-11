@@ -238,10 +238,14 @@ def calculate_curl(
 
     def _local():
         uxds = load_dataset(grid_path, data_path)
+        result = compute_curl(
+            uxds, u_variable, v_variable, scale_by_radius=scale_by_radius
+        )
         return attach_provenance(
-            compute_curl(uxds, u_variable, v_variable, scale_by_radius=scale_by_radius),
+            result,
             tool="calculate_curl",
             inputs=inputs,
+            warnings=result.get("component_warnings") or None,
         )
 
     return _run_vector_calc(
@@ -321,10 +325,12 @@ def calculate_divergence(
 
     def _local():
         uxds = load_dataset(grid_path, data_path)
+        result = compute_divergence(uxds, u_variable, v_variable)
         return attach_provenance(
-            compute_divergence(uxds, u_variable, v_variable),
+            result,
             tool="calculate_divergence",
             inputs=inputs,
+            warnings=result.get("component_warnings") or None,
         )
 
     return _run_vector_calc(

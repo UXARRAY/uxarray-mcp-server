@@ -265,6 +265,8 @@ def run_analysis(
             session_id=session_id,
             dataset_handle=dataset_handle,
             result_name=result_name,
+            use_remote=use_remote,
+            endpoint=endpoint,
         )
     if op == "regrid_dataset":
         return regrid_dataset(
@@ -277,6 +279,8 @@ def run_analysis(
             session_id=session_id,
             dataset_handle=dataset_handle,
             result_name=result_name,
+            use_remote=use_remote,
+            endpoint=endpoint,
         )
     if op == "remap_to_rectilinear":
         return remap_to_rectilinear(
@@ -288,6 +292,8 @@ def run_analysis(
             session_id=session_id,
             dataset_handle=dataset_handle,
             result_name=result_name,
+            use_remote=use_remote,
+            endpoint=endpoint,
         )
     if op == "temporal_mean":
         return calculate_temporal_mean(

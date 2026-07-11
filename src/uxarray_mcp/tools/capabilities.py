@@ -34,9 +34,125 @@ def _uxarray_supports(attr_path: str) -> bool:
     return True
 
 
+def _local_grid_facts(grid_path: str, data_path: Optional[str]) -> Dict[str, Any]:
+    """Load grid topology + variable locations locally.
+
+    Mirrors ``remote_grid_facts`` so the capability report can be built from
+    the same small facts structure whether the grid lives on the local disk or
+    on an HPC worker.
+    """
+    if grid_path.lower().startswith("healpix"):
+        parts = grid_path.split(":")
+        zoom = int(parts[1]) if len(parts) > 1 else 1
+        try:
+            grid = ux.Grid.from_healpix(zoom=zoom)
+        except Exception as e:
+            raise RuntimeError(f"Failed to create HEALPix grid: {e}") from e
+        grid_format = "HEALPix"
+    else:
+        grid_file = Path(grid_path)
+        if not grid_file.exists():
+            raise FileNotFoundError(f"Grid file not found: {grid_path}")
+        try:
+            grid = load_grid(grid_path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load grid file: {e}") from e
+        grid_format = str(getattr(grid, "source_grid_spec", "Unknown"))
+
+    facts: Dict[str, Any] = {
+        "grid_format": grid_format,
+        "n_face": int(grid.n_face) if hasattr(grid, "n_face") else 0,
+        "n_node": int(grid.n_node) if hasattr(grid, "n_node") else 0,
+        "n_edge": int(grid.n_edge) if hasattr(grid, "n_edge") else 0,
+    }
+
+    if data_path is not None:
+        data_file = Path(data_path)
+        if not data_file.exists():
+            raise FileNotFoundError(f"Data file not found: {data_path}")
+        try:
+            uxds = load_dataset(grid_path, data_path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load dataset: {e}") from e
+
+        variables = []
+        for var_name in uxds.data_vars:
+            dims = uxds[var_name].dims
+            if any(d in dims for d in ("n_face", "nCells")):
+                location = "faces"
+            elif any(d in dims for d in ("n_node", "nVertices")):
+                location = "nodes"
+            elif any(d in dims for d in ("n_edge", "nEdges")):
+                location = "edges"
+            else:
+                location = "other"
+            variables.append({"name": str(var_name), "location": location})
+        facts["variables"] = variables
+
+    return facts
+
+
+def _load_grid_facts(
+    grid_path: str,
+    data_path: Optional[str],
+    *,
+    use_remote: bool,
+    endpoint: Optional[str],
+) -> Dict[str, Any]:
+    """Return grid facts locally, or from an HPC worker when ``use_remote``.
+
+    Uses the same fallback semantics as the other front-door tools: if no
+    endpoint is ready but the path is locally reachable, run locally; if the
+    path only exists remotely and no endpoint is available, surface a clear
+    endpoint-readiness error rather than a misleading ``FileNotFoundError``.
+    """
+    if not use_remote:
+        return _local_grid_facts(grid_path, data_path)
+
+    from uxarray_mcp.remote.agent import get_agent
+    from uxarray_mcp.remote.compute_functions import remote_grid_facts
+
+    from .remote_tools import (
+        _endpoint_manager_is_up,
+        _path_is_locally_reachable,
+        _run_sync,
+    )
+
+    agent = get_agent(endpoint=endpoint, path=grid_path)
+
+    def _fallback_or_raise(reason: str) -> Dict[str, Any]:
+        if _path_is_locally_reachable(grid_path):
+            return _local_grid_facts(grid_path, data_path)
+        raise RuntimeError(
+            f"get_capabilities: {reason} and {grid_path!r} does not exist "
+            "locally. Check endpoint health (`uxarray-mcp doctor`) or pass a "
+            "local path."
+        )
+
+    if not agent.config.endpoint_id:
+        return _fallback_or_raise("use_remote=True but no HPC endpoint is configured")
+
+    ready, why = _endpoint_manager_is_up(agent)
+    if not ready:
+        return _fallback_or_raise(f"HPC endpoint not ready ({why})")
+
+    result = _run_sync(
+        lambda: agent._run_on_hpc(remote_grid_facts, grid_path, data_path)
+    )
+    # ``_run_on_hpc`` attaches provenance; strip it — facts feed the local
+    # report builder, which attaches its own provenance at the end.
+    result.pop("_provenance", None)
+    endpoint_label = agent.config.endpoint_name or "configured"
+    result["_venue"] = f"hpc:{endpoint_label}"
+    return result
+
+
 def get_capabilities(
     grid_path: str,
     data_path: Optional[str] = None,
+    use_remote: bool = False,
+    endpoint: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Recommend which MCP tools and UXarray API methods are applicable for a given mesh and dataset.
 
@@ -55,6 +171,14 @@ def get_capabilities(
         data_path: Optional path to data file with variables. If provided,
                    variable-level filtering and per-variable method lists
                    are included in the response.
+        use_remote: If True and an HPC endpoint is configured, load the grid on
+                   the remote worker and return capabilities for a path that
+                   only exists on the HPC filesystem. Only the small topology +
+                   variable-location facts cross the network; the mesh itself
+                   never leaves the cluster. Falls back to local execution when
+                   no endpoint is ready and the path is locally reachable.
+        endpoint: Named endpoint to target when several are configured.
+        session_id: Session to track this operation under.
 
     Returns:
         Dictionary containing:
@@ -85,29 +209,19 @@ def get_capabilities(
             "recommendations": ["Provide a data_path to unlock variable-level filtering."]
         }
     """
-    # --- Load grid ---
-    if grid_path.lower().startswith("healpix"):
-        parts = grid_path.split(":")
-        zoom = int(parts[1]) if len(parts) > 1 else 1
-        try:
-            grid = ux.Grid.from_healpix(zoom=zoom)
-        except Exception as e:
-            raise RuntimeError(f"Failed to create HEALPix grid: {e}") from e
-        grid_format = "HEALPix"
-    else:
-        grid_file = Path(grid_path)
-        if not grid_file.exists():
-            raise FileNotFoundError(f"Grid file not found: {grid_path}")
-        try:
-            grid = load_grid(grid_path)
-        except Exception as e:
-            raise RuntimeError(f"Failed to load grid file: {e}") from e
-        grid_format = str(getattr(grid, "source_grid_spec", "Unknown"))
+    # --- Load grid facts (topology + variable locations), local or remote ---
+    facts = _load_grid_facts(
+        grid_path,
+        data_path,
+        use_remote=use_remote,
+        endpoint=endpoint,
+    )
+    grid_format = facts["grid_format"]
 
     # --- Grid topology ---
-    n_face = int(grid.n_face) if hasattr(grid, "n_face") else 0
-    n_node = int(grid.n_node) if hasattr(grid, "n_node") else 0
-    n_edge = int(grid.n_edge) if hasattr(grid, "n_edge") else 0
+    n_face = int(facts.get("n_face", 0))
+    n_node = int(facts.get("n_node", 0))
+    n_edge = int(facts.get("n_edge", 0))
 
     has_faces = n_face > 0
     has_nodes = n_node > 0
@@ -123,7 +237,7 @@ def get_capabilities(
         "has_edges": has_edges,
     }
 
-    # --- Load dataset if data_path provided ---
+    # --- Variable locations (from facts) ---
     variables_info: List[Dict[str, Any]] = []
     has_face_centered_vars = False
     has_node_centered_vars = False
@@ -131,30 +245,17 @@ def get_capabilities(
     face_centered_var_names: List[str] = []
 
     if data_path is not None:
-        data_file = Path(data_path)
-        if not data_file.exists():
-            raise FileNotFoundError(f"Data file not found: {data_path}")
-        try:
-            uxds = load_dataset(grid_path, data_path)
-        except Exception as e:
-            raise RuntimeError(f"Failed to load dataset: {e}") from e
+        for var_fact in facts.get("variables", []):
+            var_name = var_fact["name"]
+            location = var_fact["location"]
 
-        for var_name in uxds.data_vars:
-            var = uxds[var_name]
-
-            # Detect location from dimension names
-            if any(d in var.dims for d in ("n_face", "nCells")):
-                location = "faces"
+            if location == "faces":
                 has_face_centered_vars = True
                 face_centered_var_names.append(var_name)
-            elif any(d in var.dims for d in ("n_node", "nVertices")):
-                location = "nodes"
+            elif location == "nodes":
                 has_node_centered_vars = True
-            elif any(d in var.dims for d in ("n_edge", "nEdges")):
-                location = "edges"
+            elif location == "edges":
                 has_edge_centered_vars = True
-            else:
-                location = "other"
 
             # Per-variable applicable front-door operations.
             applicable_mcp: List[str] = [
@@ -316,6 +417,7 @@ def get_capabilities(
         )
         for tool in mcp_tools:
             if tool["name"] in {
+                "get_capabilities",
                 "analyze_dataset",
                 "run_analysis",
                 "plot_dataset",
@@ -492,5 +594,12 @@ def get_capabilities(
     return attach_provenance(
         result,
         tool="get_capabilities",
-        inputs={"grid_path": grid_path, "data_path": data_path},
+        inputs={
+            "grid_path": grid_path,
+            "data_path": data_path,
+            "use_remote": use_remote,
+            "endpoint": endpoint,
+            "session_id": session_id,
+        },
+        venue=facts.get("_venue", "local"),
     )

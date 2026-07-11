@@ -161,6 +161,7 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
         "n_node": int(grid.n_node),
         "n_edge": int(grid.n_edge),
         "source": file_path,
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
 
@@ -205,6 +206,7 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
         "max_area": float(np.max(values)),
         "area_units": str(units),
         "n_face": int(grid.n_face),
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
 
@@ -694,6 +696,7 @@ def remote_calculate_zonal_mean(
             "n_node": int(uxds.uxgrid.n_node),
             "n_edge": int(uxds.uxgrid.n_edge),
         },
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
 
@@ -1091,6 +1094,7 @@ def remote_calculate_gradient(
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": applied_scale,
         "interpretation": "zonal (d/dx) and meridional (d/dy) components of the gradient",
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
 
@@ -1132,6 +1136,25 @@ def remote_calculate_curl(
                 "Curl requires face-centered vector components."
             )
 
+    # Soft semantic guardrail: curl is only physical for genuine vector
+    # components. Warn (do not block) on same-field or non-velocity inputs.
+    component_warnings = []
+    if u_variable == v_variable:
+        component_warnings.append(
+            f"curl: u_variable and v_variable are the same field "
+            f"('{u_variable}'); result is a mathematical artifact, not a "
+            "physical curl."
+        )
+    _u_units = str((getattr(u, "attrs", {}) or {}).get("units", "")).strip().lower()
+    _v_units = str((getattr(v, "attrs", {}) or {}).get("units", "")).strip().lower()
+    _vel_hints = ("m/s", "m s-1", "m s^-1", "cm/s", "km/h", "pa/s", "kg/m2/s")
+    if not any(h in _u_units or h in _v_units for h in _vel_hints):
+        component_warnings.append(
+            f"curl: neither component has a velocity-like 'units' attribute "
+            f"(u='{_u_units or 'unset'}', v='{_v_units or 'unset'}'); verify "
+            "inputs are genuine vector components before interpreting."
+        )
+
     applied_scale = False
     if "scale_by_radius" in _inspect.signature(u.curl).parameters:
         result = u.curl(v, scale_by_radius=scale_by_radius)
@@ -1157,6 +1180,8 @@ def remote_calculate_curl(
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": applied_scale,
         "stats": stats,
+        "component_warnings": component_warnings,
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
 
@@ -1193,6 +1218,25 @@ def remote_calculate_divergence(
                 "Divergence requires face-centered vector components."
             )
 
+    # Soft semantic guardrail (mirrors curl): warn on same-field or
+    # non-velocity inputs; do not block.
+    component_warnings = []
+    if u_variable == v_variable:
+        component_warnings.append(
+            f"divergence: u_variable and v_variable are the same field "
+            f"('{u_variable}'); result is a mathematical artifact, not a "
+            "physical divergence."
+        )
+    _u_units = str((getattr(u, "attrs", {}) or {}).get("units", "")).strip().lower()
+    _v_units = str((getattr(v, "attrs", {}) or {}).get("units", "")).strip().lower()
+    _vel_hints = ("m/s", "m s-1", "m s^-1", "cm/s", "km/h", "pa/s", "kg/m2/s")
+    if not any(h in _u_units or h in _v_units for h in _vel_hints):
+        component_warnings.append(
+            f"divergence: neither component has a velocity-like 'units' "
+            f"attribute (u='{_u_units or 'unset'}', v='{_v_units or 'unset'}'); "
+            "verify inputs are genuine vector components before interpreting."
+        )
+
     result = u.divergence(v)
     vals = result.values
     finite = vals[np.isfinite(vals)]
@@ -1212,6 +1256,8 @@ def remote_calculate_divergence(
         "interpretation": "horizontal divergence du/dx + dv/dy",
         "n_face": int(uxds.uxgrid.n_face),
         "stats": stats,
+        "component_warnings": component_warnings,
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
 
@@ -1264,4 +1310,280 @@ def remote_calculate_azimuthal_mean(
         "radii_deg": radii,
         "azimuthal_mean_values": values,
         "n_face": int(uxds.uxgrid.n_face),
+    }
+
+
+def remote_grid_facts(
+    grid_path: str, data_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """Return grid topology + variable locations for capability discovery.
+
+    This is the remote half of ``get_capabilities``. It loads the grid (and
+    optional dataset) on the HPC worker and returns only the small, picklable
+    facts the local report builder needs — never the mesh itself. The local
+    ``get_capabilities`` then constructs the full capability report from these
+    facts, so the (potentially multi-GB) grid never crosses the network.
+
+    Returns
+    -------
+    dict
+        ``grid_format``, ``n_face``/``n_node``/``n_edge``, and (when
+        ``data_path`` is given) ``variables`` — a list of
+        ``{name, location}`` where location is faces/nodes/edges/other.
+    """
+    import os
+
+    import uxarray as ux
+
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        grid_format = "HEALPix"
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        grid_format = str(getattr(grid, "source_grid_spec", "Unknown"))
+    else:
+        grid = ux.open_grid(grid_path)
+        grid_format = str(getattr(grid, "source_grid_spec", "Unknown"))
+
+    facts: Dict[str, Any] = {
+        "grid_format": grid_format,
+        "n_face": int(grid.n_face) if hasattr(grid, "n_face") else 0,
+        "n_node": int(grid.n_node) if hasattr(grid, "n_node") else 0,
+        "n_edge": int(grid.n_edge) if hasattr(grid, "n_edge") else 0,
+    }
+
+    if data_path is not None:
+        if grid_path.startswith("healpix:"):
+            uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+            uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        else:
+            uxds = ux.open_dataset(grid_path, data_path)
+
+        variables = []
+        for var_name in uxds.data_vars:
+            dims = uxds[var_name].dims
+            if any(d in dims for d in ("n_face", "nCells")):
+                location = "faces"
+            elif any(d in dims for d in ("n_node", "nVertices")):
+                location = "nodes"
+            elif any(d in dims for d in ("n_edge", "nEdges")):
+                location = "edges"
+            else:
+                location = "other"
+            variables.append({"name": str(var_name), "location": location})
+        facts["variables"] = variables
+
+    return facts
+
+
+def _remote_open_dataset(grid_path: str, data_path: str):
+    """Open a UxDataset on the worker, handling HEALPix / shapefile grids."""
+    import os
+
+    import uxarray as ux
+
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        return ux.open_dataset(grid.to_xarray(), data_path)
+    if os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        return ux.open_dataset(grid.to_xarray(), data_path)
+    return ux.open_dataset(grid_path, data_path)
+
+
+def _remote_open_grid(grid_path: str):
+    """Open a Grid on the worker, handling HEALPix / shapefile grids."""
+    import os
+
+    import uxarray as ux
+
+    if grid_path.startswith("healpix:"):
+        return ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+    if os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        return ux.Grid.from_file(grid_path, backend="geopandas")
+    return ux.open_grid(grid_path)
+
+
+def remote_remap_variable(
+    grid_path: str,
+    data_path: str,
+    target_grid_path: str,
+    variable_name: str,
+    method: str = "nearest_neighbor",
+    remap_to: str = "faces",
+) -> Dict[str, Any]:
+    """Remap a face-centered variable onto a target grid on HPC.
+
+    Returns compact summary statistics and grid topology (not the full remapped
+    array) so large meshes never cross the network. The heavy compute runs on
+    the worker where the data lives.
+    """
+    import numpy as np
+    import uxarray as ux
+
+    uxds = _remote_open_dataset(grid_path, data_path)
+    source_grid = uxds.uxgrid
+    target_grid = _remote_open_grid(target_grid_path)
+
+    if variable_name not in uxds.data_vars:
+        raise ValueError(
+            f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
+        )
+    uxda = uxds[variable_name]
+    if not hasattr(uxda.remap, method):
+        raise ValueError(
+            f"Unsupported remap method '{method}'. Choose from "
+            "'nearest_neighbor', 'inverse_distance_weighted', or 'bilinear'."
+        )
+
+    remapped = getattr(uxda.remap, method)(target_grid, remap_to=remap_to)
+    vals = np.asarray(remapped.values, dtype=float)
+    finite = vals[np.isfinite(vals)]
+    stats = (
+        {
+            "min": float(finite.min()),
+            "max": float(finite.max()),
+            "mean": float(finite.mean()),
+            "std": float(finite.std()),
+        }
+        if finite.size > 0
+        else {"min": None, "max": None, "mean": None, "std": None}
+    )
+
+    return {
+        "variable_name": variable_name,
+        "method": method,
+        "remap_to": remap_to,
+        "source_grid": {
+            "n_face": int(source_grid.n_face),
+            "n_node": int(source_grid.n_node),
+            "n_edge": int(source_grid.n_edge),
+        },
+        "target_grid": {
+            "n_face": int(target_grid.n_face),
+            "n_node": int(target_grid.n_node),
+            "n_edge": int(target_grid.n_edge),
+        },
+        "result_shape": list(remapped.shape),
+        "stats": stats,
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+    }
+
+
+def remote_regrid_dataset(
+    grid_path: str,
+    data_path: str,
+    target_grid_path: str,
+    variable_names: Optional[list] = None,
+    method: str = "nearest_neighbor",
+    remap_to: str = "faces",
+) -> Dict[str, Any]:
+    """Remap all selected face-centered variables onto a target grid on HPC.
+
+    Returns per-variable summary statistics (not full arrays).
+    """
+    import numpy as np
+    import uxarray as ux
+
+    uxds = _remote_open_dataset(grid_path, data_path)
+    target_grid = _remote_open_grid(target_grid_path)
+
+    variables = variable_names or [
+        name
+        for name, var in uxds.data_vars.items()
+        if "n_face" in var.dims or "nCells" in var.dims
+    ]
+    if not variables:
+        raise ValueError("No face-centered variables available for remapping.")
+
+    first = uxds[variables[0]]
+    if not hasattr(first.remap, method):
+        raise ValueError(
+            f"Unsupported remap method '{method}'. Choose from "
+            "'nearest_neighbor', 'inverse_distance_weighted', or 'bilinear'."
+        )
+
+    per_variable = {}
+    for name in variables:
+        remapped = getattr(uxds[name].remap, method)(target_grid, remap_to=remap_to)
+        vals = np.asarray(remapped.values, dtype=float)
+        finite = vals[np.isfinite(vals)]
+        per_variable[name] = (
+            {
+                "min": float(finite.min()),
+                "max": float(finite.max()),
+                "mean": float(finite.mean()),
+                "shape": list(remapped.shape),
+            }
+            if finite.size > 0
+            else {"min": None, "max": None, "mean": None, "shape": list(vals.shape)}
+        )
+
+    return {
+        "method": method,
+        "remap_to": remap_to,
+        "variables": list(variables),
+        "target_grid": {
+            "n_face": int(target_grid.n_face),
+            "n_node": int(target_grid.n_node),
+            "n_edge": int(target_grid.n_edge),
+        },
+        "per_variable_stats": per_variable,
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+    }
+
+
+def remote_remap_to_rectilinear(
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+    target_lon: list,
+    target_lat: list,
+    backend: str = "uxarray",
+) -> Dict[str, Any]:
+    """Remap a face-centered variable onto a rectilinear lon/lat grid on HPC.
+
+    The target rectilinear grid is typically small, so the full remapped array
+    is returned (as nested lists) to allow local persistence.
+    """
+    import numpy as np
+    import uxarray as ux
+
+    uxds = _remote_open_dataset(grid_path, data_path)
+    if variable_name not in uxds.data_vars:
+        raise ValueError(
+            f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
+        )
+    uxda = uxds[variable_name]
+    if not hasattr(uxda.remap, "to_rectilinear"):
+        raise NotImplementedError(
+            "remap_to_rectilinear requires a UXarray release that provides "
+            "remap.to_rectilinear. Upgrade the worker's uxarray to use this."
+        )
+
+    lon = list(target_lon)
+    lat = list(target_lat)
+    remapped = uxda.remap.to_rectilinear(lon, lat, backend=backend)
+    vals = np.asarray(remapped.values, dtype=float)
+    finite = vals[np.isfinite(vals)]
+    stats = (
+        {
+            "min": float(finite.min()),
+            "max": float(finite.max()),
+            "mean": float(finite.mean()),
+        }
+        if finite.size > 0
+        else {"min": None, "max": None, "mean": None}
+    )
+
+    return {
+        "variable_name": variable_name,
+        "backend": backend,
+        "target_shape": [len(lat), len(lon)],
+        "stats": stats,
+        "values": vals.tolist(),
+        "target_lon": lon,
+        "target_lat": lat,
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }

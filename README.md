@@ -156,9 +156,36 @@ Intent-shaped tools, not raw UXarray bindings:
   persisted sessions and multi-step workflows.
 
 Tools that can run remotely take `use_remote: bool` and optional `endpoint: str`.
-The dispatcher falls back to local if the endpoint is unhealthy.
+The dispatcher falls back to local if the endpoint is unhealthy. This now
+includes `get_capabilities` and the remapping tools (`remap_variable`,
+`regrid_dataset`, `remap_to_rectilinear`) — so discovery and remapping can run
+directly against datasets that live only on an HPC filesystem.
 
 Full schema: [docs/tools.md](docs/tools.md).
+
+---
+
+## Transparency & correctness safeguards
+
+Because agent-driven analysis needs to be *trustworthy*, every result is
+auditable and the server actively flags common scientific pitfalls:
+
+- **Provenance on everything.** Each result carries a `_provenance` block:
+  the tool that ran, timestamp, input arguments, `execution_venue`
+  (`local` or `hpc:<endpoint>`), and the UXarray/Python versions used.
+- **Derivative unit convention is never hidden.** `gradient`, `curl`, and
+  `divergence` echo `scale_by_radius` in both the result and provenance, so a
+  unit-sphere result can never be mistaken for a physical (per-metre) one.
+- **Vector-calculus sanity guard.** `curl`/`divergence` warn (without blocking)
+  when the two inputs are the same field, or when neither carries a
+  velocity/flux-like `units` attribute — the classic "vorticity from two random
+  scalars" mistake now surfaces a warning in `_provenance.warnings`.
+- **Local/remote version drift is surfaced.** Remote results record the
+  worker's *actual* UXarray version (`remote_uxarray_version`) and emit a
+  warning when it differs from the local version, so silent numerical
+  differences between venues can't slip through.
+- **Validation gating.** `analyze_dataset` validates a dataset (NaN/Inf/fill
+  checks) before computing statistics like the zonal mean.
 
 ---
 

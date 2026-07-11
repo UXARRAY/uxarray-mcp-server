@@ -615,8 +615,17 @@ def remap_variable(
     session_id: str | None = None,
     dataset_handle: str | None = None,
     result_name: str | None = None,
+    use_remote: bool = False,
+    endpoint: str | None = None,
 ) -> dict[str, Any]:
-    """Remap a face-centered variable onto a target grid."""
+    """Remap a face-centered variable onto a target grid.
+
+    When ``use_remote=True`` and an HPC endpoint is configured, the remap runs
+    on the worker (where large meshes live) and compact summary statistics are
+    returned — the full remapped array is not shipped across the network. Falls
+    back to local execution when the endpoint is unavailable and the paths are
+    locally reachable.
+    """
     tracker = OperationTracker("remap_variable", session_id=session_id)
     resolved_grid, resolved_data = _resolve_paths(
         session_id=session_id,
@@ -626,6 +635,45 @@ def remap_variable(
     )
     if resolved_data is None:
         raise ValueError("data_path is required for remapping.")
+
+    if use_remote:
+        from uxarray_mcp.remote.agent import get_agent
+        from uxarray_mcp.remote.compute_functions import remote_remap_variable
+
+        from .remote_tools import (
+            _endpoint_manager_is_up,
+            _path_is_locally_reachable,
+            _run_sync,
+        )
+
+        agent = get_agent(endpoint=endpoint, path=resolved_grid)
+        ready = bool(agent.config.endpoint_id)
+        if ready:
+            ready, _reason = _endpoint_manager_is_up(agent)
+        if ready:
+            tracker.stage("submitted", "Submitting remap_variable to HPC endpoint.")
+            remote_result = _run_sync(
+                lambda: agent._run_on_hpc(
+                    remote_remap_variable,
+                    resolved_grid,
+                    resolved_data,
+                    target_grid_path,
+                    variable_name,
+                    method,
+                    remap_to,
+                )
+            )
+            remote_result["_provenance"]["operation_id"] = tracker.operation_id
+            tracker.succeed("Variable remap complete (remote).")
+            return remote_result
+        if not _path_is_locally_reachable(resolved_grid):
+            msg = (
+                "remap_variable: use_remote=True but the HPC endpoint is not "
+                f"available and {resolved_grid!r} is not readable locally."
+            )
+            tracker.fail(msg)
+            raise RuntimeError(msg)
+        tracker.stage("fallback", "Endpoint unavailable; running remap locally.")
 
     source_grid = load_grid(resolved_grid)
     target_grid = load_grid(target_grid_path)
@@ -690,8 +738,15 @@ def regrid_dataset(
     session_id: str | None = None,
     dataset_handle: str | None = None,
     result_name: str | None = None,
+    use_remote: bool = False,
+    endpoint: str | None = None,
 ) -> dict[str, Any]:
-    """Remap all selected face-centered variables in a dataset onto a target grid."""
+    """Remap all selected face-centered variables in a dataset onto a target grid.
+
+    When ``use_remote=True`` and an HPC endpoint is configured, the regrid runs
+    on the worker and per-variable summary statistics are returned. Falls back
+    to local execution when the endpoint is unavailable and paths are local.
+    """
     tracker = OperationTracker("regrid_dataset", session_id=session_id)
     resolved_grid, resolved_data = _resolve_paths(
         session_id=session_id,
@@ -701,6 +756,45 @@ def regrid_dataset(
     )
     if resolved_data is None:
         raise ValueError("data_path is required to regrid a dataset.")
+
+    if use_remote:
+        from uxarray_mcp.remote.agent import get_agent
+        from uxarray_mcp.remote.compute_functions import remote_regrid_dataset
+
+        from .remote_tools import (
+            _endpoint_manager_is_up,
+            _path_is_locally_reachable,
+            _run_sync,
+        )
+
+        agent = get_agent(endpoint=endpoint, path=resolved_grid)
+        ready = bool(agent.config.endpoint_id)
+        if ready:
+            ready, _reason = _endpoint_manager_is_up(agent)
+        if ready:
+            tracker.stage("submitted", "Submitting regrid_dataset to HPC endpoint.")
+            remote_result = _run_sync(
+                lambda: agent._run_on_hpc(
+                    remote_regrid_dataset,
+                    resolved_grid,
+                    resolved_data,
+                    target_grid_path,
+                    variable_names,
+                    method,
+                    remap_to,
+                )
+            )
+            remote_result["_provenance"]["operation_id"] = tracker.operation_id
+            tracker.succeed("Dataset regridding complete (remote).")
+            return remote_result
+        if not _path_is_locally_reachable(resolved_grid):
+            msg = (
+                "regrid_dataset: use_remote=True but the HPC endpoint is not "
+                f"available and {resolved_grid!r} is not readable locally."
+            )
+            tracker.fail(msg)
+            raise RuntimeError(msg)
+        tracker.stage("fallback", "Endpoint unavailable; running regrid locally.")
 
     uxds = load_dataset(resolved_grid, resolved_data)
     target_grid = load_grid(target_grid_path)
@@ -770,6 +864,8 @@ def remap_to_rectilinear(
     session_id: str | None = None,
     dataset_handle: str | None = None,
     result_name: str | None = None,
+    use_remote: bool = False,
+    endpoint: str | None = None,
 ) -> dict[str, Any]:
     """Remap a face-centered variable onto a regular lon/lat (rectilinear) grid.
 
@@ -811,6 +907,78 @@ def remap_to_rectilinear(
     )
     if resolved_data is None:
         raise ValueError("data_path is required for remapping.")
+
+    if use_remote:
+        from uxarray_mcp.remote.agent import get_agent
+        from uxarray_mcp.remote.compute_functions import remote_remap_to_rectilinear
+
+        from .remote_tools import (
+            _endpoint_manager_is_up,
+            _path_is_locally_reachable,
+            _run_sync,
+        )
+
+        agent = get_agent(endpoint=endpoint, path=resolved_grid)
+        ready = bool(agent.config.endpoint_id)
+        if ready:
+            ready, _reason = _endpoint_manager_is_up(agent)
+        if ready:
+            tracker.stage(
+                "submitted", "Submitting remap_to_rectilinear to HPC endpoint."
+            )
+            remote_result = _run_sync(
+                lambda: agent._run_on_hpc(
+                    remote_remap_to_rectilinear,
+                    resolved_grid,
+                    resolved_data,
+                    variable_name,
+                    list(target_lon),
+                    list(target_lat),
+                    backend,
+                )
+            )
+            # Persist the small rectilinear array locally from the returned data.
+            values = remote_result.pop("values", None)
+            r_lon = remote_result.pop("target_lon", list(target_lon))
+            r_lat = remote_result.pop("target_lat", list(target_lat))
+            selected = remote_result.get("variable_name", variable_name)
+            if values is not None:
+                remapped_da = xr.DataArray(
+                    np.asarray(values, dtype=float),
+                    dims=("lat", "lon"),
+                    coords={"lat": r_lat, "lon": r_lon},
+                    name=selected,
+                )
+                remapped_ds = remapped_da.to_dataset(name=selected)
+                result_handle = _persist_dataset_result(
+                    dataset=remapped_ds,
+                    session_id=session_id,
+                    name=result_name or f"rectilinear:{selected}",
+                    kind="rectilinear_variable",
+                    summary=summarize_dataset(remapped_ds),
+                    metadata={
+                        "source_grid": resolved_grid,
+                        "variable_name": selected,
+                        "backend": backend,
+                        "n_lon": len(r_lon),
+                        "n_lat": len(r_lat),
+                        "execution_venue": remote_result["_provenance"][
+                            "execution_venue"
+                        ],
+                    },
+                )
+                remote_result["result_handle"] = result_handle
+            remote_result["_provenance"]["operation_id"] = tracker.operation_id
+            tracker.succeed("Rectilinear remap complete (remote).")
+            return remote_result
+        if not _path_is_locally_reachable(resolved_grid):
+            msg = (
+                "remap_to_rectilinear: use_remote=True but the HPC endpoint is "
+                f"not available and {resolved_grid!r} is not readable locally."
+            )
+            tracker.fail(msg)
+            raise RuntimeError(msg)
+        tracker.stage("fallback", "Endpoint unavailable; running remap locally.")
 
     _, uxda, selected = _load_dataarray(resolved_grid, resolved_data, variable_name)
 

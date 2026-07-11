@@ -369,6 +369,90 @@ class TestGetCapabilitiesNodeOnlyData:
             )
 
 
+class TestGetCapabilitiesRemote:
+    """Tests for remote (HPC) execution of get_capabilities.
+
+    These mock the agent so no real Globus Compute call is made — they verify
+    the dispatch wiring, that remote facts drive the report, and the fallback
+    semantics when an endpoint is unavailable.
+    """
+
+    _REMOTE_FACTS = {
+        "grid_format": "MPAS",
+        "n_face": 465044,
+        "n_node": 942873,
+        "n_edge": 1408196,
+    }
+
+    def _mock_agent(self, *, endpoint_id="ep-123", ready=True):
+        """Build a mock agent whose _run_on_hpc returns synthetic facts."""
+        from unittest.mock import MagicMock
+
+        agent = MagicMock()
+        agent.config.endpoint_id = endpoint_id
+        agent.config.endpoint_name = "chrysalis"
+
+        async def _run_on_hpc(func, *args, **kwargs):
+            facts = dict(self._REMOTE_FACTS)
+            facts["_provenance"] = {"execution_venue": "hpc:chrysalis"}
+            return facts
+
+        agent._run_on_hpc = _run_on_hpc
+        return agent
+
+    def test_remote_facts_build_report(self):
+        """A remote-only path returns a report built from worker facts."""
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent,
+            patch(
+                "uxarray_mcp.tools.remote_tools._endpoint_manager_is_up",
+                return_value=(True, "ok"),
+            ),
+        ):
+            mock_get_agent.return_value = self._mock_agent()
+            result = get_capabilities(
+                "/lus/only/on/hpc/grid.nc", use_remote=True, endpoint="chrysalis"
+            )
+
+        assert result["grid_summary"]["n_face"] == 465044
+        assert result["grid_summary"]["format"] == "MPAS"
+        assert result["_provenance"]["execution_venue"] == "hpc:chrysalis"
+
+    def test_remote_falls_back_to_local_when_endpoint_down_and_path_local(self):
+        """If the endpoint is not ready but the path is local, run locally."""
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent,
+            patch(
+                "uxarray_mcp.tools.remote_tools._endpoint_manager_is_up",
+                return_value=(False, "endpoint status='offline'"),
+            ),
+        ):
+            mock_get_agent.return_value = self._mock_agent(ready=False)
+            # healpix: paths are always locally reachable
+            result = get_capabilities("healpix:2", use_remote=True)
+
+        assert result["grid_summary"]["n_face"] == 192
+        assert result["_provenance"]["execution_venue"] == "local"
+
+    def test_remote_raises_when_endpoint_down_and_path_remote(self):
+        """No endpoint + remote-only path must raise, not FileNotFoundError."""
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent") as mock_get_agent,
+            patch(
+                "uxarray_mcp.tools.remote_tools._endpoint_manager_is_up",
+                return_value=(False, "endpoint status='offline'"),
+            ),
+        ):
+            mock_get_agent.return_value = self._mock_agent(ready=False)
+            with pytest.raises(RuntimeError, match="does not exist"):
+                get_capabilities("/lus/only/on/hpc/grid.nc", use_remote=True)
+
+    def test_local_default_still_works(self):
+        """use_remote=False is the default and unchanged."""
+        result = get_capabilities("healpix:2")
+        assert result["_provenance"]["execution_venue"] == "local"
+
+
 class TestGetCapabilitiesErrors:
     """Tests for error handling in get_capabilities."""
 
