@@ -8,14 +8,22 @@ Every tool result includes a `_provenance` block that records what ran, when, wh
 |-------|-------------|
 | `tool` | Name of the tool that produced this result |
 | `inputs` | The exact parameters passed to the tool |
-| `execution_venue` | Where it ran — `"local"` or `"hpc"` |
+| `execution_venue` | Where it ran — `"local"` or `"hpc:<endpoint>"` |
 | `timestamp_utc` | When the tool was called (UTC) |
-| `uxarray_version` | Version of UXarray used |
+| `uxarray_version` | UXarray version on the local (submitting) machine |
+| `remote_uxarray_version` | UXarray version on the HPC worker (remote runs only) |
 | `python_version` | Python version on the executing machine |
 | `warnings` | Any warnings generated during execution |
 | `artifacts` | Summary of key outputs (mesh topology, area totals, etc.) |
 | `selected_variable` | Which variable was analyzed (if applicable) |
 | `validation_summary` | Dataset validation results (if applicable) |
+
+For remote runs, `remote_uxarray_version` records the version that actually
+computed the result on the worker. When it differs from the local
+`uxarray_version`, a **version-drift warning** is added to `warnings` so that
+silent numerical differences between local and remote execution are surfaced.
+`curl`/`divergence` additionally add **vector-component warnings** here when the
+inputs do not look like genuine vector components.
 
 ## Example
 

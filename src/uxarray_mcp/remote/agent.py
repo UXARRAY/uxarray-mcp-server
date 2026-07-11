@@ -424,15 +424,47 @@ class UXarrayComputeAgent(_AcademyAgent):
 
         # Attach provenance with the correct HPC venue — the remote functions
         # are self contained and don't call attach_provenance themselves.
-        from uxarray_mcp.provenance import attach_provenance
+        from uxarray_mcp.provenance import _get_uxarray_version, attach_provenance
 
         endpoint_label = self.config.endpoint_name or "configured"
-        return attach_provenance(
+
+        # Capture the worker's true software versions (when the remote function
+        # reports them) so provenance reflects what actually computed the result
+        # — not the local submitter — and warn on local/remote version drift.
+        drift_warnings: list[str] = []
+        worker_uxarray = None
+        if isinstance(result, dict):
+            worker_uxarray = result.pop("_worker_uxarray_version", None)
+            result.pop("_worker_python_version", None)
+        local_uxarray = _get_uxarray_version()
+        if (
+            worker_uxarray
+            and local_uxarray != "unknown"
+            and worker_uxarray != local_uxarray
+        ):
+            drift_warnings.append(
+                f"UXarray version drift: local={local_uxarray}, "
+                f"remote(worker)={worker_uxarray}. Numerical results may differ "
+                "between local and remote runs; compare with care."
+            )
+
+        # Fold any warnings the remote function itself produced (e.g. vector
+        # component guardrails) into provenance.
+        if isinstance(result, dict):
+            fn_warnings = result.get("component_warnings") or []
+            drift_warnings.extend(fn_warnings)
+
+        annotated = attach_provenance(
             result,
             tool=func.__name__,
             inputs={"args": [str(a) for a in args]},
             venue=f"hpc:{endpoint_label}",
+            warnings=drift_warnings or None,
         )
+        # Record the worker's uxarray version explicitly alongside the local one.
+        if worker_uxarray:
+            annotated["_provenance"]["remote_uxarray_version"] = worker_uxarray
+        return annotated
 
     def _run_local_inspect_mesh(self, file_path: str) -> Dict[str, Any]:
         """Execute inspect_mesh locally as fallback."""

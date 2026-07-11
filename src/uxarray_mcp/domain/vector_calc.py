@@ -4,6 +4,80 @@ from __future__ import annotations
 
 from typing import Any
 
+# Units that look like a genuine 2-D vector (velocity/flux) component. Used only
+# to raise a soft, non-blocking warning when curl/divergence inputs do not look
+# like real vector components — the math is still valid, but the result is only
+# physically meaningful for true vector fields.
+_VELOCITY_LIKE_UNIT_HINTS = (
+    "m/s",
+    "m s-1",
+    "m s^-1",
+    "meter/second",
+    "meters/second",
+    "cm/s",
+    "km/h",
+    "kg/m2/s",
+    "kg m-2 s-1",
+    "pa/s",
+    "n/m2",
+)
+
+
+def _vector_component_warnings(
+    u_variable: str,
+    v_variable: str,
+    u: Any,
+    v: Any,
+    operation: str,
+) -> list[str]:
+    """Return soft warnings when (u, v) do not look like real vector components.
+
+    curl and divergence are only physically meaningful when ``u`` and ``v`` are
+    the two horizontal components of a genuine vector field (e.g. eastward and
+    northward velocity). The underlying finite-volume operators will happily
+    compute a number from *any* two scalar fields, so this guardrail flags the
+    common misuse patterns without blocking the computation:
+
+    1. ``u`` and ``v`` are the same variable (a scalar used as both components).
+    2. Neither component carries a velocity/flux-like ``units`` attribute.
+
+    Warnings are attached to the result so the caller — and any downstream
+    scientist — can see that the inputs were suspicious.
+    """
+    warnings: list[str] = []
+
+    if u_variable == v_variable:
+        warnings.append(
+            f"{operation}: u_variable and v_variable are the same field "
+            f"('{u_variable}'). {operation} is only physically meaningful for a "
+            "true 2-D vector field (distinct eastward/northward components); "
+            "the result here is a mathematical artifact, not a physical "
+            f"{operation}."
+        )
+
+    def _unit(var: Any) -> str:
+        attrs = getattr(var, "attrs", {}) or {}
+        return str(attrs.get("units", "")).strip().lower()
+
+    u_unit, v_unit = _unit(u), _unit(v)
+
+    def _looks_velocity(unit: str) -> bool:
+        return any(hint in unit for hint in _VELOCITY_LIKE_UNIT_HINTS)
+
+    if not (_looks_velocity(u_unit) or _looks_velocity(v_unit)):
+        seen = ", ".join(
+            f"{name}='{unit or 'unset'}'"
+            for name, unit in ((u_variable, u_unit), (v_variable, v_unit))
+        )
+        warnings.append(
+            f"{operation}: neither component has a velocity/flux-like 'units' "
+            f"attribute ({seen}). Verify that '{u_variable}' and '{v_variable}' "
+            "are genuine vector components (e.g. m/s) before interpreting the "
+            f"{operation} physically."
+        )
+
+    return warnings
+
 
 def compute_gradient(
     uxds: Any, variable_name: str, scale_by_radius: bool = False
@@ -115,6 +189,10 @@ def compute_curl(
 
     import numpy as np
 
+    component_warnings = _vector_component_warnings(
+        u_variable, v_variable, u, v, "curl"
+    )
+
     result = u.curl(v, scale_by_radius=scale_by_radius)
     vals = result.values
     finite = vals[np.isfinite(vals)]
@@ -137,6 +215,7 @@ def compute_curl(
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": bool(scale_by_radius),
         "stats": stats,
+        "component_warnings": component_warnings,
     }
 
 
@@ -179,6 +258,10 @@ def compute_divergence(uxds: Any, u_variable: str, v_variable: str) -> dict:
 
     import numpy as np
 
+    component_warnings = _vector_component_warnings(
+        u_variable, v_variable, u, v, "divergence"
+    )
+
     result = u.divergence(v)
     vals = result.values
     finite = vals[np.isfinite(vals)]
@@ -200,6 +283,7 @@ def compute_divergence(uxds: Any, u_variable: str, v_variable: str) -> dict:
         "interpretation": "horizontal divergence ∂u/∂x + ∂v/∂y",
         "n_face": int(uxds.uxgrid.n_face),
         "stats": stats,
+        "component_warnings": component_warnings,
     }
 
 
