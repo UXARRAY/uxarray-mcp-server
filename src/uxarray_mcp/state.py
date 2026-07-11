@@ -176,15 +176,6 @@ def register_dataset(
     return dataset_record
 
 
-def get_dataset_handle(session_id: str, dataset_handle: str) -> dict[str, Any]:
-    session = get_session(session_id)
-    if dataset_handle not in session["datasets"]:
-        raise FileNotFoundError(
-            f"Dataset handle {dataset_handle!r} not found in session {session_id!r}"
-        )
-    return session["datasets"][dataset_handle]
-
-
 def create_operation(
     *,
     tool_name: str,
