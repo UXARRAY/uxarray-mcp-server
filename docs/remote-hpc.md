@@ -195,6 +195,33 @@ If you asked for `use_remote=true` and got `local`, the dispatcher fell
 back. Reasons appear in the response's `warnings` and in
 `~/.config/uxarray-mcp/logs/`.
 
+Remote results also record the worker's UXarray version as
+`remote_uxarray_version`; if it differs from the local `uxarray_version` a
+version-drift warning is added so you know the numbers were produced by a
+different build.
+
+---
+
+## Live HPC integration tests (developers)
+
+The remapping tools (`remap_variable`, `regrid_dataset`, `remap_to_rectilinear`)
+run the heavy compute on the worker and return compact summaries. An opt-in test
+suite validates this end-to-end against a real endpoint. It is **skipped by
+default** and only runs when the required environment variables are set:
+
+```bash
+UXMCP_LIVE_ENDPOINT=chrysalis \
+UXMCP_LIVE_GRID=/home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc \
+UXMCP_LIVE_DATA=/home/jain/uxarray/test/meshfiles/mpas/QU/480/data.nc \
+UXMCP_LIVE_TARGET_GRID=/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc \
+UXMCP_LIVE_VARIABLE=bottomDepth \
+uv run pytest tests/test_remote_remap_live.py -v
+```
+
+Each test asserts `execution_venue == "hpc:<endpoint>"` and that the worker
+version is recorded. When the same paths are also readable locally, the suite
+cross-checks that remote and local summary statistics agree.
+
 ---
 
 ## Troubleshooting
