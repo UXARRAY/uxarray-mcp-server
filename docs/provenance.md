@@ -19,11 +19,13 @@ Every tool result includes a `_provenance` block that records what ran, when, wh
 | `validation_summary` | Dataset validation results (if applicable) |
 
 For remote runs, `remote_uxarray_version` records the version that actually
-computed the result on the worker. When it differs from the local
-`uxarray_version`, a **version-drift warning** is added to `warnings` so that
-silent numerical differences between local and remote execution are surfaced.
-`curl`/`divergence` additionally add **vector-component warnings** here when the
-inputs do not look like genuine vector components.
+computed the result on the worker. This is reported uniformly across every
+compute and analysis operation (inspect, area, zonal mean/anomaly, gradient,
+curl, divergence, azimuthal mean, remap/regrid, and capability discovery). When
+it differs from the local `uxarray_version`, a **version-drift warning** is added
+to `warnings` so that silent numerical differences between local and remote
+execution are surfaced. `curl`/`divergence` additionally add **vector-component
+warnings** here when the inputs do not look like genuine vector components.
 
 ## Example
 
