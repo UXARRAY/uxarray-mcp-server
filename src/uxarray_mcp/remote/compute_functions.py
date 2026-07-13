@@ -304,6 +304,7 @@ def remote_inspect_variable(
             "n_node": int(uxds.uxgrid.n_node),
             "n_edge": int(uxds.uxgrid.n_edge),
         },
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
 
@@ -1310,6 +1311,7 @@ def remote_calculate_azimuthal_mean(
         "radii_deg": radii,
         "azimuthal_mean_values": values,
         "n_face": int(uxds.uxgrid.n_face),
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
 
@@ -1350,6 +1352,7 @@ def remote_grid_facts(
         "n_face": int(grid.n_face) if hasattr(grid, "n_face") else 0,
         "n_node": int(grid.n_node) if hasattr(grid, "n_node") else 0,
         "n_edge": int(grid.n_edge) if hasattr(grid, "n_edge") else 0,
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
     if data_path is not None:

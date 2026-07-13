@@ -396,3 +396,82 @@ def test_validate_dataset_provenance(synthetic_mesh_with_data):
     assert "_provenance" in result
     assert result["_provenance"]["tool"] == "validate_dataset"
     assert isinstance(result["_provenance"]["warnings"], list)
+
+
+# -----------------------------------------------------------------------------
+# Worker-version provenance + drift warning
+# -----------------------------------------------------------------------------
+
+
+class TestWorkerVersionProvenance:
+    """All compute/analysis remote functions report the worker's UXarray version,
+    and _run_on_hpc surfaces it plus a drift warning."""
+
+    COMPUTE_REMOTE_FUNCS = [
+        "remote_inspect_mesh",
+        "remote_calculate_area",
+        "remote_inspect_variable",
+        "remote_calculate_zonal_mean",
+        "remote_calculate_zonal_anomaly",
+        "remote_calculate_gradient",
+        "remote_calculate_curl",
+        "remote_calculate_divergence",
+        "remote_calculate_azimuthal_mean",
+        "remote_grid_facts",
+        "remote_remap_variable",
+        "remote_regrid_dataset",
+        "remote_remap_to_rectilinear",
+    ]
+
+    def test_all_compute_functions_emit_worker_version(self):
+        """Guard against regressions: every compute remote function's source
+        includes the _worker_uxarray_version key."""
+        import inspect as _inspect
+
+        from uxarray_mcp.remote import compute_functions as cf
+
+        for name in self.COMPUTE_REMOTE_FUNCS:
+            fn = getattr(cf, name)
+            src = _inspect.getsource(fn)
+            assert "_worker_uxarray_version" in src, (
+                f"{name} does not report _worker_uxarray_version"
+            )
+
+    @requires_globus
+    def test_run_on_hpc_surfaces_worker_version_and_drift(self):
+        """_run_on_hpc records remote_uxarray_version and warns on drift."""
+        import asyncio
+
+        from uxarray_mcp.remote.agent import UXarrayComputeAgent
+        from uxarray_mcp.remote.config import HPCConfig
+
+        agent = UXarrayComputeAgent(
+            HPCConfig(endpoint_id="fake", endpoint_name="test", execution_mode="hpc")
+        )
+
+        # Fake executor: returns a payload with a worker version that differs
+        # from whatever is installed locally.
+        class _Fut:
+            def result(self, timeout=None):
+                return {
+                    "n_face": 1,
+                    "_worker_uxarray_version": "0.0.0-worker-different",
+                }
+
+        class _Exec:
+            def submit(self, func, *a, **k):
+                return _Fut()
+
+        agent._executor = _Exec()
+
+        def _fake_func():
+            return None
+
+        _fake_func.__name__ = "remote_inspect_mesh"
+        result = asyncio.run(agent._run_on_hpc(_fake_func))
+
+        prov = result["_provenance"]
+        assert prov["remote_uxarray_version"] == "0.0.0-worker-different"
+        assert any("drift" in w for w in prov["warnings"])
+        # Internal key must not leak into the user-facing result.
+        assert "_worker_uxarray_version" not in result
