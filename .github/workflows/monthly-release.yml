@@ -28,6 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Set up Git identity
         run: |
@@ -36,12 +37,15 @@ jobs:
 
       - name: Prepare version
         id: prep
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_FORCE: ${{ inputs.force }}
         run: |
           args=()
-          if [ -n "${{ inputs.version }}" ]; then
-            args+=(--version "${{ inputs.version }}")
+          if [ -n "$INPUT_VERSION" ]; then
+            args+=(--version "$INPUT_VERSION")
           fi
-          if [ "${{ inputs.force }}" = "true" ]; then
+          if [ "$INPUT_FORCE" = "true" ]; then
             args+=(--force)
           fi
           python scripts/prepare_release.py "${args[@]}"
@@ -80,54 +84,63 @@ jobs:
 
       - name: Update conda recipe source hash
         if: steps.prep.outputs.release_needed == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.prep.outputs.version }}
         run: |
           python scripts/update_conda_recipe.py \
-            --version "${{ steps.prep.outputs.version }}" \
+            --version "$RELEASE_VERSION" \
             --sdist dist/uxarray_mcp-*.tar.gz
 
       - name: Commit version bump
         if: steps.prep.outputs.release_needed == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.prep.outputs.version }}
         run: |
           git add pyproject.toml src/uxarray_mcp/__init__.py conda/recipe/meta.yaml
           if git diff --cached --quiet; then
-            echo "Version files already match ${{ steps.prep.outputs.version }}; no release commit needed."
+            echo "Version files already match ${RELEASE_VERSION}; no release commit needed."
           else
-            git commit -m "Release ${{ steps.prep.outputs.version }}"
+            git commit -m "Release ${RELEASE_VERSION}"
           fi
 
       - name: Tag release
         if: steps.prep.outputs.release_needed == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.prep.outputs.version }}
+          RELEASE_TAG: ${{ steps.prep.outputs.tag }}
         run: |
-          git tag -a "${{ steps.prep.outputs.tag }}" -m "Release ${{ steps.prep.outputs.version }}"
+          git tag -a "$RELEASE_TAG" -m "Release ${RELEASE_VERSION}"
 
       - name: Push release commit and tag
         if: steps.prep.outputs.release_needed == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.prep.outputs.tag }}
         run: |
           git push origin HEAD:main
-          git push origin "${{ steps.prep.outputs.tag }}"
+          git push origin "$RELEASE_TAG"
 
       - name: Create GitHub release
         if: steps.prep.outputs.release_needed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.prep.outputs.version }}
+          RELEASE_TAG: ${{ steps.prep.outputs.tag }}
+          PREVIOUS_TAG: ${{ steps.prep.outputs.previous_tag }}
+          CHANGED_COMMITS: ${{ steps.prep.outputs.changed_commits }}
         run: |
-          cat > release-notes.md <<'EOF'
-          Automated release ${{ steps.prep.outputs.version }}.
-          EOF
-          if [ -n "${{ steps.prep.outputs.previous_tag }}" ]; then
-            cat >> release-notes.md <<'EOF'
-
-          Changes since ${{ steps.prep.outputs.previous_tag }}: ${{ steps.prep.outputs.changed_commits }} commit(s).
-          EOF
-          else
-            cat >> release-notes.md <<'EOF'
-
-          Initial release.
-          EOF
-          fi
-          gh release create "${{ steps.prep.outputs.tag }}" \
+          {
+            echo "Automated release ${RELEASE_VERSION}."
+            if [ -n "$PREVIOUS_TAG" ]; then
+              echo ""
+              echo "Changes since ${PREVIOUS_TAG}: ${CHANGED_COMMITS} commit(s)."
+            else
+              echo ""
+              echo "Initial release."
+            fi
+          } > release-notes.md
+          gh release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "${{ steps.prep.outputs.tag }}" \
+            --title "$RELEASE_TAG" \
             --notes-file release-notes.md \
             dist/*
 
@@ -135,8 +148,9 @@ jobs:
         if: steps.prep.outputs.release_needed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.prep.outputs.tag }}
         run: |
           gh workflow run release.yml \
             --repo "$GITHUB_REPOSITORY" \
-            --ref "${{ steps.prep.outputs.tag }}" \
-            -f tag="${{ steps.prep.outputs.tag }}"
+            --ref "$RELEASE_TAG" \
+            -f tag="$RELEASE_TAG"

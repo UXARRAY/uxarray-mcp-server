@@ -21,9 +21,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -74,6 +77,8 @@ jobs:
     steps:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -120,10 +125,14 @@ jobs:
       - name: Check out source repository
         if: env.CONDA_FEEDSTOCK_REPOSITORY != '' && env.CONDA_FEEDSTOCK_TOKEN != ''
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install uv
         if: env.CONDA_FEEDSTOCK_REPOSITORY != '' && env.CONDA_FEEDSTOCK_TOKEN != ''
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
 
       - name: Set up Python 3.12
         if: env.CONDA_FEEDSTOCK_REPOSITORY != '' && env.CONDA_FEEDSTOCK_TOKEN != ''
@@ -142,12 +151,16 @@ jobs:
           repository: ${{ env.CONDA_FEEDSTOCK_REPOSITORY }}
           token: ${{ env.CONDA_FEEDSTOCK_TOKEN }}
           path: feedstock
+          # Credentials are intentionally persisted: this job pushes a branch
+          # and opens a PR against the conda-forge feedstock.
+          persist-credentials: true
 
       - name: Update feedstock recipe
         if: env.CONDA_FEEDSTOCK_REPOSITORY != '' && env.CONDA_FEEDSTOCK_TOKEN != ''
+        env:
+          REF_NAME: ${{ inputs.tag || github.ref_name }}
         run: |
-          ref_name="${{ inputs.tag || github.ref_name }}"
-          version="${ref_name#v}"
+          version="${REF_NAME#v}"
           python scripts/update_conda_recipe.py \
             --recipe feedstock/recipe/meta.yaml \
             --version "$version" \
@@ -157,9 +170,9 @@ jobs:
         if: env.CONDA_FEEDSTOCK_REPOSITORY != '' && env.CONDA_FEEDSTOCK_TOKEN != ''
         env:
           GH_TOKEN: ${{ env.CONDA_FEEDSTOCK_TOKEN }}
+          REF_NAME: ${{ inputs.tag || github.ref_name }}
         run: |
-          ref_name="${{ inputs.tag || github.ref_name }}"
-          version="${ref_name#v}"
+          version="${REF_NAME#v}"
           cd feedstock
           branch="uxarray-mcp-${version}"
           git config user.name "Rajeev Jain"

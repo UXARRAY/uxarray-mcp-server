@@ -35,3 +35,9 @@ repos:
           - "types-PyYAML"
         # Only check source, not tests or docs
         files: ^src/
+
+  - repo: https://github.com/woodruffw/zizmor-pre-commit
+    rev: v1.5.2
+    hooks:
+      - id: zizmor
+        name: audit GitHub Actions with zizmor
