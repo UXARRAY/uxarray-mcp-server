@@ -1,0 +1,14 @@
+# zizmor configuration — GitHub Actions security auditing.
+# https://docs.zizmor.sh/configuration/
+#
+# We fix the high-signal findings (excessive-permissions, artipacked,
+# template-injection, cache-poisoning) directly in the workflows. Pinning every
+# third-party action to a full commit SHA (`unpinned-uses`) is tracked as a
+# separate follow-up so this initial adoption stays focused and reviewable.
+rules:
+  unpinned-uses:
+    ignore:
+      - ci.yml
+      - monthly-release.yml
+      - release.yml
+      - zizmor.yml
