@@ -412,3 +412,68 @@ class TestZonalAnomaly:
             pytest.skip("could not remove zonal_anomaly for negative test")
         with pytest.raises(NotImplementedError):
             compute_zonal_anomaly_stats(healpix_field_dataset, "temperature")
+
+
+class TestZonalAnomalyRemote:
+    """Remote (HPC) dispatch for zonal_anomaly — mocked agent, no real HPC."""
+
+    class _MockAgent:
+        def __init__(self, payload):
+            from types import SimpleNamespace
+
+            self.config = SimpleNamespace(
+                endpoint_id="ep-123", endpoint_name="chrysalis"
+            )
+            self._payload = payload
+
+        async def _run_on_hpc(self, func, *args, **kwargs):
+            result = dict(self._payload)
+            result.setdefault("_provenance", {})["execution_venue"] = "hpc:chrysalis"
+            return result
+
+    def test_remote_dispatch_returns_remote_result(self, monkeypatch):
+        from uxarray_mcp.remote import agent as agent_mod
+        from uxarray_mcp.tools import remote_tools
+        from uxarray_mcp.tools.inspection import calculate_zonal_anomaly
+
+        payload = {
+            "variable_name": "temperature",
+            "conservative": False,
+            "n_face": 42,
+            "stats": {"min": -1.0, "max": 1.0, "mean": 0.0, "std": 0.5},
+            "_provenance": {"execution_venue": "hpc:chrysalis"},
+        }
+        monkeypatch.setattr(
+            agent_mod, "get_agent", lambda **kw: self._MockAgent(payload)
+        )
+        monkeypatch.setattr(
+            remote_tools, "_endpoint_manager_is_up", lambda agent: (True, "ok")
+        )
+
+        result = calculate_zonal_anomaly(
+            "/lus/only/on/hpc/grid.nc",
+            "/lus/only/on/hpc/data.nc",
+            "temperature",
+            use_remote=True,
+            endpoint="chrysalis",
+        )
+        assert result["_provenance"]["execution_venue"] == "hpc:chrysalis"
+        assert result["stats"]["mean"] == 0.0
+
+    def test_remote_raises_when_endpoint_down_and_path_remote(self, monkeypatch):
+        from uxarray_mcp.remote import agent as agent_mod
+        from uxarray_mcp.tools import remote_tools
+        from uxarray_mcp.tools.inspection import calculate_zonal_anomaly
+
+        monkeypatch.setattr(agent_mod, "get_agent", lambda **kw: self._MockAgent({}))
+        monkeypatch.setattr(
+            remote_tools, "_endpoint_manager_is_up", lambda agent: (False, "offline")
+        )
+        with pytest.raises(RuntimeError, match="not readable locally"):
+            calculate_zonal_anomaly(
+                "/lus/only/on/hpc/grid.nc",
+                "/lus/only/on/hpc/data.nc",
+                "temperature",
+                use_remote=True,
+                endpoint="chrysalis",
+            )
