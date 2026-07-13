@@ -190,6 +190,14 @@ path printed by `which uxarray-mcp`.
 
 Fully quit (`Cmd+Q` on macOS) and reopen. Closing the window is not enough.
 
+> **Restart after every upgrade, too.** The MCP server is launched once when
+> your AI client starts and is **not hot-reloaded**. Whenever you upgrade the
+> package (`uv tool upgrade ... uxarray-mcp`) or pull new code in a repository
+> checkout, **fully quit and reopen your AI client** so it relaunches the server
+> with the new code. Otherwise the running server keeps executing the old
+> version — new tools and fixes won't be visible, and remote (`use_remote=True`)
+> calls made against the newer code paths can fail with confusing errors.
+
 ### Step 6: Verify the connection
 
 In Claude, ask:
@@ -256,6 +264,13 @@ For the full HPC playbook and reusable scripts, see:
 : 1. Verify paths in the config are absolute and correct
   2. Fully quit and reopen Claude Desktop
   3. Check the Developer Console: View > Developer > Developer Tools > Console
+
+**I upgraded but new tools/fixes are missing, or a `use_remote` call fails with
+"file not found" on an HPC path**
+: The MCP server was started before the upgrade and is still running the old
+  code (MCP servers are not hot-reloaded). **Fully quit and reopen your AI
+  client** so it relaunches `uxarray-mcp serve` with the new version. Confirm
+  with `uxarray-mcp doctor`.
 
 **Remote calls fall back locally**
 : Run `diagnose_endpoint(action="status")` or

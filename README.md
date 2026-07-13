@@ -202,6 +202,24 @@ auditable and the server actively flags common scientific pitfalls:
 
 ---
 
+## Upgrading
+
+```bash
+uv tool upgrade --python 3.12 uxarray-mcp        # or your original install method
+```
+
+> **⚠️ Restart your AI client after upgrading.** MCP servers are launched once
+> when your client (Claude Desktop, Claude Code, Cursor, …) starts and are **not
+> hot-reloaded**. After upgrading the package, **fully quit and reopen your AI
+> client** so it relaunches `uxarray-mcp serve` with the new code. Until you do,
+> the running server keeps executing the *old* version — new tools and fixes
+> won't appear, and you may see confusing errors (for example, a `use_remote`
+> call on an HPC-only path failing with "file not found" because the old,
+> local-only tool is still loaded). If in doubt, run `uxarray-mcp doctor` and
+> check the reported version.
+
+---
+
 ## Risks (read before relying on output)
 
 AI agents can misread prompts, pick the wrong file, get units wrong (e.g.,
