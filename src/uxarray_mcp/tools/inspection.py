@@ -328,6 +328,9 @@ def calculate_zonal_anomaly(
     variable_name: str,
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
+    use_remote: bool = False,
+    endpoint: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Compute the zonal anomaly of a face-centered variable.
 
@@ -343,6 +346,11 @@ def calculate_zonal_anomaly(
             ``(-90, 90, 10)``; a ``(start, end, step)`` tuple or explicit band
             edges are also accepted.
         conservative: If True, use area-weighted band means.
+        use_remote: If True and an HPC endpoint is configured, run on the remote
+            worker so the operation works on HPC-only paths. Falls back to local
+            execution when the endpoint is unavailable and paths are local.
+        endpoint: Named endpoint to target when several are configured.
+        session_id: Session to track this operation under.
 
     Returns:
         Dictionary with ``variable_name``, ``conservative``, ``n_face``,
@@ -357,25 +365,58 @@ def calculate_zonal_anomaly(
         >>> calculate_zonal_anomaly("grid.nc", "data.nc", "temperature")
         {"stats": {"min": -12.4, "max": 9.8, ...}, ...}
     """
-    if not Path(grid_path).exists():
-        raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if not Path(data_path).exists():
-        raise FileNotFoundError(f"Data file not found: {data_path}")
+    inputs = {
+        "grid_path": grid_path,
+        "data_path": data_path,
+        "variable_name": variable_name,
+        "lat_spec": lat_spec,
+        "conservative": conservative,
+    }
 
-    uxds = load_dataset(grid_path, data_path)
-    result = compute_zonal_anomaly_stats(uxds, variable_name, lat_spec, conservative)
+    def _local() -> Dict[str, Any]:
+        if not Path(grid_path).exists():
+            raise FileNotFoundError(f"Grid file not found: {grid_path}")
+        if not Path(data_path).exists():
+            raise FileNotFoundError(f"Data file not found: {data_path}")
+        uxds = load_dataset(grid_path, data_path)
+        result = compute_zonal_anomaly_stats(
+            uxds, variable_name, lat_spec, conservative
+        )
+        return attach_provenance(result, tool="calculate_zonal_anomaly", inputs=inputs)
 
-    return attach_provenance(
-        result,
-        tool="calculate_zonal_anomaly",
-        inputs={
-            "grid_path": grid_path,
-            "data_path": data_path,
-            "variable_name": variable_name,
-            "lat_spec": lat_spec,
-            "conservative": conservative,
-        },
+    if not use_remote:
+        return _local()
+
+    from uxarray_mcp.remote.agent import get_agent
+    from uxarray_mcp.remote.compute_functions import remote_calculate_zonal_anomaly
+
+    from .remote_tools import (
+        _endpoint_manager_is_up,
+        _path_is_locally_reachable,
+        _run_sync,
     )
+
+    agent = get_agent(endpoint=endpoint, path=grid_path)
+    ready = bool(agent.config.endpoint_id)
+    if ready:
+        ready, _reason = _endpoint_manager_is_up(agent)
+    if ready:
+        return _run_sync(
+            lambda: agent._run_on_hpc(
+                remote_calculate_zonal_anomaly,
+                grid_path,
+                data_path,
+                variable_name,
+                lat_spec,
+                conservative,
+            )
+        )
+    if not _path_is_locally_reachable(grid_path):
+        raise RuntimeError(
+            "calculate_zonal_anomaly: use_remote=True but the HPC endpoint is "
+            f"not available and {grid_path!r} is not readable locally."
+        )
+    return _local()
 
 
 def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:

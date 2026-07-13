@@ -147,6 +147,9 @@ def run_analysis(
             _require(variable_name, "variable_name", op),
             lat_spec=lat_spec,
             conservative=conservative,
+            use_remote=use_remote,
+            endpoint=endpoint,
+            session_id=session_id,
         )
     if op == "gradient":
         return calculate_gradient(
