@@ -1377,34 +1377,6 @@ def remote_grid_facts(
     return facts
 
 
-def _remote_open_dataset(grid_path: str, data_path: str):
-    """Open a UxDataset on the worker, handling HEALPix / shapefile grids."""
-    import os
-
-    import uxarray as ux
-
-    if grid_path.startswith("healpix:"):
-        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        return ux.open_dataset(grid.to_xarray(), data_path)
-    if os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
-        grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        return ux.open_dataset(grid.to_xarray(), data_path)
-    return ux.open_dataset(grid_path, data_path)
-
-
-def _remote_open_grid(grid_path: str):
-    """Open a Grid on the worker, handling HEALPix / shapefile grids."""
-    import os
-
-    import uxarray as ux
-
-    if grid_path.startswith("healpix:"):
-        return ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-    if os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
-        return ux.Grid.from_file(grid_path, backend="geopandas")
-    return ux.open_grid(grid_path)
-
-
 def remote_remap_variable(
     grid_path: str,
     data_path: str,
@@ -1419,12 +1391,30 @@ def remote_remap_variable(
     array) so large meshes never cross the network. The heavy compute runs on
     the worker where the data lives.
     """
+    import os
+
     import numpy as np
     import uxarray as ux
 
-    uxds = _remote_open_dataset(grid_path, data_path)
+    def _open_ds(gp, dp):
+        if gp.startswith("healpix:"):
+            g = ux.Grid.from_healpix(int(gp.split(":")[1]))
+            return ux.open_dataset(g.to_xarray(), dp)
+        if os.path.splitext(gp.lower())[1] in [".shp", ".geojson"]:
+            g = ux.Grid.from_file(gp, backend="geopandas")
+            return ux.open_dataset(g.to_xarray(), dp)
+        return ux.open_dataset(gp, dp)
+
+    def _open_grid(gp):
+        if gp.startswith("healpix:"):
+            return ux.Grid.from_healpix(int(gp.split(":")[1]))
+        if os.path.splitext(gp.lower())[1] in [".shp", ".geojson"]:
+            return ux.Grid.from_file(gp, backend="geopandas")
+        return ux.open_grid(gp)
+
+    uxds = _open_ds(grid_path, data_path)
     source_grid = uxds.uxgrid
-    target_grid = _remote_open_grid(target_grid_path)
+    target_grid = _open_grid(target_grid_path)
 
     if variable_name not in uxds.data_vars:
         raise ValueError(
@@ -1483,11 +1473,29 @@ def remote_regrid_dataset(
 
     Returns per-variable summary statistics (not full arrays).
     """
+    import os
+
     import numpy as np
     import uxarray as ux
 
-    uxds = _remote_open_dataset(grid_path, data_path)
-    target_grid = _remote_open_grid(target_grid_path)
+    def _open_ds(gp, dp):
+        if gp.startswith("healpix:"):
+            g = ux.Grid.from_healpix(int(gp.split(":")[1]))
+            return ux.open_dataset(g.to_xarray(), dp)
+        if os.path.splitext(gp.lower())[1] in [".shp", ".geojson"]:
+            g = ux.Grid.from_file(gp, backend="geopandas")
+            return ux.open_dataset(g.to_xarray(), dp)
+        return ux.open_dataset(gp, dp)
+
+    def _open_grid(gp):
+        if gp.startswith("healpix:"):
+            return ux.Grid.from_healpix(int(gp.split(":")[1]))
+        if os.path.splitext(gp.lower())[1] in [".shp", ".geojson"]:
+            return ux.Grid.from_file(gp, backend="geopandas")
+        return ux.open_grid(gp)
+
+    uxds = _open_ds(grid_path, data_path)
+    target_grid = _open_grid(target_grid_path)
 
     variables = variable_names or [
         name
@@ -1547,10 +1555,20 @@ def remote_remap_to_rectilinear(
     The target rectilinear grid is typically small, so the full remapped array
     is returned (as nested lists) to allow local persistence.
     """
+    import os
+
     import numpy as np
     import uxarray as ux
 
-    uxds = _remote_open_dataset(grid_path, data_path)
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
+
     if variable_name not in uxds.data_vars:
         raise ValueError(
             f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
@@ -1585,5 +1603,83 @@ def remote_remap_to_rectilinear(
         "values": vals.tolist(),
         "target_lon": lon,
         "target_lat": lat,
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+    }
+
+
+def remote_calculate_zonal_anomaly(
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+    lat_spec: Optional[tuple | float | list] = None,
+    conservative: bool = False,
+) -> Dict[str, Any]:
+    """Compute zonal-anomaly statistics on the HPC worker.
+
+    The zonal anomaly is each face value minus the zonal mean of its latitude
+    band. Returns compact summary statistics (not the full per-face field) so
+    large meshes never cross the network.
+    """
+    import os
+
+    import numpy as np
+    import uxarray as ux
+
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
+
+    if variable_name not in uxds.data_vars:
+        raise ValueError(
+            f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
+        )
+    var = uxds[variable_name]
+    if "n_face" not in var.dims and "nCells" not in var.dims:
+        raise ValueError(
+            f"Variable '{variable_name}' is not face-centered. "
+            "Zonal anomaly only supports face-centered data."
+        )
+    if not hasattr(var, "zonal_anomaly"):
+        raise NotImplementedError(
+            "zonal_anomaly requires a UXarray release that provides "
+            "UxDataArray.zonal_anomaly. Upgrade the worker's uxarray to use this."
+        )
+
+    if lat_spec is not None:
+        result = var.zonal_anomaly(lat=lat_spec, conservative=conservative)
+    else:
+        result = var.zonal_anomaly(conservative=conservative)
+
+    vals = result.values
+    finite = vals[np.isfinite(vals)]
+    stats = (
+        {
+            "min": float(finite.min()),
+            "max": float(finite.max()),
+            "mean": float(finite.mean()),
+            "std": float(finite.std()),
+        }
+        if finite.size > 0
+        else {"min": None, "max": None, "mean": None, "std": None}
+    )
+
+    return {
+        "variable_name": variable_name,
+        "conservative": conservative,
+        "n_face": int(uxds.uxgrid.n_face),
+        "stats": stats,
+        "interpretation": (
+            "per-face deviation from the zonal mean of its latitude band"
+        ),
+        "grid_info": {
+            "n_face": int(uxds.uxgrid.n_face),
+            "n_node": int(uxds.uxgrid.n_node),
+            "n_edge": int(uxds.uxgrid.n_edge),
+        },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }

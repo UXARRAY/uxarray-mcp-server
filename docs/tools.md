@@ -85,10 +85,10 @@ the HPC worker and compact summary statistics are returned (for
 `remap_to_rectilinear`, the small rectilinear array is returned and persisted
 locally); large source meshes never cross the network.
 
-> **Still local-only:** `zonal_anomaly` currently runs on the local machine and
-> does not yet have a remote execution path, so it cannot operate on files that
-> live only on an HPC filesystem. All other compute and remapping operations
-> accept `use_remote=True`.
+All compute and remapping operations — including `zonal_anomaly` — accept
+`use_remote=True` and `endpoint="name"`, so they can run against datasets that
+live only on an HPC filesystem. Remote runs fall back to local execution when
+the endpoint is unavailable and the paths are locally reachable.
 
 Examples:
 
