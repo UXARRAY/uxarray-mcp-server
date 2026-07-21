@@ -236,20 +236,41 @@ def validate_hpc_setup(
     visible to Globus Compute. This diagnostic goes deeper: it validates local
     SDK/auth state, endpoint status, and optionally submits a tiny remote probe
     so scheduler or worker bootstrap failures surface as structured output.
+
+    Called with no ``endpoint`` and none configured, this reports a passing
+    local-only result (``passed: True``, ``endpoint_status: "no_endpoint"``) --
+    HPC is opt-in, so a fresh local-only install is a valid state, not a
+    failure. Passing an explicit ``endpoint`` name that cannot be resolved
+    still raises ``ValueError``.
     """
     tracker = OperationTracker("validate_hpc_setup", session_id=session_id)
     tracker.stage("config", "Loading HPC configuration.")
     base_config, config_path = _load_config_for_tools()
     config = base_config.for_endpoint(endpoint=endpoint, path=sample_path)
+
+    # No endpoint configured and none was explicitly requested: this is a
+    # valid, expected local-only setup, not a failure. uxarray-mcp runs
+    # locally by default — HPC is opt-in — so `doctor`/`validate_hpc_setup`
+    # called with no arguments must report a passing local-only status
+    # rather than telling every fresh install to go configure an endpoint
+    # it may never need. An explicit `endpoint=` request that fails to
+    # resolve still raises via `resolve_endpoint` before reaching here, and
+    # is unaffected by this branch.
+    endpoint_was_requested = endpoint is not None
+    local_only_ok = not config.endpoint_id and not endpoint_was_requested
+
     checks: List[Dict[str, Any]] = []
     checks.append(
         _make_check(
             "config",
-            bool(config.endpoint_id),
+            bool(config.endpoint_id) or local_only_ok,
             (
                 f"Configured endpoint {config.endpoint_name or 'default'} "
                 f"in {config_path or 'discovered config'}."
                 if config.endpoint_id
+                else "No endpoint configured — running local-only. "
+                "This is expected unless you intend to use HPC execution."
+                if local_only_ok
                 else f"No endpoint could be resolved in {config_path or 'discovered config'}."
             ),
             details={
@@ -261,11 +282,11 @@ def validate_hpc_setup(
                 "config_path": str(config_path) if config_path is not None else None,
             },
             guidance=(
-                "Copy config.yaml.example to config.yaml and set "
+                None
+                if config.endpoint_id or local_only_ok
+                else "Copy config.yaml.example to config.yaml and set "
                 "`hpc.globus_compute.endpoint_id`, or define "
                 "`hpc.endpoints` and pass endpoint='name'."
-                if not config.endpoint_id
-                else None
             ),
         )
     )
@@ -277,7 +298,7 @@ def validate_hpc_setup(
 
     if not config.endpoint_id:
         result = {
-            "passed": False,
+            "passed": local_only_ok,
             "mode": config.execution_mode,
             **_endpoint_configured_payload(config),
             "endpoint_status": endpoint_status,
@@ -297,7 +318,15 @@ def validate_hpc_setup(
             },
         )
         result["_provenance"]["operation_id"] = tracker.operation_id
-        tracker.fail("HPC validation failed because no endpoint is configured.")
+        if local_only_ok:
+            tracker.succeed(
+                "No HPC endpoint configured; running local-only (this is the default)."
+            )
+        else:
+            tracker.fail(
+                f"HPC validation failed: endpoint {endpoint!r} was requested but "
+                "could not be resolved."
+            )
         return result
 
     try:

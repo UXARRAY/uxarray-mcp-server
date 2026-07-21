@@ -347,7 +347,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--execution-mode",
         default="auto",
         choices=["local", "auto", "hpc"],
-        help="Default execution mode (default: auto).",
+        help=(
+            "Default execution mode (default: auto). 'auto' runs local-only "
+            "until you add an endpoint with `endpoints add`, then uses it "
+            "automatically. Most users never need to change this."
+        ),
     )
     setup.add_argument("--force", action="store_true", help="Overwrite existing file.")
     setup.set_defaults(func=cmd_setup)
@@ -377,12 +381,42 @@ def build_parser() -> argparse.ArgumentParser:
     ep_remove.add_argument("name")
     ep_remove.set_defaults(func=cmd_endpoints_remove)
 
-    doctor = sub.add_parser("doctor", help="Validate HPC readiness.")
-    doctor.add_argument("--sample-path", action="append", default=[])
-    doctor.add_argument("--timeout-seconds", type=int, default=180)
-    doctor.add_argument("--endpoint", default=None)
-    doctor.add_argument("--skip-remote-probe", action="store_true")
-    doctor.add_argument("--no-netcdf", action="store_true")
+    doctor = sub.add_parser(
+        "doctor",
+        help="Check that the install is healthy (local-only or HPC).",
+        description=(
+            "Run local-only by default; add an HPC endpoint (`endpoints add`) "
+            "to also validate remote readiness. With no endpoint configured, "
+            "this reports a passing local-only result — HPC is opt-in."
+        ),
+    )
+    doctor.add_argument(
+        "--sample-path",
+        action="append",
+        default=[],
+        help="Remote file path to test-read (repeatable). Requires an endpoint.",
+    )
+    doctor.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=180,
+        help="Seconds to wait for the remote worker probe (ignored if no endpoint).",
+    )
+    doctor.add_argument(
+        "--endpoint",
+        default=None,
+        help="Named endpoint to validate. Omit to check the default/local-only setup.",
+    )
+    doctor.add_argument(
+        "--skip-remote-probe",
+        action="store_true",
+        help="Skip submitting a test job to the endpoint (config/auth checks only).",
+    )
+    doctor.add_argument(
+        "--no-netcdf",
+        action="store_true",
+        help="Skip opening --sample-path as NetCDF; just check readability.",
+    )
     doctor.set_defaults(func=cmd_doctor)
 
     claude = sub.add_parser(
