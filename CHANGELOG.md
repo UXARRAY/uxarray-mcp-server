@@ -5,6 +5,36 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+### Changed
+- Bumped the `uxarray` floor to the new July release (`2026.7.0`), which
+  fixes `curl(grad(f))` accuracy (residual now ~1e-13 with
+  `scale_by_radius=True`, previously O(1) due to an upstream gradient/curl
+  normalization bug) and adds Python 3.14 support, YAC v3.18 remapping, and
+  one-file `open_dataset`.
+- Rebuilt YAC on the Chrysalis (ANL/LCRC) endpoint from v3.17.0 to v3.18.0
+  and updated `scripts/chrysalis_endpoint.sh` to point at the new
+  self-contained `~/local/yac-3.18` prefix.
+
+### Fixed
+- `domain/mesh.load_dataset` and ~20 duplicated inline branches in
+  `remote/compute_functions.py` crashed with `ValueError: cannot rename
+  'node_lon'...` whenever a HEALPix or GIS (shapefile/GeoJSON) grid was
+  combined with a *separate* data file (e.g.
+  `run_analysis(operation="gradient", grid_path="healpix:4",
+  data_path=...)`). The code treated the grid's minimal `to_xarray()`
+  representation as a full UGRID file, which the generic reader rejects.
+  Fixed by attaching the data directly to the already-loaded `Grid` object
+  instead. Added regression tests in `tests/test_domain_mesh.py` covering
+  both the local and remote code paths.
+
+### Added
+- `scripts/analytic_validation.py` — a checked-in, reproducible script that
+  validates `gradient`/`curl`/`divergence` against four analytic
+  vector-calculus identities (including the stringent
+  `curl(grad(phi)) == 0`) through the same `run_analysis` tool path an
+  agent uses, against a self-contained synthetic grid (no external mesh
+  file required).
+
 ## 0.1.2 — 2026-07-05
 
 ### Added

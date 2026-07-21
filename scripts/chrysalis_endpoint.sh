@@ -14,10 +14,7 @@ VENV_GC="${VENV_GC:-$HOME/venvs/globus-compute-py313}"
 TMUX_SESSION="uxarray-endpoint"
 
 YAC_SHIM_LIB="$HOME/local/yac-runtime-shims/lib"
-YAC_SRC_PY="$HOME/src/yac/build/python"
-YAC_SRC_CORE="$HOME/src/yac/build/src/core"
-YAC_SRC_UTILS="$HOME/src/yac/build/src/utils"
-YAC_LOCAL_PREFIX="$HOME/local/yac-3.17"
+YAC_LOCAL_PREFIX="$HOME/local/yac-3.18"
 UXARRAY_YAC_SRC="/lcrc/group/e3sm/jain/uxarray-yac-src"
 MKL_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/oneapi-2022.1.0/intel-oneapi-mkl-2022.1.0-iwhfz52/mkl/2022.1.0/lib/intel64"
 MPICH_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/gcc-11.3.0/mpich-4.3.2-dp2ycaq/lib"
@@ -25,8 +22,8 @@ HWLOC_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/gc
 YAKSA_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/gcc-11.3.0/yaksa-0.4-mejnfxw/lib"
 LIBFABRIC_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/gcc-9.3.0/libfabric-1.16.1-vwdeh3y/lib"
 GCC_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/gcc-8.5.0/gcc-11.3.0-jkpmtgq/lib64"
-YAC_PYTHONPATH="$YAC_SRC_PY:$YAC_LOCAL_PREFIX/lib/python3.12/site-packages:$UXARRAY_YAC_SRC"
-YAC_LD_LIBRARY_PATH="$YAC_SHIM_LIB:$MKL_LIB:$CONDA_ENV/lib:$YAC_SRC_CORE:$YAC_SRC_UTILS:$YAC_LOCAL_PREFIX/lib:$MPICH_LIB:$HWLOC_LIB:$YAKSA_LIB:$LIBFABRIC_LIB:$GCC_LIB"
+YAC_PYTHONPATH="$YAC_LOCAL_PREFIX/lib/python3.12/site-packages:$UXARRAY_YAC_SRC"
+YAC_LD_LIBRARY_PATH="$YAC_SHIM_LIB:$MKL_LIB:$CONDA_ENV/lib:$YAC_LOCAL_PREFIX/lib:$MPICH_LIB:$HWLOC_LIB:$YAKSA_LIB:$LIBFABRIC_LIB:$GCC_LIB"
 YAC_WORKER_PATH="$CONDA_ENV/bin:$VENV_GC/bin:/usr/bin:/bin"
 
 usage() {
