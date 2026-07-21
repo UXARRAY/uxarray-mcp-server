@@ -16,6 +16,24 @@ def _require(value: Any, name: str, operation: str) -> Any:
     return value
 
 
+def _reject_unsupported_remote(use_remote: bool, operation: str) -> None:
+    """Fail loudly when `use_remote=True` is requested for an operation that
+    has no remote implementation, instead of silently running locally.
+
+    Without this, a caller who asks for HPC execution on a facility-only
+    path (the file does not exist on their machine) got a confusing local
+    ``FileNotFoundError`` with no indication that ``use_remote`` was ever
+    honored -- exactly the "silent failure" this server's provenance and
+    guardrail mechanisms otherwise exist to prevent.
+    """
+    if use_remote:
+        raise ValueError(
+            f"{operation!r} does not support use_remote=True yet -- it always "
+            "runs locally. Pass a locally-readable path, or omit use_remote/"
+            "endpoint for this operation."
+        )
+
+
 def run_analysis(
     operation: str,
     grid_path: str | None = None,
@@ -120,6 +138,7 @@ def run_analysis(
             session_id=session_id,
         )
     if op == "validate_dataset":
+        _reject_unsupported_remote(use_remote, op)
         return validate_dataset(
             _require(grid_path, "grid_path", op),
             _require(data_path, "data_path", op),
@@ -196,6 +215,7 @@ def run_analysis(
             session_id=session_id,
         )
     if op == "subset_bbox":
+        _reject_unsupported_remote(use_remote, op)
         return subset_bbox(
             lon_bounds=_require(lon_bounds, "lon_bounds", op),
             lat_bounds=_require(lat_bounds, "lat_bounds", op),
@@ -207,6 +227,7 @@ def run_analysis(
             result_name=result_name,
         )
     if op == "subset_polygon":
+        _reject_unsupported_remote(use_remote, op)
         return subset_polygon(
             polygon_lon_lat=_require(polygon_lon_lat, "polygon_lon_lat", op),
             grid_path=grid_path,
@@ -217,6 +238,7 @@ def run_analysis(
             result_name=result_name,
         )
     if op == "cross_section":
+        _reject_unsupported_remote(use_remote, op)
         return extract_cross_section(
             latitude=latitude,
             longitude=longitude,
@@ -228,6 +250,7 @@ def run_analysis(
             result_name=result_name,
         )
     if op == "compare_fields":
+        _reject_unsupported_remote(use_remote, op)
         return compare_fields(
             variable_name=_require(variable_name, "variable_name", op),
             data_path_a=_require(data_path_a, "data_path_a", op),
@@ -237,6 +260,7 @@ def run_analysis(
             result_name=result_name,
         )
     if op == "bias":
+        _reject_unsupported_remote(use_remote, op)
         return calculate_bias(
             variable_name=_require(variable_name, "variable_name", op),
             data_path_a=_require(data_path_a, "data_path_a", op),
@@ -244,6 +268,7 @@ def run_analysis(
             grid_path=grid_path,
         )
     if op == "rmse":
+        _reject_unsupported_remote(use_remote, op)
         return calculate_rmse(
             variable_name=_require(variable_name, "variable_name", op),
             data_path_a=_require(data_path_a, "data_path_a", op),
@@ -251,6 +276,7 @@ def run_analysis(
             grid_path=grid_path,
         )
     if op == "pattern_correlation":
+        _reject_unsupported_remote(use_remote, op)
         return calculate_pattern_correlation(
             variable_name=_require(variable_name, "variable_name", op),
             data_path_a=_require(data_path_a, "data_path_a", op),
@@ -299,6 +325,7 @@ def run_analysis(
             endpoint=endpoint,
         )
     if op == "temporal_mean":
+        _reject_unsupported_remote(use_remote, op)
         return calculate_temporal_mean(
             data_path=_require(data_path, "data_path", op),
             variable_name=_require(variable_name, "variable_name", op),
@@ -307,6 +334,7 @@ def run_analysis(
             result_name=result_name,
         )
     if op == "anomaly":
+        _reject_unsupported_remote(use_remote, op)
         return calculate_anomaly(
             data_path=_require(data_path, "data_path", op),
             variable_name=_require(variable_name, "variable_name", op),
@@ -315,6 +343,7 @@ def run_analysis(
             result_name=result_name,
         )
     if op == "ensemble_mean":
+        _reject_unsupported_remote(use_remote, op)
         return calculate_ensemble_mean(
             variable_name=_require(variable_name, "variable_name", op),
             data_paths=_require(data_paths, "data_paths", op),
@@ -322,6 +351,7 @@ def run_analysis(
             result_name=result_name,
         )
     if op == "ensemble_spread":
+        _reject_unsupported_remote(use_remote, op)
         return calculate_ensemble_spread(
             variable_name=_require(variable_name, "variable_name", op),
             data_paths=_require(data_paths, "data_paths", op),
@@ -329,6 +359,7 @@ def run_analysis(
             result_name=result_name,
         )
     if op == "export":
+        _reject_unsupported_remote(use_remote, op)
         return write_result(
             output_path=_require(output_path, "output_path", op),
             format=output_format,
@@ -379,6 +410,7 @@ def plot_dataset(
             dataset_handle=dataset_handle,
         )
     if kind == "mesh_geo":
+        _reject_unsupported_remote(use_remote, f"plot_dataset(plot_type={kind!r})")
         return plot_mesh_geo(
             grid_path=grid_path,
             width=width,

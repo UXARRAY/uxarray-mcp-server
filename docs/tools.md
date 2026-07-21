@@ -159,6 +159,22 @@ Remote calls submit self-contained functions to a configured Globus Compute
 endpoint and preserve provenance. If an endpoint is missing or unhealthy, the
 dispatcher either falls back locally or reports a structured readiness error.
 
+**Not every `run_analysis` operation supports `use_remote` yet.** Passing
+`use_remote=True` for one of the operations below raises `ValueError`
+immediately rather than silently running locally — this is deliberate: a
+facility-only path (one that doesn't exist on your machine) combined with a
+silent local fallback would otherwise produce a confusing local
+`FileNotFoundError` with no indication that `use_remote` was ever honored.
+
+| Supports `use_remote` | Does not (yet) |
+|---|---|
+| `inspect_mesh`, `inspect_variable`, `calculate_area`, `calculate_zonal_mean`, `zonal_anomaly`, `gradient`, `curl`, `divergence`, `azimuthal_mean`, `remap_variable`, `regrid_dataset`, `remap_to_rectilinear` | `validate_dataset`, `subset_bbox`, `subset_polygon`, `cross_section`, `compare_fields`, `bias`, `rmse`, `pattern_correlation`, `temporal_mean`, `anomaly`, `ensemble_mean`, `ensemble_spread`, `export` |
+
+For an operation in the right-hand column, stage the file locally first (or
+run it on a machine that can already read the facility path directly).
+`plot_dataset(plot_type=...)` has the same split: `mesh`, `variable`, and
+`zonal_mean` support `use_remote`; `mesh_geo` does not yet.
+
 ### `diagnose_endpoint`
 
 Run endpoint diagnostics with concrete failure guidance.
