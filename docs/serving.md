@@ -7,8 +7,9 @@ tool implementations are exposed over multiple protocols from a single process,
 so the server is not tied to any one client. Claude Desktop is the default
 target, but the tools are equally usable over REST or from plain Python.
 
-For the Claude Desktop quickstart, see {doc}`getting-started`. This page covers
-the additional surfaces the engine provides.
+For the Claude Desktop quickstart, see the
+[README](https://github.com/UXARRAY/uxarray-mcp-server#readme). This page
+covers the additional surfaces the engine provides.
 
 ## The `serve` command
 

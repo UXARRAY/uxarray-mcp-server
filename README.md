@@ -63,6 +63,7 @@ uv tool install --python 3.12 uxarray-mcp
 # Or from a fresh clone (developer path)
 git clone https://github.com/UXARRAY/uxarray-mcp-server.git
 cd uxarray-mcp-server && uv sync --python 3.12
+# or: bash SETUP.sh   (does the sync + runs the local test suite in one step)
 ```
 
 > **Why `--python 3.12`?** The server uses Globus Compute to submit work to
@@ -125,6 +126,19 @@ In your client, try:
 > "Open `<path to a UGRID/MPAS/SCRIP grid file>` and plot the mesh."
 
 That's it for local use.
+
+**A few more things to try:**
+
+- `Use run_analysis with operation="inspect_mesh" and grid_path="healpix:4"` —
+  no sample file needed; HEALPix meshes are generated on the fly.
+- `Run a complete scientific analysis on healpix:4` — the autonomous
+  Analyze → Plan → Execute → Verify agent (see
+  [docs/scientific-agent.md](docs/scientific-agent.md)).
+- `Create a session called baseline-analysis, register <grid> and <data> in
+  it, then run the workflow for <variable>` — persisted, resumable
+  multi-step runs (see [docs/workflows.md](docs/workflows.md)).
+- `Diagnose my configured endpoint status` — once you've added an endpoint
+  below, this is the fastest way to check it's healthy.
 
 ---
 

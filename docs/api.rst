@@ -45,6 +45,10 @@ MCP tool functions that are exposed to AI agents.
    :members:
    :undoc-members:
 
+.. automodule:: uxarray_mcp.tools.orchestration
+   :members:
+   :undoc-members:
+
 .. automodule:: uxarray_mcp.tools.vector_calc
    :members:
    :undoc-members:
