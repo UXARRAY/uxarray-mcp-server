@@ -112,7 +112,20 @@ def test_plot_dataset_mesh_geo_rejects_use_remote():
         )
 
 
-def test_plot_dataset_mesh_accepts_use_remote_without_unsupported_error():
-    """`mesh` supports remote; with no endpoint it falls back locally."""
+def test_plot_dataset_mesh_accepts_use_remote_without_unsupported_error(
+    tmp_path, monkeypatch
+):
+    """`mesh` supports remote; with no endpoint configured it falls back
+    locally rather than raising our new "unsupported" error. Point config
+    discovery at an empty scratch file so this doesn't try to actually
+    reach a real endpoint if one happens to be configured on the machine
+    running the test (it would otherwise hang waiting on the network
+    instead of falling back, since a real endpoint IS configured -- that's
+    correct dispatcher behavior, just not what this test wants to exercise).
+    """
+    empty_config = tmp_path / "config.yaml"
+    empty_config.write_text("hpc:\n  execution_mode: auto\n", encoding="utf-8")
+    monkeypatch.setenv("UXARRAY_MCP_CONFIG", str(empty_config))
+
     items = plot_dataset(plot_type="mesh", grid_path="healpix:2", use_remote=True)
     assert items  # returns MCP content blocks, not our ValueError
