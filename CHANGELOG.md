@@ -5,6 +5,19 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+### Fixed
+- `run_analysis` and `plot_dataset` silently ignored `use_remote=True` for
+  13 operations that have no remote implementation (`validate_dataset`,
+  `subset_bbox`, `subset_polygon`, `cross_section`, `compare_fields`,
+  `bias`, `rmse`, `pattern_correlation`, `temporal_mean`, `anomaly`,
+  `ensemble_mean`, `ensemble_spread`, `export`, and
+  `plot_dataset(plot_type="mesh_geo")`), running locally without saying so.
+  On a facility-only path (one that doesn't exist on the caller's machine)
+  this surfaced as a confusing local `FileNotFoundError` with no indication
+  `use_remote` was ever honored. These now raise `ValueError` immediately
+  instead. See `docs/tools.md#remote-execution` for the full list of which
+  operations do and don't support remote execution today.
+
 ### Changed
 - Bumped the `uxarray` floor to the new July release (`2026.7.0`), which
   fixes `curl(grad(f))` accuracy (residual now ~1e-13 with

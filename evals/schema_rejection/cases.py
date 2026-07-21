@@ -228,6 +228,27 @@ def build_cases(grid_path: str, grid_path_with_data: tuple[str, str]) -> list[di
             },
             "expected": "reject",
         },
+        # ---- MALFORMED: use_remote requested for a local-only operation ----
+        {
+            "id": "use_remote_on_unsupported_operation",
+            "description": (
+                "subset_bbox with use_remote=True -- this operation has no "
+                "remote implementation and must reject the request rather "
+                "than silently running locally (the caller asked for a "
+                "facility-only path to be read on the endpoint; running it "
+                "locally instead would silently do the wrong thing)"
+            ),
+            "tool": "run_analysis",
+            "kwargs": {
+                "operation": "subset_bbox",
+                "grid_path": grid_only,
+                "lon_bounds": [0.0, 10.0],
+                "lat_bounds": [0.0, 10.0],
+                "use_remote": True,
+                "endpoint": "some-endpoint",
+            },
+            "expected": "reject",
+        },
         # ---- ADVERSARIAL: indirect-injection style inputs ----
         # These simulate a malicious string arriving as a tool argument
         # (e.g. echoed from a poisoned upstream tool output). The typed
