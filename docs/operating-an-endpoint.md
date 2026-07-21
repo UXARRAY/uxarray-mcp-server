@@ -489,5 +489,5 @@ See [SECURITY.md § Incident response](https://github.com/UXARRAY/uxarray-mcp-se
 - [chrysalis.md](chrysalis.md) — Argonne Chrysalis (LCRC, Slurm)
 - [improv.md](improv.md) — Argonne Improv (LCRC, PBS)
 - [ucar.md](ucar.md) — NCAR Casper / Derecho (PBS)
-- [globus-compute.md](globus-compute.md) — Globus Compute primer
-- [hpc.md](hpc.md) — generic cluster bring-up notes
+- [remote-hpc.md](remote-hpc.md) — connecting to an existing endpoint (also
+  covers the Globus Compute mental model: local machine / endpoint / worker)

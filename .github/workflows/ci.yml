@@ -87,9 +87,16 @@ jobs:
         uv run uxarray-mcp doctor --help
         uv run uxarray-mcp install-claude --help
 
-    - name: CLI list/setup roundtrip
+    - name: CLI doctor (local-only, no endpoint configured)
+      # A fresh install with no endpoint configured is a valid, expected
+      # local-only setup (HPC is opt-in) and must exit 0 -- regression
+      # check for the bug where `doctor` failed every local-only install.
       run: |
         uv run uxarray-mcp setup
+        uv run uxarray-mcp doctor
+
+    - name: CLI endpoints add/list roundtrip
+      run: |
         uv run uxarray-mcp endpoints add ci-stub 00000000-0000-0000-0000-000000000000 --path-prefix /tmp/
         uv run uxarray-mcp endpoints list
 

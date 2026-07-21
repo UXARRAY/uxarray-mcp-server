@@ -1,5 +1,12 @@
 # Tools Reference
 
+Everything on this page runs **locally on your machine by default** — no HPC
+account, Globus identity, or endpoint needed. `use_remote` and `endpoint`
+parameters exist on most tools, but you only need them once you've configured
+an HPC endpoint (see [Remote Execution](#remote-execution) at the bottom of
+this page, or skip straight to [remote-hpc.md](remote-hpc.md)). Ignore them
+until then.
+
 The MCP server exposes a small set of front-door tools. Low-level UXarray
 operations still exist as Python functions in `uxarray_mcp.tools`, but MCP
 clients should use the intent-shaped tools below.
@@ -33,7 +40,7 @@ data when provided, inspect variables, calculate face areas, calculate a zonal
 mean when possible, and produce mesh/variable plots when requested.
 
 Parameters include `grid_path`, `data_path`, `variable_name`, `session_id`,
-`dataset_handle`, `use_remote`, `endpoint`, and `include_plots`.
+`dataset_handle`, and `include_plots`.
 
 ### `run_analysis`
 
@@ -60,9 +67,9 @@ Supported operations:
 
 Common parameters include `grid_path`, `data_path`, `variable_name`,
 `target_grid_path`, `data_path_a`, `data_path_b`, `data_paths`, `lon_bounds`,
-`lat_bounds`, `method`, `session_id`, `dataset_handle`, `use_remote`, and
-`endpoint`. Each operation validates the parameters it requires and returns a
-clear error if one is missing.
+`lat_bounds`, `method`, `session_id`, and `dataset_handle`. Each operation
+validates the parameters it requires and returns a clear error if one is
+missing.
 
 `gradient`, `curl`, and `divergence` echo the `scale_by_radius` convention in
 their result and provenance. `gradient` and `curl` accept `scale_by_radius`
@@ -78,17 +85,6 @@ runs (the math is valid), but the result is flagged as possibly non-physical.
 `zonal_anomaly` and `remap_to_rectilinear` are backed by
 `UxDataArray.zonal_anomaly` and `UxDataArray.remap.to_rectilinear`, available in
 the pinned UXarray (`>=2026.6.0`).
-
-`remap_variable`, `regrid_dataset`, and `remap_to_rectilinear` accept
-`use_remote=True` and `endpoint="name"`. When run remotely the remap executes on
-the HPC worker and compact summary statistics are returned (for
-`remap_to_rectilinear`, the small rectilinear array is returned and persisted
-locally); large source meshes never cross the network.
-
-All compute and remapping operations — including `zonal_anomaly` — accept
-`use_remote=True` and `endpoint="name"`, so they can run against datasets that
-live only on an HPC filesystem. Remote runs fall back to local execution when
-the endpoint is unavailable and the paths are locally reachable.
 
 Examples:
 
@@ -129,26 +125,7 @@ Supported `plot_type` values:
 - `zonal_mean`
 
 Common parameters include `grid_path`, `data_path`, `variable_name`, `width`,
-`height`, `cmap`, `vmin`, `vmax`, `title`, `use_remote`, `endpoint`,
-`session_id`, and `dataset_handle`.
-
-### `diagnose_endpoint`
-
-Run endpoint diagnostics with concrete failure guidance.
-
-Actions:
-
-| Action | Purpose |
-|---|---|
-| `status` | Endpoint manager plus optional worker probe |
-| `validate` | SDK auth, endpoint reachability, worker probe, optional sample path |
-| `probe_path` | Check whether one exact path is readable locally or remotely |
-
-### `probe_path_access`
-
-Direct convenience path probe for cluster bring-up. This remains separately
-registered because it is the safest first command when a new filesystem path is
-suspect.
+`height`, `cmap`, `vmin`, `vmax`, `title`, `session_id`, and `dataset_handle`.
 
 ### `run_workflow` and `resume_workflow`
 
@@ -173,11 +150,39 @@ Inspect a persisted result handle and artifact metadata.
 
 ## Remote Execution
 
+Everything below only matters once you've configured an HPC endpoint (see
+[remote-hpc.md](remote-hpc.md)). Skip this section entirely for local-only use.
+
 `analyze_dataset`, `run_analysis`, `plot_dataset`, and `probe_path_access`
 accept `use_remote=True` and `endpoint="name"` where remote execution applies.
 Remote calls submit self-contained functions to a configured Globus Compute
 endpoint and preserve provenance. If an endpoint is missing or unhealthy, the
 dispatcher either falls back locally or reports a structured readiness error.
+
+### `diagnose_endpoint`
+
+Run endpoint diagnostics with concrete failure guidance.
+
+Actions:
+
+| Action | Purpose |
+|---|---|
+| `status` | Endpoint manager plus optional worker probe |
+| `validate` | SDK auth, endpoint reachability, worker probe, optional sample path |
+| `probe_path` | Check whether one exact path is readable locally or remotely |
+
+### `probe_path_access`
+
+Direct convenience path probe for cluster bring-up. This remains separately
+registered because it is the safest first command when a new filesystem path is
+suspect.
+
+`remap_variable`, `regrid_dataset`, and `remap_to_rectilinear` (all
+`run_analysis` operations) accept `use_remote=True` and `endpoint="name"` too.
+When run remotely the remap executes on the HPC worker and compact summary
+statistics are returned (for `remap_to_rectilinear`, the small rectilinear
+array is returned and persisted locally); large source meshes never cross the
+network.
 
 ## MCP Prompts
 

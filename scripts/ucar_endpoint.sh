@@ -10,7 +10,7 @@ USERNAME="rajeevj"   # your NCAR username
 
 ENDPOINT_NAME="${ENDPOINT_NAME:-ucar-uxarray-yac}"
 CONDA_ENV="/glade/work/$USERNAME/conda-envs/uxarray_dev"
-YAC_ACTIVATE="$HOME/opt/yac-core-v3.14.0_p1/activate-yac.sh"
+YAC_ACTIVATE="$HOME/opt/yac-3.18/activate-yac.sh"
 TMUX_SESSION="uxarray-endpoint"
 # NOTE: the MCP server repo does NOT need to be cloned on UCAR. Remote
 # functions are serialised via AllCodeStrategies and run with only uxarray
@@ -63,7 +63,7 @@ _check_yac() {
     return 0
   fi
   echo "WARNING: yac.core not importable — YAC remapping will be unavailable."
-  echo "  Run: find \$HOME/opt/yac-core-v3.14.0_p1 -name '_yac*.so'"
+  echo "  Run: find \$HOME/opt/yac-3.18 -name '_yac*.so'"
   echo "  If missing, rebuild YAC with: --enable-python-bindings PYTHON=\$(which python)"
   echo "  Continuing — all non-YAC tools will work normally."
 }
