@@ -159,23 +159,24 @@ Both paths assume you've finished local install above.
 
 ## What the MCP exposes
 
-Intent-shaped tools, not raw UXarray bindings:
+Intent-shaped tools, not raw UXarray bindings — all local by default:
 
 - `get_capabilities` — what can I do with this mesh?
 - `analyze_dataset` — deterministic first-look: inspect, validate, area, zonal mean, plots.
 - `run_analysis` — one operation at a time (gradient, curl, subset, remap, …).
 - `plot_dataset` — mesh, geographic, variable, or zonal-mean plots.
-- `diagnose_endpoint`, `probe_path_access` — endpoint health + file readability.
 - `run_workflow`, `resume_workflow`, `get_status`, `get_result`, `manage_session` —
   persisted sessions and multi-step workflows.
 
-Tools that can run remotely take `use_remote: bool` and optional `endpoint: str`.
-The dispatcher falls back to local if the endpoint is unhealthy. This now
-includes `get_capabilities` and the remapping tools (`remap_variable`,
-`regrid_dataset`, `remap_to_rectilinear`) — so discovery and remapping can run
-directly against datasets that live only on an HPC filesystem.
-
 Full schema: [docs/tools.md](docs/tools.md).
+
+**Once you've configured an HPC endpoint** (optional — see
+[Going beyond your laptop](#going-beyond-your-laptop) below): most tools above
+also take `use_remote: bool` and `endpoint: str`, falling back to local if the
+endpoint is unhealthy. Two more tools exist purely for that case:
+`diagnose_endpoint` and `probe_path_access` (endpoint health + file
+readability). Ignore all of this until you actually have an endpoint to point
+at.
 
 ---
 

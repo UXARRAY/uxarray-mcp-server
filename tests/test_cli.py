@@ -47,6 +47,27 @@ def test_setup_refuses_overwrite_without_force(isolated_user_config: Path):
     assert rc == 2
 
 
+def test_doctor_exits_zero_on_fresh_local_only_install(
+    isolated_user_config: Path, capsys
+):
+    """A brand-new install with no endpoint configured must pass `doctor`.
+
+    Regression test: `doctor` used to exit 1 for every local-only install
+    (the default, documented setup) because `validate_hpc_setup` treated
+    "no endpoint configured" as a failure unconditionally. README promises
+    "With no endpoints configured it reports a passing local setup ... the
+    process exits 0" -- this pins that promise at the CLI entry point, not
+    just the underlying tool function.
+    """
+    assert cli.main(["setup"]) == 0
+    capsys.readouterr()  # discard setup's "Wrote starter config to ..." line
+    rc = cli.main(["doctor", "--skip-remote-probe"])
+    report = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert report["passed"] is True
+    assert report["endpoint_status"] == "no_endpoint"
+
+
 def test_endpoints_add_creates_canonical_schema(isolated_user_config: Path):
     rc = cli.main(
         [
