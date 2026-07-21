@@ -44,7 +44,8 @@ NOTE: Chrysalis login nodes kill processes that use significant CPU/memory.
       Use slurm-debug mode for any real UXarray analysis.
 
 Environment overrides:
-  ENDPOINT_NAME   Globus Compute endpoint profile name (default: uxarray-chrysalis)
+  ENDPOINT_NAME           Globus Compute endpoint profile name (default: uxarray-chrysalis)
+  CHRYSALIS_CONDA_MODULE  Module that puts `conda` on PATH (default: miniforge3)
 EOF
 }
 
@@ -52,8 +53,27 @@ EOF
 # Helpers
 # ---------------------------------------------------------------------------
 
+_load_modules() {
+  # `conda` is not on PATH in a bare shell on Chrysalis -- it comes from the
+  # site's `miniforge3` module. Load it explicitly rather than assuming the
+  # calling shell already has it (a fresh `ssh` session, a shell already
+  # inside another venv, or a non-login shell commonly won't).
+  if command -v conda &>/dev/null; then
+    return 0
+  fi
+  if ! command -v module &>/dev/null 2>&1; then
+    for _init in \
+      /etc/profile.d/lmod.sh \
+      /usr/share/lmod/lmod/init/bash; do
+      [[ -f "$_init" ]] && source "$_init" && break
+    done
+  fi
+  module load "${CHRYSALIS_CONDA_MODULE:-miniforge3}" 2>&1 || true
+}
+
 _activate_env() {
   # Activate the conda uxarray env, then layer globus-compute-endpoint on top
+  _load_modules
   # shellcheck disable=SC1091
   source "$(conda info --base 2>/dev/null || echo "$HOME/.conda")/etc/profile.d/conda.sh" 2>/dev/null || true
   conda activate "$CONDA_ENV"
