@@ -13,7 +13,7 @@ HTTP clients) from a single install.
    :maxdepth: 2
    :caption: Getting started
 
-   getting-started
+   Local install (README) <https://github.com/UXARRAY/uxarray-mcp-server#readme>
    tools
    serving
    workflows
@@ -24,9 +24,7 @@ HTTP clients) from a single install.
    :caption: Running on HPC (optional)
 
    remote-hpc
-   globus-compute
    operating-an-endpoint
-   hpc
    improv
    ucar
    chrysalis

@@ -7,8 +7,9 @@ tool implementations are exposed over multiple protocols from a single process,
 so the server is not tied to any one client. Claude Desktop is the default
 target, but the tools are equally usable over REST or from plain Python.
 
-For the Claude Desktop quickstart, see {doc}`getting-started`. This page covers
-the additional surfaces the engine provides.
+For the Claude Desktop quickstart, see the
+[README](https://github.com/UXARRAY/uxarray-mcp-server#readme). This page
+covers the additional surfaces the engine provides.
 
 ## The `serve` command
 
@@ -33,8 +34,8 @@ The visible tool surface is selected by `--profile`:
 
 | Profile | Visible tools | Use when |
 |---|---|---|
-| `core` (default) | ~31 | Most clients. Front-door gateway tools, session/HPC control, `list_datasets`, and prompts. Predictable, conservative. |
-| `deferred-full` | ~31 visible (+32 deferred) | You want the full low-level surface. The raw implementation tools load with `defer=True`, so they do not appear in the initial list; agents find them with `discover_tools`. |
+| `core` (default) | 31 | Most clients. Front-door gateway tools, session/HPC control, `list_datasets`, and prompts. Predictable, conservative. |
+| `deferred-full` | 64 total (31 core + `discover_tools` + 32 deferred) | You want the full low-level surface. The 32 raw implementation tools load with `defer=True`, so they do not appear in the initial list; agents find them with `discover_tools`. |
 
 ```bash
 uxarray-mcp serve --profile deferred-full

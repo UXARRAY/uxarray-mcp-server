@@ -63,6 +63,7 @@ uv tool install --python 3.12 uxarray-mcp
 # Or from a fresh clone (developer path)
 git clone https://github.com/UXARRAY/uxarray-mcp-server.git
 cd uxarray-mcp-server && uv sync --python 3.12
+# or: bash SETUP.sh   (does the sync + runs the local test suite in one step)
 ```
 
 > **Why `--python 3.12`?** The server uses Globus Compute to submit work to
@@ -126,6 +127,19 @@ In your client, try:
 
 That's it for local use.
 
+**A few more things to try:**
+
+- `Use run_analysis with operation="inspect_mesh" and grid_path="healpix:4"` —
+  no sample file needed; HEALPix meshes are generated on the fly.
+- `Run a complete scientific analysis on healpix:4` — the autonomous
+  Analyze → Plan → Execute → Verify agent (see
+  [docs/scientific-agent.md](docs/scientific-agent.md)).
+- `Create a session called baseline-analysis, register <grid> and <data> in
+  it, then run the workflow for <variable>` — persisted, resumable
+  multi-step runs (see [docs/workflows.md](docs/workflows.md)).
+- `Diagnose my configured endpoint status` — once you've added an endpoint
+  below, this is the fastest way to check it's healthy.
+
 ---
 
 ## Going beyond your laptop
@@ -145,23 +159,24 @@ Both paths assume you've finished local install above.
 
 ## What the MCP exposes
 
-Intent-shaped tools, not raw UXarray bindings:
+Intent-shaped tools, not raw UXarray bindings — all local by default:
 
 - `get_capabilities` — what can I do with this mesh?
 - `analyze_dataset` — deterministic first-look: inspect, validate, area, zonal mean, plots.
 - `run_analysis` — one operation at a time (gradient, curl, subset, remap, …).
 - `plot_dataset` — mesh, geographic, variable, or zonal-mean plots.
-- `diagnose_endpoint`, `probe_path_access` — endpoint health + file readability.
 - `run_workflow`, `resume_workflow`, `get_status`, `get_result`, `manage_session` —
   persisted sessions and multi-step workflows.
 
-Tools that can run remotely take `use_remote: bool` and optional `endpoint: str`.
-The dispatcher falls back to local if the endpoint is unhealthy. This now
-includes `get_capabilities` and the remapping tools (`remap_variable`,
-`regrid_dataset`, `remap_to_rectilinear`) — so discovery and remapping can run
-directly against datasets that live only on an HPC filesystem.
-
 Full schema: [docs/tools.md](docs/tools.md).
+
+**Once you've configured an HPC endpoint** (optional — see
+[Going beyond your laptop](#going-beyond-your-laptop) below): most tools above
+also take `use_remote: bool` and `endpoint: str`, falling back to local if the
+endpoint is unhealthy. Two more tools exist purely for that case:
+`diagnose_endpoint` and `probe_path_access` (endpoint health + file
+readability). Ignore all of this until you actually have an endpoint to point
+at.
 
 ---
 

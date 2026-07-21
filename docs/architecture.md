@@ -83,19 +83,27 @@ validation, domain calls, remote dispatch, provenance, and structured results.
 
 - **frontdoor.py** — Public MCP front doors: operation dispatch, plotting dispatch, endpoint diagnostics, session management, status, and result lookup
 - **inspection.py** — Core local implementations: mesh inspection, variable inspection, area calculation, zonal mean, dataset validation
+- **orchestration.py** — Deterministic one-shot pipelines (`analyze_dataset`) that chain inspection, validation, and analysis into a single structured result
 - **remote_tools.py** — HPC-enabled wrappers with pre-flight health checks and automatic fallback to local
 - **scientific_agent.py** — Autonomous four-stage agent (Analyze > Plan > Execute > Verify)
+- **vector_calc.py** — Gradient, curl, and divergence tools with optional HPC remote execution
+- **advanced.py** — Remapping, export, subsetting, comparison, temporal/ensemble tools
+- **plotting.py** — Mesh, geographic, variable, and zonal-mean plotting tools
+- **stateful.py** — Session, workflow, and progress-aware tools
 - **capabilities.py** — Tool discovery and filtering based on grid topology and data
+- **catalog.py** — Dataset discovery and cataloging
 - **execution_control.py** — Runtime mode switching (local / hpc / auto)
 
 ## Domain Layer (`domain/`)
 
 Pure computation functions with no knowledge of MCP, I/O, or provenance. These are shared between local and HPC code paths.
 
-- **mesh.py** — Grid loading with HEALPix support
+- **mesh.py** — Grid and dataset loading, including HEALPix and GIS (shapefile/GeoJSON) support
 - **area.py** — Face area statistics
 - **variable.py** — Variable metadata and statistics extraction
 - **zonal.py** — Zonal mean computation
+- **vector_calc.py** — Gradient, curl, and divergence computation, plus the vector-component sanity guardrail
+- **plotting.py** — Pure PNG-rendering functions (mesh, geographic, variable, zonal-mean)
 
 ## Remote Layer (`remote/`)
 

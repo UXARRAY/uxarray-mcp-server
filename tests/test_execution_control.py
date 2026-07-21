@@ -63,18 +63,40 @@ def test_hpc_config_load_normalizes_legacy_remote(tmp_path):
     assert config.execution_mode == "hpc"
 
 
-def test_validate_hpc_setup_without_endpoint(monkeypatch, tmp_path):
-    """validate_hpc_setup fails clearly when no endpoint is configured."""
+def test_validate_hpc_setup_without_endpoint_passes_local_only(monkeypatch, tmp_path):
+    """No endpoint configured, none requested: this is a valid local-only
+    setup and must pass. uxarray-mcp runs locally by default (HPC is
+    opt-in), so a fresh install with no endpoint must not fail `doctor` —
+    see the "Local by default; HPC is opt-in" promise in README.md.
+    """
     config_path = tmp_path / "config.yaml"
     config_path.write_text("hpc:\n  execution_mode: auto\n", encoding="utf-8")
     monkeypatch.setattr(execution_control, "_CONFIG_PATH", config_path)
 
     result = execution_control.validate_hpc_setup(run_remote_probe=False)
 
-    assert result["passed"] is False
+    assert result["passed"] is True
     assert result["endpoint_status"] == "no_endpoint"
     assert result["checks"][0]["name"] == "config"
-    assert result["checks"][0]["passed"] is False
+    assert result["checks"][0]["passed"] is True
+
+
+def test_validate_hpc_setup_explicit_unresolvable_endpoint_fails(monkeypatch, tmp_path):
+    """An explicitly requested endpoint that isn't configured must still fail --
+    only the *no-argument* local-only case should pass.
+    """
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "hpc:\n  execution_mode: auto\n  endpoints:\n    other:\n      "
+        "endpoint_id: 00000000-0000-0000-0000-000000000000\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(execution_control, "_CONFIG_PATH", config_path)
+
+    with pytest.raises(ValueError, match="Unknown endpoint"):
+        execution_control.validate_hpc_setup(
+            run_remote_probe=False, endpoint="nonexistent"
+        )
 
 
 def test_validate_hpc_setup_local_dependency_failure(monkeypatch, tmp_path):
