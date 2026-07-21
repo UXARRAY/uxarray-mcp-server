@@ -43,6 +43,13 @@ have to all work, in three different places:
 Most "it doesn't work" failures come from one of these three layers being
 misconfigured. The steps below address each one in order.
 
+An endpoint reporting `registered` only means the lightweight manager process
+is alive and reachable — it does **not** prove the worker environment has
+`uxarray` installed, can reach the scheduler, or can read your file. Validate
+in order: manager reachable → a tiny no-op function runs → the exact file path
+is readable → only then run a real UXarray tool. `validate_hpc_setup` and
+`probe_path_access` exist for exactly this staged check.
+
 ---
 
 ## Step 1 — Get a Globus identity (one-time, 5 min)
@@ -235,6 +242,8 @@ cross-checks that remote and local summary statistics agree.
 | Tool returns `execution_venue: local` when you asked for remote | Auto-fallback fired | Check `warnings` in response. Common: path didn't match `path_prefix`, or endpoint unhealthy. |
 | `PermissionError` reading `/glade/...` from worker | Your HPC user can't read that path | Verify with `ls` over SSH first. The endpoint runs as **your** user (or the operator's service account — check with them). |
 | Slow first call, fast later calls | Normal — worker warmup | Not a bug. |
+| `qsub: command not found` (PBS sites) | The endpoint's worker environment doesn't have scheduler commands on `PATH` | Fix in the endpoint's `worker_init` / environment, not on your laptop. |
+| A path is readable in an interactive shell but not from the worker | You typed a login-node shell alias or symlink, not the canonical shared path | Run `readlink -f /path/to/file` and use the resolved path (e.g. the real `/gpfs/...` target). |
 
 For deeper diagnostics:
 
