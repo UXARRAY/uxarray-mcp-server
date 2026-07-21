@@ -93,6 +93,10 @@ extend-exclude = ["docs/architecture.html"]
 
 [tool.ruff.lint]
 extend-select = ["I"]
+# Notebooks (and their jupytext-paired .py scripts) intentionally scatter
+# imports across per-cell (# %%) blocks, so E402 (module-import-not-at-top)
+# is expected style there, not a lint violation.
+per-file-ignores = { "notebooks/*.py" = ["E402"], "notebooks/*.ipynb" = ["E402"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["uxarray_mcp"]
