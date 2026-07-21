@@ -47,17 +47,22 @@ def load_dataset(grid_path: str, data_path: str) -> Any:
         Loaded dataset object.
     """
     import uxarray as ux
+    import xarray as xr
 
-    # HEALPix is a special case (usually grid-only, but we support it if matched)
+    # HEALPix and GIS grids don't round-trip through ux.open_dataset() as a
+    # "grid file" the way a real UGRID/MPAS/SCRIP file does: grid.to_xarray()
+    # returns a minimal representation (e.g. HEALPix has no node coordinates)
+    # that the generic UGRID reader rejects. Attach the data directly to the
+    # already-loaded Grid object instead.
     if grid_path.lower().startswith("healpix"):
         parts = grid_path.split(":")
         zoom = int(parts[1]) if len(parts) > 1 else 1
         grid = ux.Grid.from_healpix(zoom=zoom)
-        return ux.open_dataset(grid.to_xarray(), data_path)
+        return ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
 
     ext = os.path.splitext(grid_path.lower())[1]
     if ext in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        return ux.open_dataset(grid.to_xarray(), data_path)
+        return ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
 
     return ux.open_dataset(grid_path, data_path)

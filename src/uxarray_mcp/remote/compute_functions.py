@@ -237,13 +237,14 @@ def remote_inspect_variable(
 
     import numpy as np
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
 
@@ -434,13 +435,14 @@ def remote_plot_variable(
 
     import matplotlib.pyplot as plt
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
 
@@ -572,13 +574,14 @@ def remote_plot_zonal_mean(
 
     import matplotlib.pyplot as plt
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
 
@@ -661,13 +664,14 @@ def remote_calculate_zonal_mean(
     import os
 
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
 
@@ -1047,13 +1051,14 @@ def remote_calculate_gradient(
 
     import numpy as np
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
     if variable_name not in uxds.data_vars:
@@ -1115,13 +1120,14 @@ def remote_calculate_curl(
 
     import numpy as np
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
     for name in (u_variable, v_variable):
@@ -1197,13 +1203,14 @@ def remote_calculate_divergence(
 
     import numpy as np
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
     for name in (u_variable, v_variable):
@@ -1275,13 +1282,14 @@ def remote_calculate_azimuthal_mean(
     import os
 
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
     if variable_name not in uxds.data_vars:
@@ -1336,6 +1344,7 @@ def remote_grid_facts(
     import os
 
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
@@ -1356,10 +1365,10 @@ def remote_grid_facts(
     }
 
     if data_path is not None:
-        if grid_path.startswith("healpix:"):
-            uxds = ux.open_dataset(grid.to_xarray(), data_path)
-        elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
-            uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        if grid_path.startswith("healpix:") or os.path.splitext(grid_path.lower())[
+            1
+        ] in [".shp", ".geojson"]:
+            uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
         else:
             uxds = ux.open_dataset(grid_path, data_path)
 
@@ -1562,13 +1571,14 @@ def remote_remap_to_rectilinear(
 
     import numpy as np
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
 
@@ -1627,13 +1637,14 @@ def remote_calculate_zonal_anomaly(
 
     import numpy as np
     import uxarray as ux
+    import xarray as xr
 
     if grid_path.startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
-        uxds = ux.open_dataset(grid.to_xarray(), data_path)
+        uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     else:
         uxds = ux.open_dataset(grid_path, data_path)
 
