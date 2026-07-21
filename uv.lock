@@ -2402,7 +2402,7 @@ wheels = [
 
 [[package]]
 name = "uxarray"
-version = "2026.6.0"
+version = "2026.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "antimeridian" },
@@ -2430,9 +2430,9 @@ dependencies = [
     { name = "spatialpandas" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/13/cbf510afda42e223f7ae50046e4f657c437b09bcf796d96c930a5e523bc0/uxarray-2026.6.0.tar.gz", hash = "sha256:f83d34fd8dae54fd8d87f59ade921f70396bce538a8efe73d20d39b63f9b7f5e", size = 202826, upload-time = "2026-06-18T22:22:05.925Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/c5/8554ed8e15ccbeeadb1e3a5f5077138cc0e4faa05c352c53e0784c5429dc/uxarray-2026.7.0.tar.gz", hash = "sha256:746ec7f2907cce11cf97221c6971e586bbb45eb9c8dd02b5081020c4c5f2804c", size = 209588, upload-time = "2026-07-20T22:14:49.561Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/41/c8a20e78aa886cdfc87979dc6851ea7c67faf989e42a405678f14dc53328/uxarray-2026.6.0-py3-none-any.whl", hash = "sha256:4a20777953dbd0eba4f8f7add28091d6c3f28ec1789b6638c60bf5865782b8c3", size = 227792, upload-time = "2026-06-18T22:22:04.541Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/81/40a45a4829cc3c8b7a9d63a174a1181df1c59b3ec48001659c7a1e09ebe9/uxarray-2026.7.0-py3-none-any.whl", hash = "sha256:41f27062eeb0cf8ffd7c9ffbc65533ec5e1f5c75661938000fe496131b39cab7", size = 235402, upload-time = "2026-07-20T22:14:47.838Z" },
 ]
 
 [[package]]
