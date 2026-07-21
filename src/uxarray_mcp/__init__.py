@@ -3,4 +3,4 @@
 from uxarray_mcp.tools import inspect_mesh
 
 __all__ = ["inspect_mesh"]
-__version__ = "0.1.2"
+__version__ = "0.1.3"
