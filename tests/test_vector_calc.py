@@ -63,6 +63,42 @@ def healpix_wind_dataset():
     return _make_wind_dataset(with_units=False)
 
 
+def _make_multidim_wind_dataset():
+    """Build a HEALPix UxDataset with (time, lev, n_face) u/v, like real model
+    output (e.g. E3SM ``U``/``V`` with shape (time, lev, ncol))."""
+    import xarray as xr
+
+    grid = ux.Grid.from_healpix(zoom=2)
+    n = grid.n_face
+    n_time, n_lev = 2, 3
+    rng = np.random.default_rng(7)
+
+    u_data = xr.DataArray(
+        rng.standard_normal((n_time, n_lev, n)).astype(np.float64),
+        dims=["time", "lev", "n_face"],
+        attrs={"units": "m/s"},
+    )
+    v_data = xr.DataArray(
+        rng.standard_normal((n_time, n_lev, n)).astype(np.float64),
+        dims=["time", "lev", "n_face"],
+        attrs={"units": "m/s"},
+    )
+
+    return ux.UxDataset(
+        {
+            "u": ux.UxDataArray(u_data, uxgrid=grid),
+            "v": ux.UxDataArray(v_data, uxgrid=grid),
+        },
+        uxgrid=grid,
+    )
+
+
+@pytest.fixture()
+def healpix_multidim_wind_dataset():
+    """Return a HEALPix UxDataset with (time, lev, n_face) u and v fields."""
+    return _make_multidim_wind_dataset()
+
+
 # ---------------------------------------------------------------------------
 # Domain: compute_gradient
 # ---------------------------------------------------------------------------
@@ -150,6 +186,64 @@ class TestComputeDivergence:
     def test_missing_variable_raises(self, healpix_wind_dataset):
         with pytest.raises(ValueError, match="not found"):
             compute_divergence(healpix_wind_dataset, "u", "bad_v")
+
+
+# ---------------------------------------------------------------------------
+# Domain: time_index / level_index selection on real-shaped (time, lev,
+# n_face) data — the shape genuine model output (e.g. E3SM U/V) actually has.
+# ---------------------------------------------------------------------------
+
+
+class TestMultiDimSelection:
+    def test_curl_without_selection_raises(self, healpix_multidim_wind_dataset):
+        with pytest.raises(Exception):
+            healpix_multidim_wind_dataset["u"].curl(healpix_multidim_wind_dataset["v"])
+
+    def test_curl_selects_time_and_level(self, healpix_multidim_wind_dataset):
+        result = compute_curl(
+            healpix_multidim_wind_dataset, "u", "v", time_index=1, level_index=2
+        )
+        assert result["n_face"] == healpix_multidim_wind_dataset.uxgrid.n_face
+        assert result["stats"]["min"] is not None
+
+    def test_curl_matches_manual_isel(self, healpix_multidim_wind_dataset):
+        result = compute_curl(
+            healpix_multidim_wind_dataset, "u", "v", time_index=0, level_index=1
+        )
+        u = healpix_multidim_wind_dataset["u"].isel(time=0, lev=1)
+        v = healpix_multidim_wind_dataset["v"].isel(time=0, lev=1)
+        expected = u.curl(v)
+        finite = expected.values[np.isfinite(expected.values)]
+        assert result["stats"]["mean"] == pytest.approx(float(finite.mean()))
+
+    def test_divergence_selects_time_and_level(self, healpix_multidim_wind_dataset):
+        result = compute_divergence(
+            healpix_multidim_wind_dataset, "u", "v", time_index=1, level_index=0
+        )
+        assert result["stats"]["min"] is not None
+
+    def test_gradient_selects_time_and_level(self, healpix_multidim_wind_dataset):
+        result = compute_gradient(
+            healpix_multidim_wind_dataset, "u", time_index=1, level_index=0
+        )
+        assert len(result["components"]) == 2
+
+    def test_default_indices_select_first_slice(self, healpix_multidim_wind_dataset):
+        result = compute_curl(healpix_multidim_wind_dataset, "u", "v")
+        u = healpix_multidim_wind_dataset["u"].isel(time=0, lev=0)
+        v = healpix_multidim_wind_dataset["v"].isel(time=0, lev=0)
+        expected = u.curl(v)
+        finite = expected.values[np.isfinite(expected.values)]
+        assert result["stats"]["mean"] == pytest.approx(float(finite.mean()))
+
+    def test_calculate_curl_tool_accepts_indices(self, healpix_multidim_wind_dataset):
+        with _make_mock_uxds(healpix_multidim_wind_dataset):
+            result = calculate_curl(
+                "grid.nc", "data.nc", "u", "v", time_index=1, level_index=2
+            )
+        assert result["_provenance"]["inputs"]["time_index"] == 1
+        assert result["_provenance"]["inputs"]["level_index"] == 2
+        assert result["stats"]["min"] is not None
 
 
 # ---------------------------------------------------------------------------

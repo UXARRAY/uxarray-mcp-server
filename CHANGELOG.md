@@ -5,6 +5,18 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+### Added
+- `gradient`, `curl`, and `divergence` (via `run_analysis` and the
+  `calculate_gradient`/`calculate_curl`/`calculate_divergence` tools) now
+  accept `time_index`/`level_index` to select a single time/level slice
+  when the input variable(s) carry those extra dimensions. Previously these
+  operations raised `Curl computation currently only supports
+  1-dimensional data` on any real multi-level/multi-time model output
+  (e.g. E3SM `U`/`V` shaped `(time, lev, n_face)`), forcing the caller to
+  pre-slice the file out-of-band before calling the tool. Both parameters
+  default to 0 and are ignored for variables that are already
+  face-centered only, so existing calls are unaffected.
+
 ### Fixed
 - `run_analysis` and `plot_dataset` silently ignored `use_remote=True` for
   13 operations that have no remote implementation (`validate_dataset`,

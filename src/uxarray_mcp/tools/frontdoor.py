@@ -65,6 +65,8 @@ def run_analysis(
     dataset_handle: str | None = None,
     result_name: str | None = None,
     scale_by_radius: bool = False,
+    time_index: int = 0,
+    level_index: int = 0,
     lat_spec: tuple | float | list[Any] | None = None,
     conservative: bool = False,
     target_lon: list[float] | None = None,
@@ -84,7 +86,12 @@ def run_analysis(
     ``anomaly``, ``ensemble_mean``, ``ensemble_spread``, and ``export``.
 
     ``gradient`` and ``curl`` accept ``scale_by_radius`` (default False keeps the
-    historical unit-sphere result). ``zonal_anomaly`` accepts ``lat_spec`` and
+    historical unit-sphere result). ``gradient``, ``curl``, and ``divergence``
+    also accept ``time_index``/``level_index`` to select a single time/level
+    slice when the input variable(s) carry those extra dimensions (e.g. real
+    model output shaped ``(time, lev, n_face)``); both default to 0 and are
+    ignored for variables that are already face-centered only.
+    ``zonal_anomaly`` accepts ``lat_spec`` and
     ``conservative``. ``remap_to_rectilinear`` accepts ``target_lon`` and
     ``target_lat`` (1-D coordinate arrays).
     """
@@ -176,6 +183,8 @@ def run_analysis(
             _require(data_path, "data_path", op),
             _require(variable_name, "variable_name", op),
             scale_by_radius=scale_by_radius,
+            time_index=time_index,
+            level_index=level_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -187,6 +196,8 @@ def run_analysis(
             _require(u_variable, "u_variable", op),
             _require(v_variable, "v_variable", op),
             scale_by_radius=scale_by_radius,
+            time_index=time_index,
+            level_index=level_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -197,6 +208,8 @@ def run_analysis(
             _require(data_path, "data_path", op),
             _require(u_variable, "u_variable", op),
             _require(v_variable, "v_variable", op),
+            time_index=time_index,
+            level_index=level_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
