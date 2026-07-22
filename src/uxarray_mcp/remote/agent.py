@@ -219,6 +219,8 @@ class UXarrayComputeAgent(_AcademyAgent):
         data_path: str,
         variable_name: str,
         scale_by_radius: bool = False,
+        time_index: int = 0,
+        level_index: int = 0,
     ) -> Dict[str, Any]:
         """Compute spatial gradient on HPC."""
         return await self._run_on_hpc(
@@ -227,6 +229,8 @@ class UXarrayComputeAgent(_AcademyAgent):
             data_path,
             variable_name,
             scale_by_radius,
+            time_index,
+            level_index,
         )
 
     @action
@@ -237,6 +241,8 @@ class UXarrayComputeAgent(_AcademyAgent):
         u_variable: str,
         v_variable: str,
         scale_by_radius: bool = False,
+        time_index: int = 0,
+        level_index: int = 0,
     ) -> Dict[str, Any]:
         """Compute relative vorticity (curl) on HPC."""
         return await self._run_on_hpc(
@@ -246,15 +252,29 @@ class UXarrayComputeAgent(_AcademyAgent):
             u_variable,
             v_variable,
             scale_by_radius,
+            time_index,
+            level_index,
         )
 
     @action
     async def calculate_divergence_remote(
-        self, grid_path: str, data_path: str, u_variable: str, v_variable: str
+        self,
+        grid_path: str,
+        data_path: str,
+        u_variable: str,
+        v_variable: str,
+        time_index: int = 0,
+        level_index: int = 0,
     ) -> Dict[str, Any]:
         """Compute horizontal divergence on HPC."""
         return await self._run_on_hpc(
-            remote_calculate_divergence, grid_path, data_path, u_variable, v_variable
+            remote_calculate_divergence,
+            grid_path,
+            data_path,
+            u_variable,
+            v_variable,
+            time_index,
+            level_index,
         )
 
     @action

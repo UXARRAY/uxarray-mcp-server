@@ -23,6 +23,55 @@ _VELOCITY_LIKE_UNIT_HINTS = (
 )
 
 
+_FACE_DIMS = {"n_face", "nCells"}
+
+# Common non-spatial dimension names, in the order we prefer to select from
+# when a caller gives a single generic index but the data has both a time and
+# a vertical dimension (rare, but keeps behavior predictable).
+_TIME_DIM_NAMES = ("time", "Time", "time_counter")
+_LEVEL_DIM_NAMES = ("lev", "level", "levels", "plev", "z", "nVertLevels")
+
+
+def _reduce_to_face(
+    var: Any,
+    *,
+    time_index: int = 0,
+    level_index: int = 0,
+) -> Any:
+    """Select a single time/level slice so ``var`` is 1-D face-centered.
+
+    UXarray's vector-calculus operators (``.curl()``, ``.divergence()``,
+    ``.gradient()``) require a single face-centered dimension with no leading
+    time/level/ensemble axes. Real model output almost always carries at
+    least a time dimension, and 3-D fields (e.g. atmospheric wind) also carry
+    a vertical dimension, so gateway tools take explicit ``time_index`` /
+    ``level_index`` selectors rather than requiring the caller to pre-slice
+    the file themselves.
+
+    Any extra dimension not recognized as time-like or level-like, and not
+    size-1, is squeezed via index 0 with a caveat left to the caller to
+    surface as a warning if desired.
+    """
+    extra = [d for d in var.dims if d not in _FACE_DIMS]
+    if not extra:
+        return var
+
+    selection: dict[str, int] = {}
+    for dim in extra:
+        if var.sizes[dim] == 1:
+            selection[dim] = 0
+        elif dim in _TIME_DIM_NAMES:
+            selection[dim] = time_index
+        elif dim in _LEVEL_DIM_NAMES:
+            selection[dim] = level_index
+        else:
+            # Unrecognized extra dimension: fall back to the first slice
+            # rather than erroring, matching plotting.py's existing behavior.
+            selection[dim] = 0
+
+    return var.isel(**selection)
+
+
 def _vector_component_warnings(
     u_variable: str,
     v_variable: str,
@@ -80,7 +129,11 @@ def _vector_component_warnings(
 
 
 def compute_gradient(
-    uxds: Any, variable_name: str, scale_by_radius: bool = False
+    uxds: Any,
+    variable_name: str,
+    scale_by_radius: bool = False,
+    time_index: int = 0,
+    level_index: int = 0,
 ) -> dict:
     """Compute the gradient of a face-centered scalar field.
 
@@ -98,6 +151,13 @@ def compute_gradient(
         When ``True``, divide the unit-sphere derivatives by
         ``uxgrid.sphere_radius`` to return physical units (requires a grid with
         ``sphere_radius``). The default ``False`` keeps the unit-sphere result.
+    time_index : int, default 0
+        Time index to select if the variable carries a leading time
+        dimension. Ignored if there is no time dimension.
+    level_index : int, default 0
+        Vertical-level index to select if the variable carries a level
+        dimension (e.g. atmospheric ``lev``). Ignored if there is no level
+        dimension.
 
     Returns
     -------
@@ -115,6 +175,7 @@ def compute_gradient(
             f"Variable '{variable_name}' is not face-centered. "
             "Gradient requires face-centered data."
         )
+    var = _reduce_to_face(var, time_index=time_index, level_index=level_index)
 
     import numpy as np
 
@@ -146,7 +207,12 @@ def compute_gradient(
 
 
 def compute_curl(
-    uxds: Any, u_variable: str, v_variable: str, scale_by_radius: bool = False
+    uxds: Any,
+    u_variable: str,
+    v_variable: str,
+    scale_by_radius: bool = False,
+    time_index: int = 0,
+    level_index: int = 0,
 ) -> dict:
     """Compute the curl (relative vorticity) of a 2-D vector field (u, v).
 
@@ -167,6 +233,13 @@ def compute_curl(
         When ``True``, divide the unit-sphere result by ``uxgrid.sphere_radius``
         to return physical units (``1/s`` for wind in ``m/s``; requires a grid
         with ``sphere_radius``). The default ``False`` keeps the unit sphere.
+    time_index : int, default 0
+        Time index to select if the components carry a leading time
+        dimension. Ignored if there is no time dimension.
+    level_index : int, default 0
+        Vertical-level index to select if the components carry a level
+        dimension (e.g. atmospheric ``lev``). Ignored if there is no level
+        dimension.
 
     Returns
     -------
@@ -186,6 +259,8 @@ def compute_curl(
                 f"Variable '{name}' is not face-centered. "
                 "Curl requires face-centered vector components."
             )
+    u = _reduce_to_face(u, time_index=time_index, level_index=level_index)
+    v = _reduce_to_face(v, time_index=time_index, level_index=level_index)
 
     import numpy as np
 
@@ -219,7 +294,13 @@ def compute_curl(
     }
 
 
-def compute_divergence(uxds: Any, u_variable: str, v_variable: str) -> dict:
+def compute_divergence(
+    uxds: Any,
+    u_variable: str,
+    v_variable: str,
+    time_index: int = 0,
+    level_index: int = 0,
+) -> dict:
     """Compute the horizontal divergence of a 2-D vector field (u, v).
 
     Divergence = ∂u/∂x + ∂v/∂y.
@@ -236,6 +317,13 @@ def compute_divergence(uxds: Any, u_variable: str, v_variable: str) -> dict:
         Zonal (east–west) component variable name.
     v_variable : str
         Meridional (north–south) component variable name.
+    time_index : int, default 0
+        Time index to select if the components carry a leading time
+        dimension. Ignored if there is no time dimension.
+    level_index : int, default 0
+        Vertical-level index to select if the components carry a level
+        dimension (e.g. atmospheric ``lev``). Ignored if there is no level
+        dimension.
 
     Returns
     -------
@@ -255,6 +343,8 @@ def compute_divergence(uxds: Any, u_variable: str, v_variable: str) -> dict:
                 f"Variable '{name}' is not face-centered. "
                 "Divergence requires face-centered vector components."
             )
+    u = _reduce_to_face(u, time_index=time_index, level_index=level_index)
+    v = _reduce_to_face(v, time_index=time_index, level_index=level_index)
 
     import numpy as np
 

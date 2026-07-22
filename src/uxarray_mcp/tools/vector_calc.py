@@ -86,6 +86,8 @@ def calculate_gradient(
     data_path: str,
     variable_name: str,
     scale_by_radius: bool = False,
+    time_index: int = 0,
+    level_index: int = 0,
     use_remote: bool = False,
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
@@ -111,6 +113,14 @@ def calculate_gradient(
         UXarray, applies it capability-safely and falls back to the unit sphere
         if unsupported; the result reports the ``scale_by_radius`` actually
         applied.
+    time_index : int
+        Time index to select if the variable has a leading time dimension
+        (e.g. real model output with shape (time, lev, n_face)). Ignored if
+        there is no time dimension. Default 0.
+    level_index : int
+        Vertical-level index to select if the variable has a level dimension
+        (e.g. atmospheric ``lev``). Ignored if there is no level dimension.
+        Default 0.
     use_remote : bool
         If True and an HPC endpoint is configured, execute remotely.
     endpoint : str, optional
@@ -129,6 +139,10 @@ def calculate_gradient(
     --------
     >>> calculate_gradient("grid.nc", "data.nc", "temperature")
     {"components": ["d_temperature_d_x", "d_temperature_d_y"], ...}
+
+    >>> # Real 3-D model output (time, lev, n_face): select a level directly
+    >>> calculate_gradient("grid.nc", "e3sm_output.nc", "U", level_index=-1)
+    {"components": [...], ...}
     """
 
     from uxarray_mcp.domain.vector_calc import compute_gradient
@@ -139,12 +153,20 @@ def calculate_gradient(
         "data_path": data_path,
         "variable_name": variable_name,
         "scale_by_radius": scale_by_radius,
+        "time_index": time_index,
+        "level_index": level_index,
     }
 
     def _local():
         uxds = load_dataset(grid_path, data_path)
         return attach_provenance(
-            compute_gradient(uxds, variable_name, scale_by_radius=scale_by_radius),
+            compute_gradient(
+                uxds,
+                variable_name,
+                scale_by_radius=scale_by_radius,
+                time_index=time_index,
+                level_index=level_index,
+            ),
             tool="calculate_gradient",
             inputs=inputs,
         )
@@ -158,7 +180,12 @@ def calculate_gradient(
         local_call=_local,
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_gradient_remote(
-                grid_path, data_path, variable_name, scale_by_radius
+                grid_path,
+                data_path,
+                variable_name,
+                scale_by_radius,
+                time_index,
+                level_index,
             )
         ),
     )
@@ -170,6 +197,8 @@ def calculate_curl(
     u_variable: str,
     v_variable: str,
     scale_by_radius: bool = False,
+    time_index: int = 0,
+    level_index: int = 0,
     use_remote: bool = False,
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
@@ -202,6 +231,14 @@ def calculate_curl(
         UXarray, applies it capability-safely and falls back to the unit sphere
         if unsupported; the result reports the ``scale_by_radius`` actually
         applied.
+    time_index : int
+        Time index to select if the components have a leading time dimension
+        (e.g. real model output with shape (time, lev, n_face)). Ignored if
+        there is no time dimension. Default 0.
+    level_index : int
+        Vertical-level index to select if the components have a level
+        dimension (e.g. atmospheric ``lev``). Ignored if there is no level
+        dimension. Default 0.
     use_remote : bool
         If True and an HPC endpoint is configured, execute remotely.
     endpoint : str, optional
@@ -223,6 +260,10 @@ def calculate_curl(
 
     >>> calculate_curl("/hpc/grid.nc", "/hpc/data.nc", "u", "v", use_remote=True)
     {"stats": {...}, "_provenance": {"execution_venue": "hpc:...", ...}}
+
+    >>> # Real 3-D E3SM output (time, lev, n_face): select time/level directly
+    >>> calculate_curl("grid.nc", "e3sm_output.nc", "U", "V", level_index=-1)
+    {"stats": {...}, ...}
     """
 
     from uxarray_mcp.domain.vector_calc import compute_curl
@@ -234,12 +275,19 @@ def calculate_curl(
         "u_variable": u_variable,
         "v_variable": v_variable,
         "scale_by_radius": scale_by_radius,
+        "time_index": time_index,
+        "level_index": level_index,
     }
 
     def _local():
         uxds = load_dataset(grid_path, data_path)
         result = compute_curl(
-            uxds, u_variable, v_variable, scale_by_radius=scale_by_radius
+            uxds,
+            u_variable,
+            v_variable,
+            scale_by_radius=scale_by_radius,
+            time_index=time_index,
+            level_index=level_index,
         )
         return attach_provenance(
             result,
@@ -257,7 +305,13 @@ def calculate_curl(
         local_call=_local,
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_curl_remote(
-                grid_path, data_path, u_variable, v_variable, scale_by_radius
+                grid_path,
+                data_path,
+                u_variable,
+                v_variable,
+                scale_by_radius,
+                time_index,
+                level_index,
             )
         ),
     )
@@ -268,6 +322,8 @@ def calculate_divergence(
     data_path: str,
     u_variable: str,
     v_variable: str,
+    time_index: int = 0,
+    level_index: int = 0,
     use_remote: bool = False,
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
@@ -291,6 +347,14 @@ def calculate_divergence(
         Zonal (east-west) component.
     v_variable : str
         Meridional (north-south) component.
+    time_index : int
+        Time index to select if the components have a leading time dimension
+        (e.g. real model output with shape (time, lev, n_face)). Ignored if
+        there is no time dimension. Default 0.
+    level_index : int
+        Vertical-level index to select if the components have a level
+        dimension (e.g. atmospheric ``lev``). Ignored if there is no level
+        dimension. Default 0.
     use_remote : bool
         If True and an HPC endpoint is configured, execute remotely.
     endpoint : str, optional
@@ -321,11 +385,19 @@ def calculate_divergence(
         "data_path": data_path,
         "u_variable": u_variable,
         "v_variable": v_variable,
+        "time_index": time_index,
+        "level_index": level_index,
     }
 
     def _local():
         uxds = load_dataset(grid_path, data_path)
-        result = compute_divergence(uxds, u_variable, v_variable)
+        result = compute_divergence(
+            uxds,
+            u_variable,
+            v_variable,
+            time_index=time_index,
+            level_index=level_index,
+        )
         return attach_provenance(
             result,
             tool="calculate_divergence",
@@ -342,7 +414,12 @@ def calculate_divergence(
         local_call=_local,
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_divergence_remote(
-                grid_path, data_path, u_variable, v_variable
+                grid_path,
+                data_path,
+                u_variable,
+                v_variable,
+                time_index,
+                level_index,
             )
         ),
     )

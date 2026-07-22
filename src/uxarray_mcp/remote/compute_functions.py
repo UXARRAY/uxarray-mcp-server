@@ -1043,7 +1043,12 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
 
 
 def remote_calculate_gradient(
-    grid_path: str, data_path: str, variable_name: str, scale_by_radius: bool = False
+    grid_path: str,
+    data_path: str,
+    variable_name: str,
+    scale_by_radius: bool = False,
+    time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Compute the spatial gradient of a face-centered scalar field on HPC."""
     import inspect as _inspect
@@ -1071,6 +1076,27 @@ def remote_calculate_gradient(
             f"Variable '{variable_name}' is not face-centered. "
             "Gradient requires face-centered data."
         )
+
+    # Select a single time/level slice so gradient() sees 1-D face-centered
+    # data, mirroring the local domain.vector_calc._reduce_to_face behavior.
+    # Inlined (not imported) since this function is serialized whole and
+    # shipped to Globus Compute workers.
+    _face_dims = {"n_face", "nCells"}
+    _time_dims = ("time", "Time", "time_counter")
+    _level_dims = ("lev", "level", "levels", "plev", "z", "nVertLevels")
+    _extra = [d for d in var.dims if d not in _face_dims]
+    if _extra:
+        _sel = {}
+        for _d in _extra:
+            if var.sizes[_d] == 1:
+                _sel[_d] = 0
+            elif _d in _time_dims:
+                _sel[_d] = time_index
+            elif _d in _level_dims:
+                _sel[_d] = level_index
+            else:
+                _sel[_d] = 0
+        var = var.isel(**_sel)
 
     # Honor scale_by_radius when the worker's UXarray supports it; otherwise
     # fall back to the unit-sphere call so older workers keep working.
@@ -1110,6 +1136,8 @@ def remote_calculate_curl(
     u_variable: str,
     v_variable: str,
     scale_by_radius: bool = False,
+    time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Compute relative vorticity (curl) of a 2-D wind field on HPC.
 
@@ -1142,6 +1170,32 @@ def remote_calculate_curl(
                 f"Variable '{name}' is not face-centered. "
                 "Curl requires face-centered vector components."
             )
+
+    # Select a single time/level slice so curl() sees 1-D face-centered data,
+    # mirroring the local domain.vector_calc._reduce_to_face behavior.
+    # Inlined (not imported) since this function is serialized whole and
+    # shipped to Globus Compute workers.
+    _face_dims = {"n_face", "nCells"}
+    _time_dims = ("time", "Time", "time_counter")
+    _level_dims = ("lev", "level", "levels", "plev", "z", "nVertLevels")
+    for _name, _var in (("u", u), ("v", v)):
+        _extra = [d for d in _var.dims if d not in _face_dims]
+        if not _extra:
+            continue
+        _sel = {}
+        for _d in _extra:
+            if _var.sizes[_d] == 1:
+                _sel[_d] = 0
+            elif _d in _time_dims:
+                _sel[_d] = time_index
+            elif _d in _level_dims:
+                _sel[_d] = level_index
+            else:
+                _sel[_d] = 0
+        if _name == "u":
+            u = u.isel(**_sel)
+        else:
+            v = v.isel(**_sel)
 
     # Soft semantic guardrail: curl is only physical for genuine vector
     # components. Warn (do not block) on same-field or non-velocity inputs.
@@ -1193,7 +1247,12 @@ def remote_calculate_curl(
 
 
 def remote_calculate_divergence(
-    grid_path: str, data_path: str, u_variable: str, v_variable: str
+    grid_path: str,
+    data_path: str,
+    u_variable: str,
+    v_variable: str,
+    time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Compute horizontal divergence of a 2-D vector field on HPC.
 
@@ -1225,6 +1284,32 @@ def remote_calculate_divergence(
                 f"Variable '{name}' is not face-centered. "
                 "Divergence requires face-centered vector components."
             )
+
+    # Select a single time/level slice so divergence() sees 1-D face-centered
+    # data, mirroring the local domain.vector_calc._reduce_to_face behavior.
+    # Inlined (not imported) since this function is serialized whole and
+    # shipped to Globus Compute workers.
+    _face_dims = {"n_face", "nCells"}
+    _time_dims = ("time", "Time", "time_counter")
+    _level_dims = ("lev", "level", "levels", "plev", "z", "nVertLevels")
+    for _name, _var in (("u", u), ("v", v)):
+        _extra = [d for d in _var.dims if d not in _face_dims]
+        if not _extra:
+            continue
+        _sel = {}
+        for _d in _extra:
+            if _var.sizes[_d] == 1:
+                _sel[_d] = 0
+            elif _d in _time_dims:
+                _sel[_d] = time_index
+            elif _d in _level_dims:
+                _sel[_d] = level_index
+            else:
+                _sel[_d] = 0
+        if _name == "u":
+            u = u.isel(**_sel)
+        else:
+            v = v.isel(**_sel)
 
     # Soft semantic guardrail (mirrors curl): warn on same-field or
     # non-velocity inputs; do not block.
