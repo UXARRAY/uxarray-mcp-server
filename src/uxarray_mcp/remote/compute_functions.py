@@ -196,7 +196,12 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
         grid = ux.open_grid(file_path)
 
     areas = grid.face_areas
-    units = getattr(areas, "units", "m^2") if hasattr(areas, "units") else "m^2"
+    # None (not a fabricated "m^2" default) when the grid carries no units
+    # attribute at all -- inventing a label the source file never provided
+    # is exactly the silent-metadata failure this server's guardrails exist
+    # to prevent, so an absent attribute must surface as absent.
+    area_attrs = getattr(areas, "attrs", {}) or {}
+    units = area_attrs.get("units")
     values = areas.values if hasattr(areas, "values") else np.asarray(areas)
 
     return {
@@ -204,7 +209,7 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
         "mean_area": float(np.mean(values)),
         "min_area": float(np.min(values)),
         "max_area": float(np.max(values)),
-        "area_units": str(units),
+        "area_units": units,
         "n_face": int(grid.n_face),
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }

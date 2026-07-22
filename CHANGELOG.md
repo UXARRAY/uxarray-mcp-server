@@ -27,6 +27,15 @@ uses Semantic Versioning for public releases.
   reading the tool's structured JSON result.
 
 ### Fixed
+- `calculate_area` (local and remote) silently defaulted `area_units` to
+  `"m^2"` whenever a grid's `face_areas` carried no `units` attribute at
+  all, fabricating a label the source file never provided. It now reports
+  `None` in that case, so an absent unit is never confused with a genuine
+  (even if stale) `"m^2"` label. Found while independently verifying a
+  paper claim about which production meshes carry stale area-unit
+  metadata: this server's own tool -- not just the meshes -- was inventing
+  metadata, the exact class of silent failure this project exists to
+  prevent.
 - `run_analysis` and `plot_dataset` silently ignored `use_remote=True` for
   13 operations that have no remote implementation (`validate_dataset`,
   `subset_bbox`, `subset_polygon`, `cross_section`, `compare_fields`,
