@@ -288,6 +288,56 @@ class TestVectorComponentGuardrail:
         assert any("same field" in w for w in result["_provenance"]["warnings"])
 
 
+class TestSphereRadiusWarningCapture:
+    """UXarray's own UserWarning (e.g. missing sphere_radius) must surface in
+    the tool's structured warnings, not just to stderr, so an agent reading
+    the JSON result -- not a human watching a terminal -- sees it too."""
+
+    def test_curl_scale_by_radius_warning_captured(self):
+        ds = _make_wind_dataset(with_units=True)
+        assert "sphere_radius" not in ds.uxgrid.attrs
+        result = compute_curl(ds, "u", "v", scale_by_radius=True)
+        assert any("sphere_radius" in w for w in result["component_warnings"]), result[
+            "component_warnings"
+        ]
+
+    def test_curl_scale_by_radius_warning_not_duplicated(self):
+        ds = _make_wind_dataset(with_units=True)
+        result = compute_curl(ds, "u", "v", scale_by_radius=True)
+        sphere_warnings = [
+            w for w in result["component_warnings"] if "sphere_radius" in w
+        ]
+        assert len(sphere_warnings) == 1
+
+    def test_gradient_scale_by_radius_warning_captured(self):
+        ds = _make_wind_dataset(with_units=True)
+        assert "sphere_radius" not in ds.uxgrid.attrs
+        result = compute_gradient(ds, "u", scale_by_radius=True)
+        assert any("sphere_radius" in w for w in result["component_warnings"]), result[
+            "component_warnings"
+        ]
+
+    def test_curl_scale_by_radius_false_has_no_sphere_warning(self):
+        ds = _make_wind_dataset(with_units=True)
+        result = compute_curl(ds, "u", "v", scale_by_radius=False)
+        assert not any("sphere_radius" in w for w in result["component_warnings"])
+
+    def test_sphere_radius_warning_reaches_provenance(self, monkeypatch):
+        """The tool layer surfaces UXarray's own warning into _provenance.warnings,
+        not just the guardrail's own component-unit checks."""
+        from uxarray_mcp.tools import vector_calc as vc_tools
+
+        ds = _make_wind_dataset(with_units=True)
+        monkeypatch.setattr(vc_tools, "load_dataset", lambda *a, **k: ds)
+
+        result = vc_tools.calculate_curl(
+            "grid.nc", "data.nc", "u", "v", scale_by_radius=True
+        )
+        assert any("sphere_radius" in w for w in result["_provenance"]["warnings"]), (
+            result["_provenance"]["warnings"]
+        )
+
+
 # ---------------------------------------------------------------------------
 # Domain: compute_azimuthal_mean
 # ---------------------------------------------------------------------------

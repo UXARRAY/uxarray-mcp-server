@@ -2,7 +2,31 @@
 
 from __future__ import annotations
 
-from typing import Any
+import warnings as _warnings_module
+from typing import Any, Callable, TypeVar
+
+_T = TypeVar("_T")
+
+
+def _call_capturing_warnings(fn: Callable[[], _T]) -> tuple[_T, list[str]]:
+    """Call ``fn`` and capture any Python warnings it raises as strings.
+
+    UXarray itself emits ``UserWarning``s for conditions a caller needs to
+    know about to trust a result -- e.g. ``scale_by_radius=True`` silently
+    falling back to unit-sphere output when the grid has no
+    ``sphere_radius`` attribute. Those warnings normally only reach a
+    terminal's stderr and are invisible to an agent reading the tool's
+    structured JSON result. Capturing them here and merging them into the
+    same ``warnings`` list as our own guardrail messages means every
+    warning that would change how a scientist should trust the number ends
+    up in ``_provenance.warnings``, not just the ones this server authored.
+    """
+    with _warnings_module.catch_warnings(record=True) as caught:
+        _warnings_module.simplefilter("always")
+        value = fn()
+        messages = [str(w.message) for w in caught]
+    return value, messages
+
 
 # Units that look like a genuine 2-D vector (velocity/flux) component. Used only
 # to raise a soft, non-blocking warning when curl/divergence inputs do not look
@@ -180,7 +204,16 @@ def compute_gradient(
     import numpy as np
 
     # gradient() returns a UxDataset with zonal and meridional components.
-    grad = var.gradient(scale_by_radius=scale_by_radius)
+    grad, uxarray_warnings = _call_capturing_warnings(
+        lambda: var.gradient(scale_by_radius=scale_by_radius)
+    )
+    _dedup_seen: set[str] = set()
+    _deduped: list[str] = []
+    for _w in uxarray_warnings:
+        if _w not in _dedup_seen:
+            _dedup_seen.add(_w)
+            _deduped.append(_w)
+    uxarray_warnings = _deduped
     comp_names = list(grad.data_vars)
 
     def _stats(arr: Any) -> dict:
@@ -203,6 +236,7 @@ def compute_gradient(
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": bool(scale_by_radius),
         "interpretation": "zonal (∂/∂x) and meridional (∂/∂y) components of the gradient",
+        "component_warnings": uxarray_warnings,
     }
 
 
@@ -268,7 +302,20 @@ def compute_curl(
         u_variable, v_variable, u, v, "curl"
     )
 
-    result = u.curl(v, scale_by_radius=scale_by_radius)
+    result, uxarray_warnings = _call_capturing_warnings(
+        lambda: u.curl(v, scale_by_radius=scale_by_radius)
+    )
+    # UXarray's curl() computes an internal gradient per component, so the
+    # same sphere_radius UserWarning can fire more than once for one call;
+    # de-duplicate while preserving order for a clean, non-repetitive
+    # provenance record.
+    seen: set[str] = set()
+    deduped_uxarray_warnings = []
+    for w in uxarray_warnings:
+        if w not in seen:
+            seen.add(w)
+            deduped_uxarray_warnings.append(w)
+    component_warnings = component_warnings + deduped_uxarray_warnings
     vals = result.values
     finite = vals[np.isfinite(vals)]
 

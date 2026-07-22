@@ -17,6 +17,15 @@ uses Semantic Versioning for public releases.
   default to 0 and are ignored for variables that are already
   face-centered only, so existing calls are unaffected.
 
+### Changed
+- `calculate_gradient` and `calculate_curl` (local and remote) now capture
+  UXarray's own `UserWarning`s raised during the actual computation --
+  e.g. `scale_by_radius=True` silently falling back to unit-sphere output
+  when the grid has no `sphere_radius` attribute -- and merge them into
+  the tool's `component_warnings`/`_provenance.warnings`. Previously these
+  warnings only reached a terminal's stderr and were invisible to an agent
+  reading the tool's structured JSON result.
+
 ### Fixed
 - `run_analysis` and `plot_dataset` silently ignored `use_remote=True` for
   13 operations that have no remote implementation (`validate_dataset`,
