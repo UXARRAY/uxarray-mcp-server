@@ -1100,12 +1100,26 @@ def remote_calculate_gradient(
 
     # Honor scale_by_radius when the worker's UXarray supports it; otherwise
     # fall back to the unit-sphere call so older workers keep working.
+    # Capture any UXarray-internal UserWarning (e.g. missing sphere_radius
+    # silently falling back to unit-sphere output) so it reaches the
+    # structured result and _provenance.warnings, not just worker stderr.
+    import warnings as _warnings_module
+
     applied_scale = False
-    if "scale_by_radius" in _inspect.signature(var.gradient).parameters:
-        grad = var.gradient(scale_by_radius=scale_by_radius)
-        applied_scale = bool(scale_by_radius)
-    else:
-        grad = var.gradient()
+    with _warnings_module.catch_warnings(record=True) as _caught:
+        _warnings_module.simplefilter("always")
+        if "scale_by_radius" in _inspect.signature(var.gradient).parameters:
+            grad = var.gradient(scale_by_radius=scale_by_radius)
+            applied_scale = bool(scale_by_radius)
+        else:
+            grad = var.gradient()
+        _seen: set = set()
+        uxarray_warnings = []
+        for _w in _caught:
+            _msg = str(_w.message)
+            if _msg not in _seen:
+                _seen.add(_msg)
+                uxarray_warnings.append(_msg)
     comp_names = list(grad.data_vars)
 
     def _stats(arr: Any) -> Dict[str, Any]:
@@ -1126,6 +1140,7 @@ def remote_calculate_gradient(
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": applied_scale,
         "interpretation": "zonal (d/dx) and meridional (d/dy) components of the gradient",
+        "component_warnings": uxarray_warnings,
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
@@ -1216,12 +1231,25 @@ def remote_calculate_curl(
             "inputs are genuine vector components before interpreting."
         )
 
+    # Capture any UXarray-internal UserWarning (e.g. missing sphere_radius
+    # silently falling back to unit-sphere output) so it reaches the
+    # structured result and _provenance.warnings, not just worker stderr.
+    import warnings as _warnings_module
+
     applied_scale = False
-    if "scale_by_radius" in _inspect.signature(u.curl).parameters:
-        result = u.curl(v, scale_by_radius=scale_by_radius)
-        applied_scale = bool(scale_by_radius)
-    else:
-        result = u.curl(v)
+    with _warnings_module.catch_warnings(record=True) as _caught:
+        _warnings_module.simplefilter("always")
+        if "scale_by_radius" in _inspect.signature(u.curl).parameters:
+            result = u.curl(v, scale_by_radius=scale_by_radius)
+            applied_scale = bool(scale_by_radius)
+        else:
+            result = u.curl(v)
+        _seen: set = set()
+        for _w in _caught:
+            _msg = str(_w.message)
+            if _msg not in _seen:
+                _seen.add(_msg)
+                component_warnings.append(_msg)
     vals = result.values
     finite = vals[np.isfinite(vals)]
     stats: Dict[str, Any] = (
