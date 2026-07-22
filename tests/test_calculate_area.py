@@ -56,10 +56,19 @@ class TestCalculateAreaBasic:
 
             assert result["total_area"] == 5.1e14
             assert result["n_face"] == 192
-            assert result["area_units"] == "m^2"  # Default units
+            # No units attribute present -> report None, not a fabricated
+            # "m^2" default. Inventing a label the grid never provided is
+            # the exact silent-metadata failure this server's provenance
+            # and guardrail mechanisms exist to prevent.
+            assert result["area_units"] is None
 
     def test_calculate_area_no_units(self):
-        """Test area calculation when units not specified."""
+        """Test area calculation when units not specified.
+
+        area_units must be None, not a fabricated "m^2" default: reporting
+        a made-up unit when the grid carries no units attribute at all
+        would silently invent metadata the source file never provided.
+        """
         mock_grid = MagicMock()
         mock_grid.n_face = 50
         mock_areas = MagicMock()
@@ -78,7 +87,7 @@ class TestCalculateAreaBasic:
 
             result = calculate_area("/mesh.nc")
 
-            assert result["area_units"] == "m^2"  # Default
+            assert result["area_units"] is None
 
 
 class TestCalculateAreaErrorHandling:
