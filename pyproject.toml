@@ -26,10 +26,12 @@ license = { file = "LICENSE" }
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "toolregistry-server[mcp]>=0.4.0",
+    # toolregistry-server 0.4.x imports McpError, renamed to MCPError in mcp 2.
+    "mcp>=1.20,<2",
     "holoviews>=1.19.0",
     "matplotlib>=3.9.0",
     "pyyaml>=6.0",
-    "uxarray>=2026.6.0",
+    "uxarray>=2026.7.0",
 ]
 
 [project.optional-dependencies]
