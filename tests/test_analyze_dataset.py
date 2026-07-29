@@ -115,3 +115,84 @@ def test_analyze_dataset_recommended_next_steps_present(synthetic_mesh_with_data
         kw in joined
         for kw in ("plot_zonal_mean", "extract_cross_section", "subset_bbox")
     )
+
+
+def test_validation_failure_blocks_downstream_statistics(
+    monkeypatch, synthetic_mesh_with_data
+):
+    """Validation failure must prevent zonal statistics and variable plots."""
+    from uxarray_mcp.tools import inspection, remote_tools
+
+    grid_file, data_file = synthetic_mesh_with_data
+    monkeypatch.setattr(
+        inspection,
+        "validate_dataset",
+        lambda *args, **kwargs: {
+            "passed": False,
+            "n_variables_checked": 2,
+            "n_variables_failed": 1,
+            "_provenance": {"warnings": ["invalid values"]},
+        },
+    )
+    monkeypatch.setattr(
+        remote_tools,
+        "calculate_zonal_mean",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("zonal mean must not run")
+        ),
+    )
+    monkeypatch.setattr(
+        remote_tools,
+        "plot_variable",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("variable plot must not run")
+        ),
+    )
+
+    result = analyze_dataset(grid_file, data_file, include_plots=True)
+    assert result["zonal_mean"] is None
+    assert result["variable_plot"] is None
+    assert any("validation failed" in warning for warning in result["warnings"])
+    assert result["_provenance"]["validation_summary"]["passed"] is False
+
+
+def test_requested_remote_with_local_stages_reports_actual_venue(
+    monkeypatch, synthetic_mesh_with_data
+):
+    """Aggregate venue comes from stage provenance, not the use_remote request."""
+    from uxarray_mcp.tools import remote_tools
+
+    grid_file, data_file = synthetic_mesh_with_data
+
+    def force_local(result):
+        result["_provenance"]["execution_venue"] = "local"
+        return result
+
+    original_inspect = remote_tools.inspect_mesh
+    original_variables = remote_tools.inspect_variable
+    original_area = remote_tools.calculate_area
+    original_zonal = remote_tools.calculate_zonal_mean
+    monkeypatch.setattr(
+        remote_tools,
+        "inspect_mesh",
+        lambda *args, **kwargs: force_local(original_inspect(args[0])),
+    )
+    monkeypatch.setattr(
+        remote_tools,
+        "inspect_variable",
+        lambda *args, **kwargs: force_local(
+            original_variables(args[0], args[1], args[2])
+        ),
+    )
+    monkeypatch.setattr(
+        remote_tools,
+        "calculate_area",
+        lambda *args, **kwargs: force_local(original_area(args[0])),
+    )
+    monkeypatch.setattr(
+        remote_tools,
+        "calculate_zonal_mean",
+        lambda *args, **kwargs: force_local(original_zonal(args[0], args[1], args[2])),
+    )
+    result = analyze_dataset(grid_file, data_file, use_remote=True, include_plots=False)
+    assert result["_provenance"]["execution_venue"] == "local"

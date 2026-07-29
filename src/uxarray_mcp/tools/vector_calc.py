@@ -85,7 +85,7 @@ def calculate_gradient(
     grid_path: str,
     data_path: str,
     variable_name: str,
-    scale_by_radius: bool = False,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
     use_remote: bool = False,
@@ -107,8 +107,8 @@ def calculate_gradient(
         Name of the face-centered scalar variable.
     scale_by_radius : bool
         If True, divide unit-sphere derivatives by ``uxgrid.sphere_radius`` for
-        physical units (requires a grid with ``sphere_radius``). Default False
-        preserves the unit-sphere result. Local execution passes this to the
+        physical units (requires a grid with ``sphere_radius``). Default True
+        matches UXarray. Local execution passes this to the
         pinned UXarray directly. The remote worker, which may run an older
         UXarray, applies it capability-safely and falls back to the unit sphere
         if unsupported; the result reports the ``scale_by_radius`` actually
@@ -196,7 +196,7 @@ def calculate_curl(
     data_path: str,
     u_variable: str,
     v_variable: str,
-    scale_by_radius: bool = False,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
     use_remote: bool = False,
@@ -225,8 +225,8 @@ def calculate_curl(
         Meridional (north-south) component, e.g. ``"uReconstructMeridional"``.
     scale_by_radius : bool
         If True, divide the unit-sphere result by ``uxgrid.sphere_radius`` for
-        physical units (requires a grid with ``sphere_radius``). Default False
-        preserves the unit-sphere result. Local execution passes this to the
+        physical units (requires a grid with ``sphere_radius``). Default True
+        matches UXarray. Local execution passes this to the
         pinned UXarray directly. The remote worker, which may run an older
         UXarray, applies it capability-safely and falls back to the unit sphere
         if unsupported; the result reports the ``scale_by_radius`` actually

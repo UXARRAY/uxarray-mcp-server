@@ -59,11 +59,11 @@ jobs:
         if: steps.prep.outputs.release_needed == 'true'
         uses: astral-sh/setup-uv@v5
 
-      - name: Set up Python 3.13
+      - name: Set up Python 3.12
         if: steps.prep.outputs.release_needed == 'true'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.12"
 
       - name: Run release checks
         if: steps.prep.outputs.release_needed == 'true'
@@ -78,7 +78,7 @@ jobs:
         run: |
           uv build
           uvx twine check dist/*
-          uv venv /tmp/uxarray-mcp-wheel --python 3.13
+          uv venv /tmp/uxarray-mcp-wheel --python 3.12
           uv pip install --python /tmp/uxarray-mcp-wheel/bin/python dist/uxarray_mcp-*.whl
           /tmp/uxarray-mcp-wheel/bin/uxarray-mcp --help
 

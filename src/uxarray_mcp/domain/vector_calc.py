@@ -102,7 +102,7 @@ def _vector_component_warnings(
     u: Any,
     v: Any,
     operation: str,
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     """Return soft warnings when (u, v) do not look like real vector components.
 
     curl and divergence are only physically meaningful when ``u`` and ``v`` are
@@ -118,8 +118,10 @@ def _vector_component_warnings(
     scientist — can see that the inputs were suspicious.
     """
     warnings: list[str] = []
+    warning_codes: list[str] = []
 
     if u_variable == v_variable:
+        warning_codes.append("VECTOR_COMPONENTS_IDENTICAL")
         warnings.append(
             f"{operation}: u_variable and v_variable are the same field "
             f"('{u_variable}'). {operation} is only physically meaningful for a "
@@ -138,6 +140,7 @@ def _vector_component_warnings(
         return any(hint in unit for hint in _VELOCITY_LIKE_UNIT_HINTS)
 
     if not (_looks_velocity(u_unit) or _looks_velocity(v_unit)):
+        warning_codes.append("VECTOR_UNITS_UNVERIFIED")
         seen = ", ".join(
             f"{name}='{unit or 'unset'}'"
             for name, unit in ((u_variable, u_unit), (v_variable, v_unit))
@@ -149,13 +152,13 @@ def _vector_component_warnings(
             f"{operation} physically."
         )
 
-    return warnings
+    return warnings, warning_codes
 
 
 def compute_gradient(
     uxds: Any,
     variable_name: str,
-    scale_by_radius: bool = False,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
 ) -> dict:
@@ -171,10 +174,10 @@ def compute_gradient(
         Loaded UXarray dataset.
     variable_name : str
         Face-centered scalar variable to differentiate.
-    scale_by_radius : bool, default False
+    scale_by_radius : bool, default True
         When ``True``, divide the unit-sphere derivatives by
         ``uxgrid.sphere_radius`` to return physical units (requires a grid with
-        ``sphere_radius``). The default ``False`` keeps the unit-sphere result.
+        ``sphere_radius``). Pass ``False`` to keep the unit-sphere result.
     time_index : int, default 0
         Time index to select if the variable carries a leading time
         dimension. Ignored if there is no time dimension.
@@ -229,7 +232,7 @@ def compute_gradient(
 
     components = {name: _stats(grad[name]) for name in comp_names}
 
-    return {
+    result = {
         "variable_name": variable_name,
         "components": comp_names,
         "component_stats": components,
@@ -238,13 +241,20 @@ def compute_gradient(
         "interpretation": "zonal (∂/∂x) and meridional (∂/∂y) components of the gradient",
         "component_warnings": uxarray_warnings,
     }
+    from uxarray_mcp.provenance import attach_scientific_status
+
+    return attach_scientific_status(
+        result,
+        warnings=uxarray_warnings,
+        warning_codes=["SPHERE_RADIUS_UNAVAILABLE"] if uxarray_warnings else [],
+    )
 
 
 def compute_curl(
     uxds: Any,
     u_variable: str,
     v_variable: str,
-    scale_by_radius: bool = False,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
 ) -> dict:
@@ -263,10 +273,10 @@ def compute_curl(
         Zonal (east–west) component variable name.
     v_variable : str
         Meridional (north–south) component variable name.
-    scale_by_radius : bool, default False
+    scale_by_radius : bool, default True
         When ``True``, divide the unit-sphere result by ``uxgrid.sphere_radius``
         to return physical units (``1/s`` for wind in ``m/s``; requires a grid
-        with ``sphere_radius``). The default ``False`` keeps the unit sphere.
+        with ``sphere_radius``). Pass ``False`` to keep the unit sphere.
     time_index : int, default 0
         Time index to select if the components carry a leading time
         dimension. Ignored if there is no time dimension.
@@ -298,7 +308,7 @@ def compute_curl(
 
     import numpy as np
 
-    component_warnings = _vector_component_warnings(
+    component_warnings, warning_codes = _vector_component_warnings(
         u_variable, v_variable, u, v, "curl"
     )
 
@@ -316,6 +326,8 @@ def compute_curl(
             seen.add(w)
             deduped_uxarray_warnings.append(w)
     component_warnings = component_warnings + deduped_uxarray_warnings
+    if deduped_uxarray_warnings:
+        warning_codes.append("SPHERE_RADIUS_UNAVAILABLE")
     vals = result.values
     finite = vals[np.isfinite(vals)]
 
@@ -330,7 +342,7 @@ def compute_curl(
     else:
         stats = {"min": None, "max": None, "mean": None, "std": None}
 
-    return {
+    result = {
         "u_variable": u_variable,
         "v_variable": v_variable,
         "interpretation": "relative vorticity ζ = ∂v/∂x − ∂u/∂y",
@@ -339,6 +351,11 @@ def compute_curl(
         "stats": stats,
         "component_warnings": component_warnings,
     }
+    from uxarray_mcp.provenance import attach_scientific_status
+
+    return attach_scientific_status(
+        result, warnings=component_warnings, warning_codes=warning_codes
+    )
 
 
 def compute_divergence(
@@ -395,11 +412,16 @@ def compute_divergence(
 
     import numpy as np
 
-    component_warnings = _vector_component_warnings(
+    component_warnings, warning_codes = _vector_component_warnings(
         u_variable, v_variable, u, v, "divergence"
     )
 
-    result = u.divergence(v)
+    result, uxarray_warnings = _call_capturing_warnings(lambda: u.divergence(v))
+    for warning in uxarray_warnings:
+        if warning not in component_warnings:
+            component_warnings.append(warning)
+    if uxarray_warnings:
+        warning_codes.append("SPHERE_RADIUS_UNAVAILABLE")
     vals = result.values
     finite = vals[np.isfinite(vals)]
 
@@ -414,7 +436,7 @@ def compute_divergence(
     else:
         stats = {"min": None, "max": None, "mean": None, "std": None}
 
-    return {
+    output = {
         "u_variable": u_variable,
         "v_variable": v_variable,
         "interpretation": "horizontal divergence ∂u/∂x + ∂v/∂y",
@@ -422,6 +444,11 @@ def compute_divergence(
         "stats": stats,
         "component_warnings": component_warnings,
     }
+    from uxarray_mcp.provenance import attach_scientific_status
+
+    return attach_scientific_status(
+        output, warnings=component_warnings, warning_codes=warning_codes
+    )
 
 
 def compute_azimuthal_mean(

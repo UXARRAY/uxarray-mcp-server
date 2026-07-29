@@ -272,14 +272,44 @@ class TestGetCapabilitiesWithData:
         assert any("gradient" in m for m in vc)
         assert any("zonal_mean" in m for m in vc)
 
-    def test_curl_available_with_multiple_face_vars(self, synthetic_mesh_with_data):
-        """curl and divergence appear when 2+ face-centered variables exist."""
+    def test_curl_structural_capability_does_not_claim_semantic_suitability(
+        self, synthetic_mesh_with_data
+    ):
+        """Two scalar fields are computable inputs, not verified vector components."""
         grid_file, data_file = synthetic_mesh_with_data
         result = get_capabilities(grid_file, data_file)
         vc = result["uxarray_capabilities"]["vector_calculus"]
         # synthetic_mesh_with_data has temperature + pressure (2 face vars)
         assert any("curl" in m for m in vc)
         assert any("divergence" in m for m in vc)
+        contract = result["scientific_contracts"]["vector_calculus"]
+        assert contract["structurally_applicable"] is True
+        assert contract["semantic_suitability"] == "unverified"
+        assert contract["evidence"]["temperature"]["units"] == "K"
+        assert contract["evidence"]["temperature"]["vector_like"] is False
+        recommendations = " ".join(result["recommendations"])
+        assert "Do not interpret" in recommendations
+
+    def test_vector_metadata_support_is_reported(self, tmp_path, synthetic_mesh_file):
+        data_file = tmp_path / "wind.nc"
+        xr.Dataset(
+            {
+                "u": (
+                    ["nMesh2_face"],
+                    [1.0],
+                    {"units": "m/s", "standard_name": "eastward_wind"},
+                ),
+                "v": (
+                    ["nMesh2_face"],
+                    [2.0],
+                    {"units": "m/s", "standard_name": "northward_wind"},
+                ),
+            }
+        ).to_netcdf(data_file)
+        result = get_capabilities(synthetic_mesh_file, str(data_file))
+        contract = result["scientific_contracts"]["vector_calculus"]
+        assert contract["semantic_suitability"] == "supported_by_metadata"
+        assert contract["evidence"]["u"]["vector_like"] is True
 
     def test_remapping_available_with_face_data(self, synthetic_mesh_with_data):
         """Remapping methods listed without [needs face-centered data] note."""

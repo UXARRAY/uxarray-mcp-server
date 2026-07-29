@@ -9,6 +9,29 @@ from uxarray_mcp.domain import load_dataset, load_grid
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.config import load_config
 
+_VECTOR_UNIT_HINTS = (
+    "m/s",
+    "m s-1",
+    "m s^-1",
+    "meter/second",
+    "meters/second",
+    "cm/s",
+    "km/h",
+    "kg/m2/s",
+    "kg m-2 s-1",
+    "pa/s",
+    "n/m2",
+)
+
+
+def _looks_vector_like(variable: Dict[str, Any]) -> bool:
+    units = str(variable.get("units") or "").strip().lower()
+    standard_name = str(variable.get("standard_name") or "").strip().lower()
+    return any(hint in units for hint in _VECTOR_UNIT_HINTS) or any(
+        hint in standard_name
+        for hint in ("eastward_", "northward_", "grid_eastward_", "grid_northward_")
+    )
+
 
 def _uxarray_supports(attr_path: str) -> bool:
     """Return True if ``UxDataArray`` provides the given (possibly dotted) attr.
@@ -77,7 +100,8 @@ def _local_grid_facts(grid_path: str, data_path: Optional[str]) -> Dict[str, Any
 
         variables = []
         for var_name in uxds.data_vars:
-            dims = uxds[var_name].dims
+            variable = uxds[var_name]
+            dims = variable.dims
             if any(d in dims for d in ("n_face", "nCells")):
                 location = "faces"
             elif any(d in dims for d in ("n_node", "nVertices")):
@@ -86,7 +110,16 @@ def _local_grid_facts(grid_path: str, data_path: Optional[str]) -> Dict[str, Any
                 location = "edges"
             else:
                 location = "other"
-            variables.append({"name": str(var_name), "location": location})
+            variables.append(
+                {
+                    "name": str(var_name),
+                    "location": location,
+                    "dims": list(dims),
+                    "units": variable.attrs.get("units"),
+                    "standard_name": variable.attrs.get("standard_name"),
+                    "long_name": variable.attrs.get("long_name"),
+                }
+            )
         facts["variables"] = variables
 
     return facts
@@ -243,6 +276,7 @@ def get_capabilities(
     has_node_centered_vars = False
     has_edge_centered_vars = False
     face_centered_var_names: List[str] = []
+    face_centered_var_facts: List[Dict[str, Any]] = []
 
     if data_path is not None:
         for var_fact in facts.get("variables", []):
@@ -252,6 +286,7 @@ def get_capabilities(
             if location == "faces":
                 has_face_centered_vars = True
                 face_centered_var_names.append(var_name)
+                face_centered_var_facts.append(var_fact)
             elif location == "nodes":
                 has_node_centered_vars = True
             elif location == "edges":
@@ -319,6 +354,10 @@ def get_capabilities(
                 {
                     "name": var_name,
                     "location": location,
+                    "dims": var_fact.get("dims", []),
+                    "units": var_fact.get("units"),
+                    "standard_name": var_fact.get("standard_name"),
+                    "long_name": var_fact.get("long_name"),
                     "applicable_mcp_tools": applicable_mcp,
                     "applicable_uxarray_methods": applicable_uxarray,
                 }
@@ -495,8 +534,8 @@ def get_capabilities(
         ]
         if len(face_centered_var_names) >= 2:
             uxarray_capabilities["vector_calculus"] += [
-                "ux_da_u.curl(ux_da_v)  [two face-centered vars required]",
-                "ux_da_u.divergence(ux_da_v)  [two face-centered vars required]",
+                "ux_da_u.curl(ux_da_v)  [structurally applicable; verify component semantics]",
+                "ux_da_u.divergence(ux_da_v)  [structurally applicable; verify component semantics]",
             ]
 
     # Topological ops — for node/edge data
@@ -572,10 +611,18 @@ def get_capabilities(
         )
 
     if has_face_centered_vars and len(face_centered_var_names) >= 2:
-        recommendations.append(
-            "Multiple face-centered variables detected — you can compute vector operations "
-            "like curl and divergence between pairs (e.g. wind u/v components)."
-        )
+        if sum(_looks_vector_like(var) for var in face_centered_var_facts) >= 2:
+            recommendations.append(
+                "Multiple face-centered variables carry vector-like metadata. Curl and "
+                "divergence are structurally applicable; still verify that the selected "
+                "variables are paired components in the same coordinate system."
+            )
+        else:
+            recommendations.append(
+                "Multiple face-centered variables make curl/divergence structurally "
+                "computable, but fewer than two carry vector-like units or standard names. "
+                "Do not interpret a result physically until component identity is verified."
+            )
 
     result: Dict[str, Any] = {
         "grid_summary": grid_summary,
@@ -585,6 +632,30 @@ def get_capabilities(
             "configured_endpoints": config.endpoint_names,
         },
         "uxarray_capabilities": uxarray_capabilities,
+        "scientific_contracts": {
+            "vector_calculus": {
+                "structurally_applicable": len(face_centered_var_names) >= 2,
+                "semantic_suitability": (
+                    "supported_by_metadata"
+                    if sum(_looks_vector_like(var) for var in face_centered_var_facts)
+                    >= 2
+                    else "unverified"
+                ),
+                "evidence": {
+                    var["name"]: {
+                        "units": var.get("units"),
+                        "standard_name": var.get("standard_name"),
+                        "vector_like": _looks_vector_like(var),
+                    }
+                    for var in face_centered_var_facts
+                },
+                "required_for_physical_interpretation": [
+                    "distinct paired components",
+                    "compatible velocity/flux units",
+                    "documented component coordinate system",
+                ],
+            }
+        },
         "recommendations": recommendations,
     }
 

@@ -191,10 +191,16 @@ auditable and the server actively flags common scientific pitfalls:
 - **Derivative unit convention is never hidden.** `gradient`, `curl`, and
   `divergence` echo `scale_by_radius` in both the result and provenance, so a
   unit-sphere result can never be mistaken for a physical (per-metre) one.
+  Gradient and curl default to physical scaling, matching UXarray; pass
+  `scale_by_radius=False` explicitly for unit-sphere output.
 - **Vector-calculus sanity guard.** `curl`/`divergence` warn (without blocking)
   when the two inputs are the same field, or when neither carries a
   velocity/flux-like `units` attribute — the classic "vorticity from two random
-  scalars" mistake now surfaces a warning in `_provenance.warnings`.
+  scalars" mistake now surfaces a warning in `_provenance.warnings` and a
+  machine-actionable `scientific_status` with stable warning codes.
+- **Applicability is not suitability.** `get_capabilities` reports whether
+  vector operations are structurally computable separately from whether
+  metadata supports physical interpretation.
 - **Local/remote version drift is surfaced.** Remote results record the
   worker's *actual* UXarray version (`remote_uxarray_version`) and emit a
   warning when it differs from the local version, so silent numerical

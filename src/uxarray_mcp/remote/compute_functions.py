@@ -1051,7 +1051,7 @@ def remote_calculate_gradient(
     grid_path: str,
     data_path: str,
     variable_name: str,
-    scale_by_radius: bool = False,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
 ) -> Dict[str, Any]:
@@ -1146,6 +1146,14 @@ def remote_calculate_gradient(
         "scale_by_radius": applied_scale,
         "interpretation": "zonal (d/dx) and meridional (d/dy) components of the gradient",
         "component_warnings": uxarray_warnings,
+        "scientific_status": {
+            "status": "warning" if uxarray_warnings else "complete",
+            "physically_interpretable": not uxarray_warnings,
+            "warning_codes": (
+                ["SPHERE_RADIUS_UNAVAILABLE"] if uxarray_warnings else []
+            ),
+            "warnings": uxarray_warnings,
+        },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
@@ -1155,7 +1163,7 @@ def remote_calculate_curl(
     data_path: str,
     u_variable: str,
     v_variable: str,
-    scale_by_radius: bool = False,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
 ) -> Dict[str, Any]:
@@ -1220,7 +1228,9 @@ def remote_calculate_curl(
     # Soft semantic guardrail: curl is only physical for genuine vector
     # components. Warn (do not block) on same-field or non-velocity inputs.
     component_warnings = []
+    warning_codes = []
     if u_variable == v_variable:
+        warning_codes.append("VECTOR_COMPONENTS_IDENTICAL")
         component_warnings.append(
             f"curl: u_variable and v_variable are the same field "
             f"('{u_variable}'); result is a mathematical artifact, not a "
@@ -1230,6 +1240,7 @@ def remote_calculate_curl(
     _v_units = str((getattr(v, "attrs", {}) or {}).get("units", "")).strip().lower()
     _vel_hints = ("m/s", "m s-1", "m s^-1", "cm/s", "km/h", "pa/s", "kg/m2/s")
     if not any(h in _u_units or h in _v_units for h in _vel_hints):
+        warning_codes.append("VECTOR_UNITS_UNVERIFIED")
         component_warnings.append(
             f"curl: neither component has a velocity-like 'units' attribute "
             f"(u='{_u_units or 'unset'}', v='{_v_units or 'unset'}'); verify "
@@ -1255,6 +1266,7 @@ def remote_calculate_curl(
             if _msg not in _seen:
                 _seen.add(_msg)
                 component_warnings.append(_msg)
+                warning_codes.append("SPHERE_RADIUS_UNAVAILABLE")
     vals = result.values
     finite = vals[np.isfinite(vals)]
     stats: Dict[str, Any] = (
@@ -1275,6 +1287,12 @@ def remote_calculate_curl(
         "scale_by_radius": applied_scale,
         "stats": stats,
         "component_warnings": component_warnings,
+        "scientific_status": {
+            "status": "warning" if component_warnings else "complete",
+            "physically_interpretable": not component_warnings,
+            "warning_codes": warning_codes,
+            "warnings": component_warnings,
+        },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
@@ -1347,7 +1365,9 @@ def remote_calculate_divergence(
     # Soft semantic guardrail (mirrors curl): warn on same-field or
     # non-velocity inputs; do not block.
     component_warnings = []
+    warning_codes = []
     if u_variable == v_variable:
+        warning_codes.append("VECTOR_COMPONENTS_IDENTICAL")
         component_warnings.append(
             f"divergence: u_variable and v_variable are the same field "
             f"('{u_variable}'); result is a mathematical artifact, not a "
@@ -1357,13 +1377,23 @@ def remote_calculate_divergence(
     _v_units = str((getattr(v, "attrs", {}) or {}).get("units", "")).strip().lower()
     _vel_hints = ("m/s", "m s-1", "m s^-1", "cm/s", "km/h", "pa/s", "kg/m2/s")
     if not any(h in _u_units or h in _v_units for h in _vel_hints):
+        warning_codes.append("VECTOR_UNITS_UNVERIFIED")
         component_warnings.append(
             f"divergence: neither component has a velocity-like 'units' "
             f"attribute (u='{_u_units or 'unset'}', v='{_v_units or 'unset'}'); "
             "verify inputs are genuine vector components before interpreting."
         )
 
-    result = u.divergence(v)
+    import warnings as _warnings_module
+
+    with _warnings_module.catch_warnings(record=True) as _caught:
+        _warnings_module.simplefilter("always")
+        result = u.divergence(v)
+        for _warning in _caught:
+            _message = str(_warning.message)
+            if _message not in component_warnings:
+                component_warnings.append(_message)
+                warning_codes.append("SPHERE_RADIUS_UNAVAILABLE")
     vals = result.values
     finite = vals[np.isfinite(vals)]
     stats: Dict[str, Any] = (
@@ -1383,6 +1413,12 @@ def remote_calculate_divergence(
         "n_face": int(uxds.uxgrid.n_face),
         "stats": stats,
         "component_warnings": component_warnings,
+        "scientific_status": {
+            "status": "warning" if component_warnings else "complete",
+            "physically_interpretable": not component_warnings,
+            "warning_codes": warning_codes,
+            "warnings": component_warnings,
+        },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
     }
 
@@ -1492,7 +1528,8 @@ def remote_grid_facts(
 
         variables = []
         for var_name in uxds.data_vars:
-            dims = uxds[var_name].dims
+            variable = uxds[var_name]
+            dims = variable.dims
             if any(d in dims for d in ("n_face", "nCells")):
                 location = "faces"
             elif any(d in dims for d in ("n_node", "nVertices")):
@@ -1501,7 +1538,16 @@ def remote_grid_facts(
                 location = "edges"
             else:
                 location = "other"
-            variables.append({"name": str(var_name), "location": location})
+            variables.append(
+                {
+                    "name": str(var_name),
+                    "location": location,
+                    "dims": list(dims),
+                    "units": variable.attrs.get("units"),
+                    "standard_name": variable.attrs.get("standard_name"),
+                    "long_name": variable.attrs.get("long_name"),
+                }
+            )
         facts["variables"] = variables
 
     return facts
