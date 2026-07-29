@@ -1,7 +1,16 @@
 """Tests for session, workflow, and persisted result tools."""
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import xarray as xr
+
+from uxarray_mcp.state import (
+    get_result,
+    persist_result,
+    save_result,
+    write_dataset_artifact,
+)
 from uxarray_mcp.tools import (
     create_session,
     get_result_handle,
@@ -100,3 +109,28 @@ def test_reset_session_state_clears_results_workflows_and_operations(
     assert state["workflow_ids"] == []
     assert state["operation_ids"] == []
     assert not Path(state_dir, "results", f"{workflow['result_handle']}.json").exists()
+
+
+def test_concurrent_artifact_writes_remain_readable(state_dir):
+    """Concurrent result persistence must never expose partial NetCDF files."""
+
+    def persist(index: int) -> str:
+        record = persist_result(
+            kind="concurrent-test",
+            name=f"result-{index}",
+            summary={"index": index},
+        )
+        dataset = xr.Dataset({"value": ("x", [float(index)])})
+        path = write_dataset_artifact(dataset, record["result_handle"])
+        record["artifact_path"] = path
+        save_result(record)
+        return record["result_handle"]
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        handles = list(executor.map(persist, range(24)))
+
+    assert len(set(handles)) == 24
+    for handle in handles:
+        record = get_result(handle)
+        with xr.open_dataset(record["artifact_path"]) as dataset:
+            assert dataset["value"].size == 1

@@ -64,7 +64,7 @@ def run_analysis(
     session_id: str | None = None,
     dataset_handle: str | None = None,
     result_name: str | None = None,
-    scale_by_radius: bool = False,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
     lat_spec: tuple | float | list[Any] | None = None,
@@ -85,8 +85,9 @@ def run_analysis(
     ``regrid_dataset``, ``remap_to_rectilinear``, ``temporal_mean``,
     ``anomaly``, ``ensemble_mean``, ``ensemble_spread``, and ``export``.
 
-    ``gradient`` and ``curl`` accept ``scale_by_radius`` (default False keeps the
-    historical unit-sphere result). ``gradient``, ``curl``, and ``divergence``
+    ``gradient`` and ``curl`` accept ``scale_by_radius`` (default True matches
+    UXarray and returns physical units when sphere-radius metadata exists).
+    ``gradient``, ``curl``, and ``divergence``
     also accept ``time_index``/``level_index`` to select a single time/level
     slice when the input variable(s) carry those extra dimensions (e.g. real
     model output shaped ``(time, lev, n_face)``); both default to 0 and are

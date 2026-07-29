@@ -204,7 +204,12 @@ def analyze_dataset(
 
     # ── Stage 5: zonal mean (needs data + face-centered variable) ───────────
     zonal_mean: Optional[dict[str, Any]] = None
-    if resolved_data is not None and selected_variable is not None:
+    validation_passed = validation is None or validation.get("passed") is not False
+    if (
+        resolved_data is not None
+        and selected_variable is not None
+        and validation_passed
+    ):
         zonal_mean = _safe_call(
             "calculate_zonal_mean",
             lambda: calculate_zonal_mean(
@@ -219,6 +224,10 @@ def analyze_dataset(
         )
         if zonal_mean is not None:
             stages_run.append("calculate_zonal_mean")
+    elif resolved_data is not None and selected_variable is not None:
+        warnings.append(
+            "calculate_zonal_mean: skipped because dataset validation failed."
+        )
 
     # ── Stage 6 + 7: plots (optional) ────────────────────────────────────────
     mesh_plot: Optional[dict[str, Any]] = None
@@ -239,7 +248,11 @@ def analyze_dataset(
             mesh_plot = _png_meta(plot_items)
             stages_run.append("plot_mesh")
 
-        if resolved_data is not None and selected_variable is not None:
+        if (
+            resolved_data is not None
+            and selected_variable is not None
+            and validation_passed
+        ):
             var_plot_items = _safe_call(
                 "plot_variable",
                 lambda: plot_variable(
@@ -255,6 +268,8 @@ def analyze_dataset(
             if var_plot_items is not None:
                 variable_plot = _png_meta(var_plot_items)
                 stages_run.append("plot_variable")
+        elif resolved_data is not None and selected_variable is not None:
+            warnings.append("plot_variable: skipped because dataset validation failed.")
 
     # ── Recommended next steps ──────────────────────────────────────────────
     next_steps: list[str] = []
@@ -307,7 +322,19 @@ def analyze_dataset(
     # (used by tests that import `inspect_mesh` directly from this module).
     _ = inspect_mesh  # keep import alive
 
-    venue = "hpc" if use_remote else "local"
+    stage_results = [mesh, variables, area, zonal_mean]
+    venues = {
+        stage.get("_provenance", {}).get("execution_venue")
+        for stage in stage_results
+        if isinstance(stage, dict)
+    }
+    venues.discard(None)
+    if not venues:
+        venue = "local"
+    elif len(venues) == 1:
+        venue = venues.pop()
+    else:
+        venue = "mixed:" + ",".join(sorted(venues))
     return attach_provenance(
         result,
         tool="analyze_dataset",
@@ -323,5 +350,14 @@ def analyze_dataset(
         },
         venue=venue,
         warnings=warnings,
+        validation_summary=(
+            {
+                "passed": validation.get("passed"),
+                "n_variables_checked": validation.get("n_variables_checked"),
+                "n_variables_failed": validation.get("n_variables_failed"),
+            }
+            if validation is not None
+            else None
+        ),
         selected_variable=selected_variable,
     )
