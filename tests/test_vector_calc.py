@@ -269,12 +269,17 @@ class TestVectorComponentGuardrail:
         # Synthetic fields carry no 'units' attr → non-velocity warning.
         result = compute_curl(healpix_wind_dataset, "u", "v")
         assert any("velocity" in w for w in result["component_warnings"])
+        assert result["scientific_status"]["status"] == "warning"
+        assert result["scientific_status"]["physically_interpretable"] is False
+        assert "VECTOR_UNITS_UNVERIFIED" in result["scientific_status"]["warning_codes"]
 
     def test_velocity_units_suppress_warning(self):
         # Fields with velocity units set at creation time → no warnings.
         ds = _make_wind_dataset(with_units=True)
-        result = compute_curl(ds, "u", "v")
+        result = compute_curl(ds, "u", "v", scale_by_radius=False)
         assert result["component_warnings"] == []
+        assert result["scientific_status"]["status"] == "complete"
+        assert result["scientific_status"]["physically_interpretable"] is True
 
     def test_curl_warning_reaches_provenance(self, monkeypatch):
         """The tool layer surfaces component warnings into _provenance.warnings."""
@@ -522,18 +527,18 @@ class TestCalculateAzimuthalMeanTool:
 
 
 # ---------------------------------------------------------------------------
-# scale_by_radius opt-in
+# scale_by_radius defaults align with UXarray
 # ---------------------------------------------------------------------------
 
 
 class TestScaleByRadius:
-    def test_gradient_default_keeps_unit_sphere(self, healpix_wind_dataset):
+    def test_gradient_default_requests_radius_scaling(self, healpix_wind_dataset):
         result = compute_gradient(healpix_wind_dataset, "temperature")
-        assert result["scale_by_radius"] is False
+        assert result["scale_by_radius"] is True
 
-    def test_curl_default_keeps_unit_sphere(self, healpix_wind_dataset):
+    def test_curl_default_requests_radius_scaling(self, healpix_wind_dataset):
         result = compute_curl(healpix_wind_dataset, "u", "v")
-        assert result["scale_by_radius"] is False
+        assert result["scale_by_radius"] is True
 
     def test_gradient_records_scale_by_radius_flag(self, healpix_wind_dataset):
         with warnings.catch_warnings():

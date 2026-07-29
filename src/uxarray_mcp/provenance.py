@@ -77,3 +77,20 @@ def attach_provenance(
         provenance["validation_summary"] = validation_summary
     result["_provenance"] = provenance
     return result
+
+
+def attach_scientific_status(
+    result: dict[str, Any],
+    *,
+    warnings: list[str] | None = None,
+    warning_codes: list[str] | None = None,
+) -> dict[str, Any]:
+    """Attach a machine-actionable scientific interpretation status."""
+    messages = warnings or []
+    result["scientific_status"] = {
+        "status": "warning" if messages else "complete",
+        "physically_interpretable": not messages,
+        "warning_codes": warning_codes or [],
+        "warnings": messages,
+    }
+    return result

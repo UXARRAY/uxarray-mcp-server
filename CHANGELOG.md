@@ -5,7 +5,20 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+### Breaking
+- `gradient` and `curl` now default `scale_by_radius=True`, matching UXarray's
+  public API. Pass `scale_by_radius=False` explicitly to preserve the previous
+  MCP unit-sphere behavior. This default alignment requires a minor release.
+
 ### Added
+- Vector-calculus results now include a machine-actionable
+  `scientific_status` with `status`, `physically_interpretable`, stable warning
+  codes, and warning text.
+- `get_capabilities` now returns variable units, standard names, dimensions,
+  and a `scientific_contracts.vector_calculus` block that separates structural
+  applicability from semantic suitability.
+- Persistent JSON and NetCDF artifacts are written atomically under a process
+  lock so concurrent tool calls cannot expose partial result files.
 - `gradient`, `curl`, and `divergence` (via `run_analysis` and the
   `calculate_gradient`/`calculate_curl`/`calculate_divergence` tools) now
   accept `time_index`/`level_index` to select a single time/level slice
@@ -27,6 +40,14 @@ uses Semantic Versioning for public releases.
   reading the tool's structured JSON result.
 
 ### Fixed
+- `analyze_dataset` and `run_scientific_agent` now actually skip zonal
+  statistics after failed validation; `analyze_dataset` also skips variable
+  plotting and records the validation summary in provenance.
+- `analyze_dataset` derives aggregate execution venue from completed stage
+  provenance instead of labeling a fallback-local run as HPC solely because
+  `use_remote=True` was requested.
+- The monthly release workflow now uses supported Python 3.12 instead of Python
+  3.13, which conflicts with the package's `requires-python` constraint.
 - `calculate_area` (local and remote) silently defaulted `area_units` to
   `"m^2"` whenever a grid's `face_areas` carried no `units` attribute at
   all, fabricating a label the source file never provided. It now reports
