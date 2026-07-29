@@ -133,6 +133,8 @@ jobs:
         uv venv /tmp/uxarray-mcp-wheel --python 3.12
         uv pip install --python /tmp/uxarray-mcp-wheel/bin/python dist/uxarray_mcp-*.whl
         /tmp/uxarray-mcp-wheel/bin/uxarray-mcp --help
+        /tmp/uxarray-mcp-wheel/bin/python scripts/check_mcp_handshake.py \
+          --command /tmp/uxarray-mcp-wheel/bin/uxarray-mcp
 
   test-hpc:
     runs-on: ubuntu-latest
