@@ -44,6 +44,8 @@ jobs:
           uv venv /tmp/uxarray-mcp-wheel --python 3.12
           uv pip install --python /tmp/uxarray-mcp-wheel/bin/python dist/uxarray_mcp-*.whl
           /tmp/uxarray-mcp-wheel/bin/uxarray-mcp --help
+          /tmp/uxarray-mcp-wheel/bin/python scripts/check_mcp_handshake.py \
+            --command /tmp/uxarray-mcp-wheel/bin/uxarray-mcp
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
@@ -109,6 +111,11 @@ jobs:
           fi
           /tmp/uxarray-mcp-pypi/bin/uxarray-mcp --help
           /tmp/uxarray-mcp-pypi/bin/python -c "import uxarray_mcp; print(uxarray_mcp.__version__)"
+          curl -fsSL \
+            https://raw.githubusercontent.com/UXARRAY/uxarray-mcp-server/${REF_NAME}/scripts/check_mcp_handshake.py \
+            -o /tmp/check_mcp_handshake.py
+          /tmp/uxarray-mcp-pypi/bin/python /tmp/check_mcp_handshake.py \
+            --command /tmp/uxarray-mcp-pypi/bin/uxarray-mcp
 
   update-conda-feedstock:
     runs-on: ubuntu-latest

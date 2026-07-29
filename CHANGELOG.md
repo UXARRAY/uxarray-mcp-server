@@ -5,6 +5,15 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+### Fixed
+- Pin the MCP Python SDK to `<2` until toolregistry-server supports the renamed
+  `MCPError` exception in SDK 2.x. Fresh installs previously resolved MCP 2.0,
+  installed successfully, then failed when starting the stdio server.
+- CI and release verification now perform a real clean-wheel MCP handshake:
+  initialize the server, list tools, and call `get_capabilities` over stdio.
+- Package metadata now enforces the documented UXarray 2026.7.0 minimum used by
+  the vector-calculus fixes and scientific contracts.
+
 ### Breaking
 - `gradient` and `curl` now default `scale_by_radius=True`, matching UXarray's
   public API. Pass `scale_by_radius=False` explicitly to preserve the previous

@@ -2437,11 +2437,12 @@ wheels = [
 
 [[package]]
 name = "uxarray-mcp"
-version = "0.1.2"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "holoviews" },
     { name = "matplotlib" },
+    { name = "mcp" },
     { name = "pyyaml" },
     { name = "toolregistry-server", extra = ["mcp"] },
     { name = "uxarray" },
@@ -2476,13 +2477,14 @@ requires-dist = [
     { name = "globus-compute-sdk", marker = "extra == 'hpc'", specifier = ">=4.5.0" },
     { name = "holoviews", specifier = ">=1.19.0" },
     { name = "matplotlib", specifier = ">=3.9.0" },
+    { name = "mcp", specifier = ">=1.20,<2" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=3.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0" },
     { name = "sphinx-book-theme", marker = "extra == 'docs'", specifier = ">=1.1.0" },
     { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.4.0" },
     { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.4.0" },
-    { name = "uxarray", specifier = ">=2026.6.0" },
+    { name = "uxarray", specifier = ">=2026.7.0" },
 ]
 provides-extras = ["openapi", "hpc", "docs"]
 
