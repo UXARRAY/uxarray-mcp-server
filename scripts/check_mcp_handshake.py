@@ -19,8 +19,12 @@ async def _check(command: str) -> None:
             names = {tool.name for tool in listed.tools}
             required = {"get_capabilities", "run_analysis"}
             if not required.issubset(names):
-                raise RuntimeError(f"Missing required tools: {sorted(required - names)}")
-            result = await session.call_tool("get_capabilities", {"grid_path": "healpix:1"})
+                raise RuntimeError(
+                    f"Missing required tools: {sorted(required - names)}"
+                )
+            result = await session.call_tool(
+                "get_capabilities", {"grid_path": "healpix:1"}
+            )
             if result.isError:
                 raise RuntimeError(f"get_capabilities failed: {result.content}")
             print(
