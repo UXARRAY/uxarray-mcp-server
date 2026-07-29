@@ -73,14 +73,20 @@ missing.
 
 `gradient`, `curl`, and `divergence` echo the `scale_by_radius` convention in
 their result and provenance. `gradient` and `curl` accept `scale_by_radius`
-(default `False`). When `False`, results stay on the unit sphere (the historical
-behavior). Set it to `True` to divide by `uxgrid.sphere_radius` for physical
-units; the grid must define `sphere_radius`.
+(default `True`, matching UXarray). When `True`, results are divided by
+`uxgrid.sphere_radius` for physical units; the grid must define
+`sphere_radius`. Pass `False` explicitly to keep unit-sphere results.
 
 `curl` and `divergence` also emit **vector-component warnings**: if the two
 inputs are the same field, or neither carries a velocity/flux-like `units`
 attribute, a warning is added to `_provenance.warnings`. The computation still
-runs (the math is valid), but the result is flagged as possibly non-physical.
+runs (the math is valid), but `scientific_status` marks the result as a warning,
+sets `physically_interpretable` to false, and includes stable warning codes.
+
+`get_capabilities` distinguishes **structural applicability** from **semantic
+suitability** for vector operations. Two face-centered arrays make curl and
+divergence computable, but physical interpretation remains `unverified` unless
+metadata supplies vector-like units or standard names.
 
 `zonal_anomaly` and `remap_to_rectilinear` are backed by
 `UxDataArray.zonal_anomaly` and `UxDataArray.remap.to_rectilinear`, available in

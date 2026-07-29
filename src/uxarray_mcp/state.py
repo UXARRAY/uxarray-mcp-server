@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import tempfile
+import threading
 import uuid
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -13,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import xarray as xr
+
+_WRITE_LOCK = threading.RLock()
 
 
 def _now_utc() -> str:
@@ -51,7 +55,9 @@ def _json_safe(value: Any) -> Any:
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(_json_safe(payload), indent=2, sort_keys=True))
+    serialized = json.dumps(_json_safe(payload), indent=2, sort_keys=True)
+    with _WRITE_LOCK:
+        _atomic_write(path, lambda temporary: temporary.write_text(serialized))
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -72,6 +78,21 @@ def _new_id(prefix: str) -> str:
 
 def _result_path(result_id: str, suffix: str) -> Path:
     return _artifacts_dir() / f"{result_id}{suffix}"
+
+
+def _atomic_write(path: Path, writer: Any) -> None:
+    """Write through a sibling temporary file and atomically replace ``path``."""
+    _ensure_dir(path.parent)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    os.close(fd)
+    temporary = Path(temporary_name)
+    try:
+        writer(temporary)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _sanitize_netcdf_attr_value(value: Any) -> Any:
@@ -318,13 +339,17 @@ def save_result(result: dict[str, Any]) -> dict[str, Any]:
 
 def write_grid_artifact(grid: Any, result_id: str) -> str:
     path = _result_path(result_id, ".nc")
-    grid.to_xarray().to_netcdf(path)
+    with _WRITE_LOCK:
+        _atomic_write(path, lambda temporary: grid.to_xarray().to_netcdf(temporary))
     return str(path)
 
 
 def write_dataarray_artifact(data: Any, result_id: str) -> str:
     path = _result_path(result_id, ".nc")
-    _sanitize_netcdf_attrs(data).to_netcdf(path)
+    with _WRITE_LOCK:
+        _atomic_write(
+            path, lambda temporary: _sanitize_netcdf_attrs(data).to_netcdf(temporary)
+        )
     return str(path)
 
 
@@ -342,7 +367,8 @@ def write_dataset_artifact(data: Any, result_id: str) -> str:
             str(key): _sanitize_netcdf_attr_value(value)
             for key, value in sanitized[name].attrs.items()
         }
-    sanitized.to_netcdf(path)
+    with _WRITE_LOCK:
+        _atomic_write(path, lambda temporary: sanitized.to_netcdf(temporary))
     return str(path)
 
 
