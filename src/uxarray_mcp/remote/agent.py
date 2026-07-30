@@ -167,6 +167,19 @@ class UXarrayComputeAgent(_AcademyAgent):
             return self._run_local_inspect_variable(grid_path, data_path, variable_name)
 
     @action
+    async def validate_dataset_remote(
+        self, grid_path: str, data_path: str, use_remote: bool = False
+    ) -> Dict[str, Any]:
+        """Validate a dataset in the environment that can read its paths."""
+        from uxarray_mcp.remote.compute_functions import remote_validate_dataset
+
+        if use_remote and self.config.endpoint_id:
+            return await self._run_on_hpc(remote_validate_dataset, grid_path, data_path)
+        from uxarray_mcp.tools.inspection import validate_dataset
+
+        return validate_dataset(grid_path, data_path)
+
+    @action
     async def calculate_zonal_mean_remote(
         self,
         grid_path: str,
@@ -453,9 +466,14 @@ class UXarrayComputeAgent(_AcademyAgent):
         # — not the local submitter — and warn on local/remote version drift.
         drift_warnings: list[str] = []
         worker_uxarray = None
+        worker_runtime: dict[str, Any] = {}
         if isinstance(result, dict):
             worker_uxarray = result.pop("_worker_uxarray_version", None)
-            result.pop("_worker_python_version", None)
+            worker_runtime = result.pop("_worker_runtime", {}) or {}
+            worker_python = result.pop("_worker_python_version", None)
+            if worker_python and "python_version" not in worker_runtime:
+                worker_runtime["python_version"] = worker_python
+            worker_uxarray = worker_runtime.get("uxarray_version") or worker_uxarray
         local_uxarray = _get_uxarray_version()
         if (
             worker_uxarray
@@ -484,6 +502,16 @@ class UXarrayComputeAgent(_AcademyAgent):
         # Record the worker's uxarray version explicitly alongside the local one.
         if worker_uxarray:
             annotated["_provenance"]["remote_uxarray_version"] = worker_uxarray
+        for key in (
+            "hostname",
+            "python_version",
+            "xarray_version",
+            "numpy_version",
+            "slurm_job_id",
+            "pbs_job_id",
+        ):
+            if worker_runtime.get(key):
+                annotated["_provenance"][f"remote_{key}"] = worker_runtime[key]
         return annotated
 
     def _run_local_inspect_mesh(self, file_path: str) -> Dict[str, Any]:

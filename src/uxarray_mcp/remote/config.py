@@ -162,7 +162,7 @@ class HPCConfig:
     def resolve_endpoint(
         self, endpoint: str | None = None, path: str | None = None
     ) -> EndpointProfile | None:
-        """Resolve an explicit endpoint name, default endpoint, or raw UUID."""
+        """Resolve an explicit endpoint, matching path prefix, or default."""
         if endpoint:
             if endpoint in self.endpoints:
                 return self.endpoints[endpoint]
@@ -184,6 +184,23 @@ class HPCConfig:
                 f"Configured endpoint names: {configured}. "
                 "Pass a configured endpoint name or a Globus Compute endpoint UUID."
             )
+
+        if path:
+            matches: list[tuple[int, EndpointProfile, str]] = []
+            for profile in self.endpoints.values():
+                for prefix in profile.path_prefixes:
+                    if path.startswith(prefix):
+                        matches.append((len(prefix), profile, prefix))
+            if matches:
+                longest = max(length for length, _, _ in matches)
+                best = [item for item in matches if item[0] == longest]
+                names = {profile.name for _, profile, _ in best}
+                if len(names) > 1:
+                    raise ValueError(
+                        f"Path {path!r} matches equally specific endpoint prefixes: "
+                        + ", ".join(sorted(names))
+                    )
+                return best[0][1]
 
         if self.default_endpoint and self.default_endpoint in self.endpoints:
             return self.endpoints[self.default_endpoint]

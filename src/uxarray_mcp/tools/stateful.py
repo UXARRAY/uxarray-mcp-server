@@ -159,12 +159,12 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
         probe_path_access,
         validate_hpc_setup,
     )
-    from uxarray_mcp.tools.inspection import validate_dataset
     from uxarray_mcp.tools.remote_tools import (
         calculate_area,
         calculate_zonal_mean,
         inspect_mesh,
         inspect_variable,
+        validate_dataset,
     )
 
     workflow = get_workflow(workflow_id)
@@ -182,6 +182,8 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
     data_path = workflow["inputs"].get("data_path")
     variable_name = workflow["inputs"].get("variable_name")
     sample_path = workflow["inputs"].get("sample_path")
+    use_remote = bool(workflow["inputs"].get("use_remote", False))
+    endpoint = workflow["inputs"].get("endpoint")
     session_id = workflow.get("session_id")
 
     steps: list[tuple[str, Any]] = [
@@ -190,17 +192,31 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
             lambda: validate_hpc_setup(
                 run_remote_probe=True,
                 sample_path=sample_path,
+                endpoint=endpoint,
             ),
         ),
         (
             "probe_path_access",
-            lambda: probe_path_access(sample_path or file_path, use_remote=False),
+            lambda: probe_path_access(
+                sample_path or file_path,
+                use_remote=use_remote,
+                endpoint=endpoint,
+            ),
         ),
-        ("inspect_mesh", lambda: inspect_mesh(file_path)),
+        (
+            "inspect_mesh",
+            lambda: inspect_mesh(file_path, use_remote=use_remote, endpoint=endpoint),
+        ),
         (
             "inspect_variable",
             lambda: (
-                inspect_variable(file_path, data_path, variable_name)
+                inspect_variable(
+                    file_path,
+                    data_path,
+                    variable_name,
+                    use_remote=use_remote,
+                    endpoint=endpoint,
+                )
                 if data_path is not None
                 else {"skipped": True}
             ),
@@ -208,12 +224,20 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
         (
             "validate_dataset",
             lambda: (
-                validate_dataset(file_path, data_path)
+                validate_dataset(
+                    file_path,
+                    data_path,
+                    use_remote=use_remote,
+                    endpoint=endpoint,
+                )
                 if data_path is not None
                 else {"skipped": True}
             ),
         ),
-        ("calculate_area", lambda: calculate_area(file_path)),
+        (
+            "calculate_area",
+            lambda: calculate_area(file_path, use_remote=use_remote, endpoint=endpoint),
+        ),
     ]
 
     # `calculate_zonal_mean` depends on inspected variables and validation.
@@ -286,7 +310,13 @@ def _execute_workflow(workflow_id: str, *, resume: bool) -> dict[str, Any]:
             )
             tracker.stage(zonal_step_name, f"Running {zonal_step_name}")
             update_workflow_step(workflow_id, zonal_step_name, status="running")
-            zonal_result = calculate_zonal_mean(file_path, data_path, selected_variable)
+            zonal_result = calculate_zonal_mean(
+                file_path,
+                data_path,
+                selected_variable,
+                use_remote=use_remote,
+                endpoint=endpoint,
+            )
             last_results[zonal_step_name] = zonal_result
             update_workflow_step(
                 workflow_id,
@@ -341,6 +371,8 @@ def run_workflow(
     session_id: str | None = None,
     dataset_handle: str | None = None,
     sample_path: str | None = None,
+    use_remote: bool = False,
+    endpoint: str | None = None,
 ) -> dict[str, Any]:
     """Run the canonical scientific workflow with persisted state and progress."""
     resolved_grid, resolved_data = _resolve_workflow_inputs(
@@ -356,6 +388,8 @@ def run_workflow(
             "data_path": resolved_data,
             "variable_name": variable_name,
             "sample_path": sample_path,
+            "use_remote": use_remote,
+            "endpoint": endpoint,
         },
         session_id=session_id,
         steps=[
@@ -379,7 +413,10 @@ def run_workflow(
             "session_id": session_id,
             "dataset_handle": dataset_handle,
             "sample_path": sample_path,
+            "use_remote": use_remote,
+            "endpoint": endpoint,
         },
+        venue=(f"hpc:{endpoint}" if use_remote and endpoint else "local"),
     )
 
 

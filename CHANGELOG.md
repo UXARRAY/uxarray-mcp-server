@@ -6,6 +6,30 @@ uses Semantic Versioning for public releases.
 ## Unreleased
 
 ### Fixed
+- Preserve the original remote worker exception when synchronous MCP tools run
+  inside an event loop instead of masking it with a nested `asyncio.run` error.
+- Route facility-only paths to the endpoint with the longest configured path
+  prefix before using the default endpoint.
+- `list_datasets` now accepts an explicit endpoint and uses the common remote
+  execution path instead of silently selecting the configured default.
+- Dataset validation can run on the selected endpoint. Composite and persisted
+  workflows no longer attempt facility-only paths locally, and unavailable or
+  failed validation blocks downstream statistics and variable plots.
+- Remote variable metadata converts NumPy scalar attributes to JSON-safe Python
+  values.
+
+### Added
+- Remote scientific results now distinguish submitter and worker Python
+  versions through `remote_python_version`; the runtime envelope is extensible
+  to hostname, Xarray, NumPy, and scheduler identifiers.
+- Curl scientific status reports whether physical scaling was requested and
+  actually applied. Missing radius metadata or unsupported worker APIs cannot
+  appear as a complete physical result.
+- A reproducible layered-readiness matrix exercises manager, worker, path,
+  portable calculation, native workflow, venue, and worker provenance across
+  named endpoints.
+
+### Fixed
 - Pin the MCP Python SDK to `<2` until toolregistry-server supports the renamed
   `MCPError` exception in SDK 2.x. Fresh installs previously resolved MCP 2.0,
   installed successfully, then failed when starting the stdio server.

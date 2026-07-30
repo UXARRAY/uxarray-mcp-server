@@ -48,12 +48,14 @@ def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
     """
     try:
         asyncio.get_running_loop()
-        # Inside async context (e.g. MCP server) — run in a new thread
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return pool.submit(asyncio.run, async_call()).result()
     except RuntimeError:
         # No event loop running (tests, CLI) — run directly
         return asyncio.run(async_call())
+
+    # Inside async context (e.g. MCP server) — run in a new thread. Keep the
+    # operation outside the loop-detection try so its RuntimeError is preserved.
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        return pool.submit(lambda: asyncio.run(async_call())).result()
 
 
 def _path_is_locally_reachable(path_hint: str | None) -> bool:
@@ -216,6 +218,29 @@ def inspect_mesh(
         local_call=lambda: _inspect_mesh_local(file_path),
         remote_call=lambda agent: _run_sync(
             lambda: agent.inspect_mesh_remote(file_path, use_remote)
+        ),
+    )
+
+
+def validate_dataset(
+    grid_path: str,
+    data_path: str,
+    use_remote: bool = False,
+    endpoint: str | None = None,
+    session_id: str | None = None,
+) -> Dict[str, Any]:
+    """Validate a dataset locally or on the selected endpoint."""
+    from uxarray_mcp.tools.inspection import validate_dataset as local_validate
+
+    return _run_with_optional_hpc(
+        tool_name="validate_dataset",
+        use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=grid_path,
+        session_id=session_id,
+        local_call=lambda: local_validate(grid_path, data_path),
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.validate_dataset_remote(grid_path, data_path, True)
         ),
     )
 
