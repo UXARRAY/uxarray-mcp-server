@@ -7,6 +7,7 @@ Python API, but MCP clients get fewer, intent-shaped choices.
 
 from __future__ import annotations
 
+from functools import wraps
 from typing import Any
 
 
@@ -34,6 +35,78 @@ def _reject_unsupported_remote(use_remote: bool, operation: str) -> None:
         )
 
 
+def _finalize_analysis_result(operation: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Attach front-door semantics without changing low-level operation results."""
+    status = "complete"
+    physically_interpretable: bool | None = None
+    warning_codes: list[str] = []
+
+    if operation == "validate_dataset":
+        passed = result.get("passed", result.get("is_valid"))
+        physically_interpretable = None
+        if passed is False:
+            status = "invalid"
+            warning_codes.append("DATASET_VALIDATION_FAILED")
+    elif operation in {"curl", "divergence"}:
+        evidence = result.get("component_evidence", {})
+        metadata_supported = bool(
+            evidence.get("units_supported")
+            and evidence.get("component_identity_supported")
+        )
+        scaling_supported = operation != "curl" or bool(result.get("scale_by_radius"))
+        physically_interpretable = bool(
+            metadata_supported
+            and scaling_supported
+            and not result.get("component_warnings")
+        )
+        if not physically_interpretable:
+            status = "warning"
+            if not metadata_supported:
+                warning_codes.append("VECTOR_COMPONENTS_UNVERIFIED")
+            if metadata_supported and not scaling_supported:
+                warning_codes.append("PHYSICAL_SCALING_UNVERIFIED")
+
+    result["scientific_status"] = {
+        "status": status,
+        "physically_interpretable": physically_interpretable,
+        "warning_codes": warning_codes,
+    }
+    result["postconditions"] = {
+        "status": "not_evaluated",
+        "checks": [],
+        "independent_verification": False,
+    }
+    return result
+
+
+def _with_analysis_contract(func: Any) -> Any:
+    """Preserve the MCP schema signature while finalizing successful results."""
+
+    @wraps(func)
+    def wrapped(operation: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        result = func(operation, *args, **kwargs)
+        normalized = operation.strip().lower().replace("-", "_")
+        return _finalize_analysis_result(normalized, result)
+
+    return wrapped
+
+
+def _resolve_optional_session(
+    session_id: str | None, dataset_handle: str | None
+) -> str | None:
+    """Ignore a nonexistent optional session when explicit paths are sufficient."""
+    if session_id is None or dataset_handle is not None:
+        return session_id
+    from uxarray_mcp.state import get_session
+
+    try:
+        get_session(session_id)
+    except FileNotFoundError:
+        return None
+    return session_id
+
+
+@_with_analysis_contract
 def run_analysis(
     operation: str,
     grid_path: str | None = None,
@@ -129,6 +202,7 @@ def run_analysis(
     )
 
     op = operation.strip().lower().replace("-", "_")
+    session_id = _resolve_optional_session(session_id, dataset_handle)
 
     if op == "inspect_mesh":
         return inspect_mesh(
