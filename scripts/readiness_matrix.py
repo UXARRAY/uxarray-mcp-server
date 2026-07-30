@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
+import platform
 from pathlib import Path
 from typing import Any, Callable
 
@@ -25,13 +27,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--server-commit", required=True)
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
 
     from uxarray_mcp.tools import analyze_dataset, endpoint_status, probe_path_access
     from uxarray_mcp.tools.frontdoor import run_analysis
 
-    report: dict[str, Any] = {"protocol": manifest.get("protocol", {}), "endpoints": {}}
+    report: dict[str, Any] = {
+        "protocol": manifest.get("protocol", {}),
+        "software": {
+            "uxarray_mcp_version": importlib.metadata.version("uxarray-mcp"),
+            "uxarray_mcp_commit": args.server_commit,
+            "submitter_python_version": platform.python_version(),
+        },
+        "endpoints": {},
+    }
     for endpoint, config in manifest["endpoints"].items():
         grid_path = config.get("grid_path")
         data_path = config.get("data_path")
