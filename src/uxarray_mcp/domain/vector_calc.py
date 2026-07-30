@@ -155,6 +155,39 @@ def _vector_component_warnings(
     return warnings, warning_codes
 
 
+def _vector_component_evidence(u: Any, v: Any) -> dict[str, Any]:
+    """Return explicit metadata evidence for physical vector interpretation."""
+
+    def evidence(var: Any) -> dict[str, str | bool | None]:
+        attrs = getattr(var, "attrs", {}) or {}
+        units = str(attrs.get("units", "")).strip()
+        standard_name = str(attrs.get("standard_name", "")).strip()
+        long_name = str(attrs.get("long_name", "")).strip()
+        direction = f"{standard_name} {long_name}".lower()
+        return {
+            "units": units or None,
+            "standard_name": standard_name or None,
+            "long_name": long_name or None,
+            "velocity_units": any(
+                hint in units.lower() for hint in _VELOCITY_LIKE_UNIT_HINTS
+            ),
+            "eastward": any(term in direction for term in ("eastward", "zonal")),
+            "northward": any(term in direction for term in ("northward", "meridional")),
+        }
+
+    u_evidence, v_evidence = evidence(u), evidence(v)
+    return {
+        "u": u_evidence,
+        "v": v_evidence,
+        "units_supported": bool(
+            u_evidence["velocity_units"] and v_evidence["velocity_units"]
+        ),
+        "component_identity_supported": bool(
+            u_evidence["eastward"] and v_evidence["northward"]
+        ),
+    }
+
+
 def compute_gradient(
     uxds: Any,
     variable_name: str,
@@ -311,6 +344,7 @@ def compute_curl(
     component_warnings, warning_codes = _vector_component_warnings(
         u_variable, v_variable, u, v, "curl"
     )
+    component_evidence = _vector_component_evidence(u, v)
 
     result, uxarray_warnings = _call_capturing_warnings(
         lambda: u.curl(v, scale_by_radius=scale_by_radius)
@@ -350,6 +384,7 @@ def compute_curl(
         "scale_by_radius": bool(scale_by_radius),
         "stats": stats,
         "component_warnings": component_warnings,
+        "component_evidence": component_evidence,
     }
     from uxarray_mcp.provenance import attach_scientific_status
 
@@ -423,6 +458,7 @@ def compute_divergence(
     component_warnings, warning_codes = _vector_component_warnings(
         u_variable, v_variable, u, v, "divergence"
     )
+    component_evidence = _vector_component_evidence(u, v)
 
     result, uxarray_warnings = _call_capturing_warnings(lambda: u.divergence(v))
     for warning in uxarray_warnings:
@@ -451,6 +487,7 @@ def compute_divergence(
         "n_face": int(uxds.uxgrid.n_face),
         "stats": stats,
         "component_warnings": component_warnings,
+        "component_evidence": component_evidence,
     }
     from uxarray_mcp.provenance import attach_scientific_status
 
