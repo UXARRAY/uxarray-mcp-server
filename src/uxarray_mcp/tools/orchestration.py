@@ -46,6 +46,7 @@ def _png_meta(items: list[Any]) -> dict[str, Any]:
         "image_size_bytes": image_size_bytes,
         "grid_info": meta.get("grid_info"),
         "variable_name": meta.get("variable_name"),
+        "_provenance": meta.get("_provenance", {}),
     }
 
 
@@ -126,6 +127,7 @@ def analyze_dataset(
         inspect_variable,
         plot_mesh,
         plot_variable,
+        validate_dataset,
     )
 
     resolved_grid, resolved_data = _resolve_plot_paths(
@@ -155,14 +157,15 @@ def analyze_dataset(
     selected_variable: Optional[str] = variable_name
 
     if resolved_data is not None:
-        # validate_dataset is local-only by design (data is read directly);
-        # if the dispatcher were ever added, prefer that. For now use the
-        # local variant via inspection.validate_dataset.
-        from .inspection import validate_dataset as _validate_dataset
-
         validation = _safe_call(
             "validate_dataset",
-            lambda: _validate_dataset(resolved_grid, resolved_data),
+            lambda: validate_dataset(
+                resolved_grid,
+                resolved_data,
+                use_remote=use_remote,
+                endpoint=endpoint,
+                session_id=session_id,
+            ),
             warnings,
         )
         if validation is not None:
@@ -204,7 +207,7 @@ def analyze_dataset(
 
     # ── Stage 5: zonal mean (needs data + face-centered variable) ───────────
     zonal_mean: Optional[dict[str, Any]] = None
-    validation_passed = validation is None or validation.get("passed") is not False
+    validation_passed = validation is not None and validation.get("passed") is True
     if (
         resolved_data is not None
         and selected_variable is not None
@@ -226,7 +229,7 @@ def analyze_dataset(
             stages_run.append("calculate_zonal_mean")
     elif resolved_data is not None and selected_variable is not None:
         warnings.append(
-            "calculate_zonal_mean: skipped because dataset validation failed."
+            "calculate_zonal_mean: skipped because dataset validation failed or was unavailable."
         )
 
     # ── Stage 6 + 7: plots (optional) ────────────────────────────────────────
@@ -269,7 +272,9 @@ def analyze_dataset(
                 variable_plot = _png_meta(var_plot_items)
                 stages_run.append("plot_variable")
         elif resolved_data is not None and selected_variable is not None:
-            warnings.append("plot_variable: skipped because dataset validation failed.")
+            warnings.append(
+                "plot_variable: skipped because dataset validation failed or was unavailable."
+            )
 
     # ── Recommended next steps ──────────────────────────────────────────────
     next_steps: list[str] = []
@@ -322,7 +327,15 @@ def analyze_dataset(
     # (used by tests that import `inspect_mesh` directly from this module).
     _ = inspect_mesh  # keep import alive
 
-    stage_results = [mesh, variables, area, zonal_mean]
+    stage_results = [
+        mesh,
+        validation,
+        variables,
+        area,
+        zonal_mean,
+        mesh_plot,
+        variable_plot,
+    ]
     venues = {
         stage.get("_provenance", {}).get("execution_venue")
         for stage in stage_results

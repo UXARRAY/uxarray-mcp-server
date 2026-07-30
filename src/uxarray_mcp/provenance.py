@@ -84,13 +84,17 @@ def attach_scientific_status(
     *,
     warnings: list[str] | None = None,
     warning_codes: list[str] | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach a machine-actionable scientific interpretation status."""
     messages = warnings or []
-    result["scientific_status"] = {
+    status = {
         "status": "warning" if messages else "complete",
         "physically_interpretable": not messages,
         "warning_codes": warning_codes or [],
         "warnings": messages,
     }
+    if extra:
+        status.update(extra)
+    result["scientific_status"] = status
     return result

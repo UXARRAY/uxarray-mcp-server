@@ -267,6 +267,16 @@ class TestRemoteTools:
         assert isinstance(result, dict)
         assert result["n_face"] == 192
 
+    @pytest.mark.asyncio
+    async def test_run_sync_preserves_remote_runtime_error(self):
+        from uxarray_mcp.tools.remote_tools import _run_sync
+
+        async def fail():
+            raise RuntimeError("original worker failure")
+
+        with pytest.raises(RuntimeError, match="original worker failure"):
+            _run_sync(fail)
+
     def test_remote_inspect_variable_invalid_name(self, synthetic_mesh_with_data):
         """Test remote inspect_variable mirrors local invalid-variable behavior."""
         from uxarray_mcp.remote.compute_functions import remote_inspect_variable

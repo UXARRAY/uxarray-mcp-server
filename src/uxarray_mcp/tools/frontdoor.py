@@ -113,12 +113,13 @@ def run_analysis(
         subset_polygon,
         write_result,
     )
-    from uxarray_mcp.tools.inspection import calculate_zonal_anomaly, validate_dataset
+    from uxarray_mcp.tools.inspection import calculate_zonal_anomaly
     from uxarray_mcp.tools.remote_tools import (
         calculate_area,
         calculate_zonal_mean,
         inspect_mesh,
         inspect_variable,
+        validate_dataset,
     )
     from uxarray_mcp.tools.vector_calc import (
         calculate_azimuthal_mean,
@@ -146,10 +147,12 @@ def run_analysis(
             session_id=session_id,
         )
     if op == "validate_dataset":
-        _reject_unsupported_remote(use_remote, op)
         return validate_dataset(
             _require(grid_path, "grid_path", op),
             _require(data_path, "data_path", op),
+            use_remote=use_remote,
+            endpoint=endpoint,
+            session_id=session_id,
         )
     if op == "calculate_area":
         return calculate_area(

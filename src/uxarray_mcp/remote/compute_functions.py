@@ -162,6 +162,80 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
         "n_edge": int(grid.n_edge),
         "source": file_path,
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
+    }
+
+
+def remote_validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
+    """Validate numeric variables on the worker that can read the dataset."""
+    import os
+    import platform
+
+    import numpy as np
+    import uxarray as ux
+
+    if grid_path.startswith("healpix:"):
+        grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        xr_ds = __import__("xarray").open_dataset(data_path)
+        uxds = ux.UxDataset(xr_ds, uxgrid=grid)
+    elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+        grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        xr_ds = __import__("xarray").open_dataset(data_path)
+        uxds = ux.UxDataset(xr_ds, uxgrid=grid)
+    else:
+        uxds = ux.open_dataset(grid_path, data_path)
+
+    fill_candidates = [1e20, 9.96920996838687e36, -999.0, -9999.0]
+    results = []
+    all_warnings: list[str] = []
+    for name in uxds.data_vars:
+        values = uxds[name].values
+        if not np.issubdtype(values.dtype, np.number):
+            continue
+        is_float = np.issubdtype(values.dtype, np.floating)
+        n_nan = int(np.sum(np.isnan(values))) if is_float else 0
+        n_inf = int(np.sum(np.isinf(values))) if is_float else 0
+        n_fill = 0
+        detected_fill = None
+        if is_float:
+            for candidate in fill_candidates:
+                count = int(np.sum(np.isclose(values, candidate, rtol=1e-3)))
+                if count:
+                    n_fill = count
+                    detected_fill = candidate
+                    break
+        warnings = []
+        if n_nan:
+            warnings.append(f"{name}: contains {n_nan} NaN values")
+        if n_inf:
+            warnings.append(f"{name}: contains {n_inf} Inf values")
+        if n_fill:
+            warnings.append(f"{name}: contains {n_fill} fill values")
+        all_warnings.extend(warnings)
+        results.append(
+            {
+                "name": name,
+                "passed": not warnings,
+                "n_nan": n_nan,
+                "n_inf": n_inf,
+                "n_fill_values": n_fill,
+                "detected_fill_value": detected_fill,
+                "shape": list(values.shape),
+                "dtype": str(values.dtype),
+                "warnings": warnings,
+            }
+        )
+
+    passed = all(item["passed"] for item in results)
+    return {
+        "passed": passed,
+        "is_valid": passed,
+        "n_variables_checked": len(results),
+        "n_variables_failed": sum(not item["passed"] for item in results),
+        "variables": results,
+        "issues": all_warnings,
+        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": platform.python_version(),
     }
 
 
@@ -212,6 +286,7 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
         "area_units": units,
         "n_face": int(grid.n_face),
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -264,6 +339,17 @@ def remote_inspect_variable(
 
     variables = []
 
+    def _jsonable(value: Any) -> Any:
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if isinstance(value, dict):
+            return {str(key): _jsonable(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_jsonable(item) for item in value]
+        return value
+
     for name in var_names:
         if name not in uxds:
             continue
@@ -298,7 +384,7 @@ def remote_inspect_variable(
                 "shape": list(var.shape),
                 "dtype": str(var.dtype),
                 "location": location,
-                "attrs": dict(var.attrs),
+                "attrs": _jsonable(dict(var.attrs)),
                 "statistics": stats,
             }
         )
@@ -311,6 +397,7 @@ def remote_inspect_variable(
             "n_edge": int(uxds.uxgrid.n_edge),
         },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -707,6 +794,7 @@ def remote_calculate_zonal_mean(
             "n_edge": int(uxds.uxgrid.n_edge),
         },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -1155,6 +1243,7 @@ def remote_calculate_gradient(
             "warnings": uxarray_warnings,
         },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -1260,6 +1349,12 @@ def remote_calculate_curl(
             applied_scale = bool(scale_by_radius)
         else:
             result = u.curl(v)
+            if scale_by_radius:
+                component_warnings.append(
+                    "Worker UXarray does not support scale_by_radius; returned "
+                    "the unit-sphere curl."
+                )
+                warning_codes.append("SCALE_BY_RADIUS_UNSUPPORTED")
         _seen: set = set()
         for _w in _caught:
             _msg = str(_w.message)
@@ -1267,6 +1362,7 @@ def remote_calculate_curl(
                 _seen.add(_msg)
                 component_warnings.append(_msg)
                 warning_codes.append("SPHERE_RADIUS_UNAVAILABLE")
+                applied_scale = False
     vals = result.values
     finite = vals[np.isfinite(vals)]
     stats: Dict[str, Any] = (
@@ -1290,10 +1386,13 @@ def remote_calculate_curl(
         "scientific_status": {
             "status": "warning" if component_warnings else "complete",
             "physically_interpretable": not component_warnings,
+            "physical_scaling_requested": bool(scale_by_radius),
+            "physical_scaling_applied": bool(applied_scale),
             "warning_codes": warning_codes,
             "warnings": component_warnings,
         },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -1420,6 +1519,7 @@ def remote_calculate_divergence(
             "warnings": component_warnings,
         },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -1474,6 +1574,7 @@ def remote_calculate_azimuthal_mean(
         "azimuthal_mean_values": values,
         "n_face": int(uxds.uxgrid.n_face),
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -1516,6 +1617,7 @@ def remote_grid_facts(
         "n_node": int(grid.n_node) if hasattr(grid, "n_node") else 0,
         "n_edge": int(grid.n_edge) if hasattr(grid, "n_edge") else 0,
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
     if data_path is not None:
@@ -1634,6 +1736,7 @@ def remote_remap_variable(
         "result_shape": list(remapped.shape),
         "stats": stats,
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -1715,6 +1818,7 @@ def remote_regrid_dataset(
         },
         "per_variable_stats": per_variable,
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -1781,6 +1885,7 @@ def remote_remap_to_rectilinear(
         "target_lon": lon,
         "target_lat": lat,
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }
 
 
@@ -1860,4 +1965,5 @@ def remote_calculate_zonal_anomaly(
             "n_edge": int(uxds.uxgrid.n_edge),
         },
         "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
+        "_worker_python_version": __import__("platform").python_version(),
     }

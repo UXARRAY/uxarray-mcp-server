@@ -63,6 +63,33 @@ def test_hpc_config_load_normalizes_legacy_remote(tmp_path):
     assert config.execution_mode == "hpc"
 
 
+@pytest.mark.asyncio
+async def test_run_sync_preserves_operation_runtime_error():
+    async def fail():
+        raise RuntimeError("original path probe failure")
+
+    with pytest.raises(RuntimeError, match="original path probe failure"):
+        execution_control._run_sync(fail)
+
+
+def test_path_prefix_routing_precedes_default():
+    from uxarray_mcp.remote.config import EndpointProfile
+
+    config = HPCConfig(
+        endpoints={
+            "chrysalis": EndpointProfile(
+                name="chrysalis", endpoint_id="chrysalis-id", path_prefixes=("/lcrc/",)
+            ),
+            "improv": EndpointProfile(
+                name="improv", endpoint_id="improv-id", path_prefixes=("/gpfs/",)
+            ),
+        },
+        default_endpoint="chrysalis",
+    )
+
+    assert config.resolve_endpoint(path="/gpfs/data/file.nc").name == "improv"
+
+
 def test_validate_hpc_setup_without_endpoint_passes_local_only(monkeypatch, tmp_path):
     """No endpoint configured, none requested: this is a valid local-only
     setup and must pass. uxarray-mcp runs locally by default (HPC is

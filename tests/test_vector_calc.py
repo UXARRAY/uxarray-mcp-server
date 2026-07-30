@@ -272,6 +272,7 @@ class TestVectorComponentGuardrail:
         assert result["scientific_status"]["status"] == "warning"
         assert result["scientific_status"]["physically_interpretable"] is False
         assert "VECTOR_UNITS_UNVERIFIED" in result["scientific_status"]["warning_codes"]
+        assert result["scientific_status"]["physical_scaling_requested"] is True
 
     def test_velocity_units_suppress_warning(self):
         # Fields with velocity units set at creation time → no warnings.
@@ -280,6 +281,8 @@ class TestVectorComponentGuardrail:
         assert result["component_warnings"] == []
         assert result["scientific_status"]["status"] == "complete"
         assert result["scientific_status"]["physically_interpretable"] is True
+        assert result["scientific_status"]["physical_scaling_requested"] is False
+        assert result["scientific_status"]["physical_scaling_applied"] is False
 
     def test_curl_warning_reaches_provenance(self, monkeypatch):
         """The tool layer surfaces component warnings into _provenance.warnings."""
