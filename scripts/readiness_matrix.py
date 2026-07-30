@@ -77,16 +77,15 @@ def main() -> int:
             )
         if grid_path:
             entry["native_workflow"] = _capture(
-                lambda grid_path=grid_path,
-                data_path=data_path,
-                variable_name=variable_name,
-                endpoint=endpoint: analyze_dataset(
-                    grid_path=grid_path,
-                    data_path=data_path,
-                    variable_name=variable_name,
-                    use_remote=True,
-                    endpoint=endpoint,
-                    include_plots=False,
+                lambda grid_path=grid_path, data_path=data_path, variable_name=variable_name, endpoint=endpoint: (
+                    analyze_dataset(
+                        grid_path=grid_path,
+                        data_path=data_path,
+                        variable_name=variable_name,
+                        use_remote=True,
+                        endpoint=endpoint,
+                        include_plots=False,
+                    )
                 )
             )
         report["endpoints"][endpoint] = entry
