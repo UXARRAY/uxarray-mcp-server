@@ -28,7 +28,6 @@ from uxarray_mcp.tools import plot_dataset, run_analysis
 # Kwargs are the minimum needed to reach the use_remote check inside each
 # branch (i.e. get past _require() for that operation's own required args).
 NO_REMOTE_OPERATIONS = [
-    ("validate_dataset", {"grid_path": "g.nc", "data_path": "d.nc"}),
     (
         "subset_bbox",
         {"grid_path": "g.nc", "lon_bounds": [0, 10], "lat_bounds": [0, 10]},

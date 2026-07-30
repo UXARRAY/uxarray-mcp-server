@@ -456,6 +456,7 @@ class TestWorkerVersionProvenance:
                 return {
                     "n_face": 1,
                     "_worker_uxarray_version": "0.0.0-worker-different",
+                    "_worker_python_version": "3.11.12",
                 }
 
         class _Exec:
@@ -472,6 +473,7 @@ class TestWorkerVersionProvenance:
 
         prov = result["_provenance"]
         assert prov["remote_uxarray_version"] == "0.0.0-worker-different"
+        assert prov["remote_python_version"] == "3.11.12"
         assert any("drift" in w for w in prov["warnings"])
         # Internal key must not leak into the user-facing result.
         assert "_worker_uxarray_version" not in result
