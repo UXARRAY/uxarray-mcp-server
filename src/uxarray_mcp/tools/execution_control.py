@@ -145,10 +145,11 @@ def _run_sync(awaitable_factory) -> Dict[str, Any]:
     """Run an async call from sync code in CLI and server contexts."""
     try:
         asyncio.get_running_loop()
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return pool.submit(asyncio.run, awaitable_factory()).result()
     except RuntimeError:
         return asyncio.run(awaitable_factory())
+
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        return pool.submit(lambda: asyncio.run(awaitable_factory())).result()
 
 
 def probe_path_access(

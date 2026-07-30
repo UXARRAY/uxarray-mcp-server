@@ -154,19 +154,47 @@ class TestListDatasetsErrors:
 
     def test_remote_scan_fails_fast_when_endpoint_unavailable(self, tmp_path):
         with (
-            patch("uxarray_mcp.tools.catalog.load_config") as mock_load_config,
             patch("uxarray_mcp.tools.catalog.get_agent") as mock_get_agent,
             patch(
                 "uxarray_mcp.tools.catalog._endpoint_is_ready",
                 return_value=(False, "endpoint status='stopped': "),
             ),
         ):
-            mock_load_config.return_value.has_endpoint = True
-            mock_load_config.return_value.endpoint_id = "fake-endpoint"
-            mock_get_agent.return_value = MagicMock()
+            mock_agent = MagicMock()
+            mock_agent.config.endpoint_id = "fake-endpoint"
+            mock_get_agent.return_value = mock_agent
 
             with pytest.raises(RuntimeError, match="HPC endpoint not ready"):
                 list_datasets(str(tmp_path), use_remote=True)
+
+    def test_remote_scan_forwards_named_endpoint(self, tmp_path):
+        with (
+            patch("uxarray_mcp.tools.catalog.get_agent") as mock_get_agent,
+            patch(
+                "uxarray_mcp.tools.catalog._endpoint_is_ready",
+                return_value=(True, "ok"),
+            ),
+            patch("uxarray_mcp.tools.remote_tools._run_sync") as mock_run_sync,
+        ):
+            mock_agent = MagicMock()
+            mock_agent.config.endpoint_id = "improv-id"
+            mock_agent.config.endpoint_name = "improv"
+            mock_get_agent.return_value = mock_agent
+            mock_run_sync.return_value = {
+                "directory": str(tmp_path),
+                "total_files": 0,
+                "truncated": False,
+                "groups": [],
+                "recommendations": [],
+                "_provenance": {"warnings": []},
+            }
+
+            result = list_datasets(str(tmp_path), use_remote=True, endpoint="improv")
+
+            mock_get_agent.assert_called_once_with(
+                endpoint="improv", path=str(tmp_path)
+            )
+            assert result["_provenance"]["inputs"]["endpoint"] == "improv"
 
 
 class TestListDatasetsRecommendations:

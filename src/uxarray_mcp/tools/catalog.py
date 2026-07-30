@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 from typing import Any, Dict, List
 
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.agent import get_agent
-from uxarray_mcp.remote.config import load_config
 from uxarray_mcp.tools.remote_tools import _endpoint_is_ready
 
 # File extensions recognised as potential mesh/data files
@@ -36,6 +34,7 @@ def list_datasets(
     recursive: bool = False,
     max_files: int = 200,
     use_remote: bool = False,
+    endpoint: str | None = None,
 ) -> Dict[str, Any]:
     """Scan a directory for mesh and data files and return a structured catalog.
 
@@ -80,7 +79,7 @@ def list_datasets(
             list_datasets("/lus/grand/projects/climate", recursive=True, max_files=500)
     """
     if use_remote:
-        return _list_datasets_remote(directory, recursive, max_files)
+        return _list_datasets_remote(directory, recursive, max_files, endpoint)
 
     root = Path(directory)
     if not root.exists():
@@ -187,6 +186,7 @@ def list_datasets(
             "recursive": recursive,
             "max_files": max_files,
             "use_remote": False,
+            "endpoint": endpoint,
         },
     )
 
@@ -307,49 +307,28 @@ def _remote_catalog_fn(
 
 
 def _list_datasets_remote(
-    directory: str, recursive: bool, max_files: int
+    directory: str, recursive: bool, max_files: int, endpoint: str | None = None
 ) -> Dict[str, Any]:
-    """Run list_datasets on the configured HPC endpoint."""
-    config = load_config()
-    if not config.has_endpoint:
+    """Run list_datasets on the selected HPC endpoint."""
+    agent = get_agent(endpoint=endpoint, path=directory)
+    config = agent.config
+    if not config.endpoint_id:
         raise RuntimeError(
             "No HPC endpoint configured. Set endpoint_id in config.yaml "
             "or the GLOBUS_COMPUTE_ENDPOINT_ID environment variable."
         )
 
-    agent = get_agent()
     ready, reason = _endpoint_is_ready(agent)
     if not ready:
         raise RuntimeError(
             f"HPC endpoint not ready ({reason}). Remote catalog scan not submitted."
         )
 
-    try:
-        from globus_compute_sdk import Executor
-        from globus_compute_sdk.serialize import AllCodeStrategies, ComputeSerializer
-    except ImportError as exc:
-        raise RuntimeError(
-            "HPC dependencies not installed. Run: uv sync --extra hpc"
-        ) from exc
+    from uxarray_mcp.tools.remote_tools import _run_sync
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
-            category=UserWarning,
-        )
-        executor = Executor(
-            endpoint_id=config.endpoint_id,
-            serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
-        )
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
-            category=UserWarning,
-        )
-        future = executor.submit(_remote_catalog_fn, directory, recursive, max_files)
-        raw = future.result(timeout=config.timeout_seconds)
+    raw = _run_sync(
+        lambda: agent._run_on_hpc(_remote_catalog_fn, directory, recursive, max_files)
+    )
 
     if "error" in raw:
         raise FileNotFoundError(raw["error"])
@@ -364,6 +343,7 @@ def _list_datasets_remote(
             "recursive": recursive,
             "max_files": max_files,
             "use_remote": True,
+            "endpoint": endpoint,
         },
         venue=f"hpc:{endpoint_label}",
     )

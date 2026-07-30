@@ -354,7 +354,15 @@ def compute_curl(
     from uxarray_mcp.provenance import attach_scientific_status
 
     return attach_scientific_status(
-        result, warnings=component_warnings, warning_codes=warning_codes
+        result,
+        warnings=component_warnings,
+        warning_codes=warning_codes,
+        extra={
+            "physical_scaling_requested": bool(scale_by_radius),
+            "physical_scaling_applied": bool(
+                scale_by_radius and not deduped_uxarray_warnings
+            ),
+        },
     )
 
 
