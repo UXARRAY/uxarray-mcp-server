@@ -1,5 +1,5 @@
 {% set name = "uxarray-mcp" %}
-{% set version = "0.2.1" %}
+{% set version = "0.2.2" %}
 {% set python_min = "3.12" %}
 
 package:
@@ -8,7 +8,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/u/uxarray-mcp/uxarray_mcp-{{ version }}.tar.gz
-  sha256: e8a21c156ab226ba6eb4f941b3cea754b4d2247318f34755df569f7d1e0d03e8
+  sha256: 67f55a4ff7c832a665af1a7ecaf68e4856864243c6e2ed4ac7e1755d8cd2e220
 
 build:
   noarch: python
