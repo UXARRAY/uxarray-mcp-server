@@ -116,16 +116,17 @@ path exists.
 2. **Record the protocol version we actually speak.** Nothing in the repo said
    `2025-11-25`. Reviewers of the eScience artifact will ask which spec the 480
    runs used. Added to the README alongside this document.
-3. **Note on issue #86** that MRTR is the intended mechanism once available, so
-   the design is not re-litigated from scratch later.
+3. ~~Note on issue #86 that MRTR is the intended mechanism.~~ **Added**, with
+   the caveat that the precondition data model should be designed to surface
+   either as a refusal now or as `input_required` later.
 
 ### Upstream, not ours to merge
 
-4. **Open a tracking issue on `Oaklight/toolregistry-server`** for `mcp` 2.0.0 /
-   spec 2026-07-28, stating concretely that `adapters/mcp/adapter.py` imports
-   `mcp.types`, which no longer exists, and that the unbounded `mcp>=1.8.0`
-   means downstreams hit this without warning. Suggest an upper bound as an
-   interim fix. *(Draft only — do not post without Rajeev.)*
+4. ~~Open a tracking issue on `Oaklight/toolregistry-server`.~~ **Filed** as
+   [Oaklight/toolregistry-server#54](https://github.com/Oaklight/toolregistry-server/issues/54):
+   `adapters/mcp/adapter.py` imports `mcp.types`, which 2.0.0 removes, and the
+   unbounded `mcp>=1.8.0` means downstreams hit it on a routine lock refresh.
+   Suggests an upper bound as the interim fix.
 
 ### When upstream lands support
 
