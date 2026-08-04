@@ -1863,6 +1863,51 @@ def remote_remap_to_rectilinear(
 
     lon = list(target_lon)
     lat = list(target_lat)
+    # Same coverage screen as the local path, inlined because the worker does
+    # not have uxarray_mcp installed.
+    grid_lon = (np.asarray(uxda.uxgrid.node_lon, dtype=float) + 180.0) % 360.0 - 180.0
+    grid_lat = np.asarray(uxda.uxgrid.node_lat, dtype=float)
+    bbox = {
+        "lon_min": float(grid_lon.min()),
+        "lon_max": float(grid_lon.max()),
+        "lat_min": float(grid_lat.min()),
+        "lat_max": float(grid_lat.max()),
+    }
+    t_lon = (np.asarray(lon, dtype=float) + 180.0) % 360.0 - 180.0
+    mesh_lon, mesh_lat = np.meshgrid(t_lon, np.asarray(lat, dtype=float))
+    pts = np.column_stack([mesh_lon.ravel(), mesh_lat.ravel()])
+    in_bbox = (
+        (pts[:, 0] >= bbox["lon_min"])
+        & (pts[:, 0] <= bbox["lon_max"])
+        & (pts[:, 1] >= bbox["lat_min"])
+        & (pts[:, 1] <= bbox["lat_max"])
+    )
+    n_points = int(pts.shape[0])
+    n_inside = int(in_bbox.sum())
+    coverage_test = "bounding_box"
+    if n_inside and n_points <= 20000:
+        try:
+            _faces, counts = uxda.uxgrid.get_faces_containing_point(pts[in_bbox])
+            n_inside = int(np.count_nonzero(np.asarray(counts) > 0))
+            coverage_test = "point_in_cell"
+        except Exception:
+            coverage_test = "bounding_box"
+    coverage_codes = []
+    if n_inside == 0:
+        coverage_codes.append("REMAP_COVERAGE_ZERO")
+    elif n_inside < n_points:
+        coverage_codes.append("REMAP_COVERAGE_PARTIAL")
+    coverage_codes.append("REMAP_METHOD_NOT_CONSERVATIVE")
+    coverage = {
+        "n_target_points": n_points,
+        "points_in_source": n_inside,
+        "coverage_fraction": (float(n_inside) / n_points) if n_points else 0.0,
+        "source_bbox": bbox,
+        "test": coverage_test,
+        "method_is_conservative": False,
+        "warning_codes": coverage_codes,
+    }
+
     remapped = uxda.remap.to_rectilinear(lon, lat, backend=backend)
     vals = np.asarray(remapped.values, dtype=float)
     finite = vals[np.isfinite(vals)]
@@ -1881,6 +1926,7 @@ def remote_remap_to_rectilinear(
         "backend": backend,
         "target_shape": [len(lat), len(lon)],
         "stats": stats,
+        "source_coverage": coverage,
         "values": vals.tolist(),
         "target_lon": lon,
         "target_lat": lat,

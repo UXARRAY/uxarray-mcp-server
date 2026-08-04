@@ -3,7 +3,7 @@
 Working memory for this server: what we intend to do, why, and what is
 already filed. Update this rather than re-deriving context from scratch.
 
-Last updated 2026-07-31.
+Last updated 2026-08-04.
 
 ## Where the work comes from
 
@@ -34,6 +34,14 @@ Three sources feed this list.
 | [#91](https://github.com/UXARRAY/uxarray-mcp-server/issues/91) | Results have no declared shape a caller can validate against | review |
 | [#92](https://github.com/UXARRAY/uxarray-mcp-server/issues/92) | Test fixtures have no physical radius, vertical coordinate, or mask | review |
 | [#93](https://github.com/UXARRAY/uxarray-mcp-server/issues/93) | No eval for multi-turn behavior: handles, chaining, and recovery | review |
+
+## Addressed on `main`
+
+| Issue | What landed |
+|---|---|
+| [#85](https://github.com/UXARRAY/uxarray-mcp-server/issues/85) | `remap_to_rectilinear` returns a `source_coverage` block (`points_in_source` / `n_target_points`, source bounding box, point-in-cell or bounding-box test) and raises `REMAP_COVERAGE_ZERO`, `REMAP_COVERAGE_PARTIAL`, and `REMAP_METHOD_NOT_CONSERVATIVE`. Refusing on zero coverage still depends on #86. |
+| [#87](https://github.com/UXARRAY/uxarray-mcp-server/issues/87) | `scale_by_radius` already defaults to `True` on `main`, matching the UXarray accessor; the issue describes a state that predates the readiness-contract work. Verify and close. |
+| [#88](https://github.com/UXARRAY/uxarray-mcp-server/issues/88) | `tests/test_payload_budget.py` asserts per-operation result byte budgets, a signal-fraction floor, absence of discovery-only keys in results, and a ceiling on the serialized core tool specification. Budgets are ratchets to tighten as #83 and #89 land. |
 
 Upstream, blocking us:
 

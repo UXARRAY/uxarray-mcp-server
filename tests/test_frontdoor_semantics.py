@@ -101,3 +101,29 @@ def test_dataset_handle_keeps_strict_session_resolution():
         _resolve_optional_session("required-session", "dataset_123")
         == "required-session"
     )
+
+
+def test_remap_zero_coverage_is_not_physically_interpretable():
+    result = _finalize_analysis_result(
+        "remap_to_rectilinear",
+        {
+            "stats": {"mean": 1.0},
+            "source_coverage": {
+                "points_in_source": 0,
+                "n_target_points": 25,
+                "warning_codes": [
+                    "REMAP_COVERAGE_ZERO",
+                    "REMAP_METHOD_NOT_CONSERVATIVE",
+                ],
+            },
+        },
+    )
+
+    assert result["scientific_status"] == {
+        "status": "warning",
+        "physically_interpretable": False,
+        "warning_codes": [
+            "REMAP_COVERAGE_ZERO",
+            "REMAP_METHOD_NOT_CONSERVATIVE",
+        ],
+    }
