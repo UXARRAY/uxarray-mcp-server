@@ -271,6 +271,13 @@ Actions:
 | `status` | Endpoint manager plus optional worker probe |
 | `validate` | SDK auth, endpoint reachability, worker probe, optional sample path |
 | `probe_path` | Check whether one exact path is readable locally or remotely |
+| `check_yac` | Confirm native YAC imports and completes a real remap on the worker |
+
+`check_yac` matters on a freshly built endpoint: YAC is compiled separately
+from the Python environment, so it can be missing or mislinked on a worker that
+is otherwise healthy. The check runs inside a worker-side subprocess, because a
+bad YAC/MPI link can abort the importing process outright — that would
+otherwise surface as an opaque `WorkerLost` rather than a diagnosable result.
 
 ### `probe_path_access`
 

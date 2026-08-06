@@ -10,6 +10,7 @@ def compute_zonal_mean_stats(
     variable_name: str,
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
+    time_index: int = 0,
 ) -> dict:
     """Compute zonal mean statistics from a loaded UXarray dataset.
 
@@ -23,6 +24,9 @@ def compute_zonal_mean_stats(
         Latitude specification for zonal bands.
     conservative : bool
         If True, use area-weighted conservative averaging.
+    time_index : int
+        Index used to reduce any non-latitude dimension (e.g. time) so the
+        returned profile is 1-D.
 
     Returns
     -------
@@ -48,8 +52,9 @@ def compute_zonal_mean_stats(
     else:
         zonal_result = var.zonal_mean(conservative=conservative)
 
-    latitudes = zonal_result.coords["latitudes"].values.tolist()
-    zonal_mean_values = zonal_result.values.tolist()
+    latitudes, zonal_mean_values, reduced_dims = extract_profile(
+        zonal_result, "latitudes", time_index=time_index
+    )
 
     grid_info = {
         "n_face": int(uxds.uxgrid.n_face),
@@ -62,6 +67,7 @@ def compute_zonal_mean_stats(
         "latitudes": latitudes,
         "zonal_mean_values": zonal_mean_values,
         "conservative": conservative,
+        "reduced_dims": reduced_dims,
         "grid_info": grid_info,
     }
 
@@ -153,3 +159,51 @@ def compute_zonal_anomaly_stats(
             "n_edge": int(uxds.uxgrid.n_edge),
         },
     }
+
+
+def extract_profile(
+    result: Any,
+    coord_name: str,
+    time_index: int = 0,
+) -> tuple[list, list, dict]:
+    """Return ``(coordinate_values, profile_values, reduced_dims)``.
+
+    ``zonal_mean``/``azimuthal_mean`` place their new coordinate at the former
+    face-axis position, which is *not* necessarily axis 0: a variable with dims
+    ``(time, n_face)`` reduces to ``(time, latitudes)``.  Selecting the
+    coordinate positionally therefore returns the time axis and silently
+    mislabels time indices as degrees, so the coordinate is always looked up by
+    name.
+
+    Any remaining dimension is collapsed to a single index so callers get the
+    1-D series a line plot requires.  Which index is used depends on the
+    dimension: a time axis uses ``time_index``, anything else (a vertical
+    level, an ensemble member) uses 0, because ``time_index`` says nothing
+    about those.  Every collapse is reported in ``reduced_dims`` -- returning a
+    profile that is one slice of a multi-level field without saying so is how a
+    caller ends up believing a single level is the whole answer.
+    """
+    if coord_name in result.coords:
+        coords = result.coords[coord_name].values.tolist()
+    else:
+        # Older UXarray builds may not name the coordinate; the reduced axis is
+        # always the trailing one in that case.
+        coord_name = result.dims[-1]
+        coords = result.coords[coord_name].values.tolist()
+
+    reduced: dict = {}
+    selection: dict = {}
+    for dim in result.dims:
+        if dim == coord_name:
+            continue
+        size = int(result.sizes[dim])
+        if size == 1:
+            selection[dim] = 0
+            continue
+        index = time_index if "time" in str(dim).lower() else 0
+        selection[dim] = index
+        reduced[str(dim)] = {"index": index, "size": size}
+
+    if selection:
+        result = result.isel(**selection)
+    return coords, result.values.tolist(), reduced

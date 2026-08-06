@@ -5,6 +5,8 @@ from __future__ import annotations
 import warnings as _warnings_module
 from typing import Any, Callable, TypeVar
 
+from uxarray_mcp.domain.zonal import extract_profile
+
 _T = TypeVar("_T")
 
 
@@ -503,6 +505,7 @@ def compute_azimuthal_mean(
     center_lat: float,
     outer_radius: float,
     radius_step: float,
+    time_index: int = 0,
 ) -> dict:
     """Compute the azimuthal (radial) mean around a centre point.
 
@@ -525,6 +528,9 @@ def compute_azimuthal_mean(
         Maximum radius in great-circle degrees.
     radius_step : float
         Radial bin width in great-circle degrees.
+    time_index : int
+        Index used to reduce any non-radial dimension (e.g. time) so the
+        returned profile is 1-D.
 
     Returns
     -------
@@ -548,9 +554,11 @@ def compute_azimuthal_mean(
         radius_step=radius_step,
     )
 
-    # result is an xr.DataArray with a radius coordinate
-    radii = result.coords[result.dims[0]].values.tolist()
-    values = result.values.tolist()
+    # ``radius`` replaces the face axis, which is not necessarily axis 0, so
+    # the coordinate is looked up by name rather than by position.
+    radii, values, reduced_dims = extract_profile(
+        result, "radius", time_index=time_index
+    )
 
     return {
         "variable_name": variable_name,
@@ -559,5 +567,6 @@ def compute_azimuthal_mean(
         "radius_step_deg": radius_step,
         "radii_deg": radii,
         "azimuthal_mean_values": values,
+        "reduced_dims": reduced_dims,
         "n_face": int(uxds.uxgrid.n_face),
     }

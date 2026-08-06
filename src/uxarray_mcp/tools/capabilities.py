@@ -5,7 +5,12 @@ from typing import Any, Dict, List, Optional
 
 import uxarray as ux
 
-from uxarray_mcp.domain import load_dataset, load_grid
+from uxarray_mcp.domain import (
+    is_healpix_spec,
+    load_dataset,
+    load_grid,
+    parse_healpix_zoom,
+)
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.config import load_config
 
@@ -64,9 +69,8 @@ def _local_grid_facts(grid_path: str, data_path: Optional[str]) -> Dict[str, Any
     the same small facts structure whether the grid lives on the local disk or
     on an HPC worker.
     """
-    if grid_path.lower().startswith("healpix"):
-        parts = grid_path.split(":")
-        zoom = int(parts[1]) if len(parts) > 1 else 1
+    if is_healpix_spec(grid_path):
+        zoom = parse_healpix_zoom(grid_path)
         try:
             grid = ux.Grid.from_healpix(zoom=zoom)
         except Exception as e:

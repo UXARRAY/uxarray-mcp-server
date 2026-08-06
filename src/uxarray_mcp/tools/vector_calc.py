@@ -436,6 +436,7 @@ def calculate_azimuthal_mean(
     use_remote: bool = False,
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
+    time_index: int = 0,
 ) -> Dict[str, Any]:
     """Compute the azimuthal (radial) mean of a variable around a centre point.
 
@@ -468,6 +469,9 @@ def calculate_azimuthal_mean(
         Named endpoint to target when several are configured.
     session_id : str, optional
         Session to track this operation under.
+    time_index : int
+        Index used to reduce any non-radial dimension (e.g. time) so the
+        returned profile is one-dimensional.
 
     Returns
     -------
@@ -501,13 +505,20 @@ def calculate_azimuthal_mean(
         "center_lat": center_lat,
         "outer_radius": outer_radius,
         "radius_step": radius_step,
+        "time_index": time_index,
     }
 
     def _local():
         uxds = load_dataset(grid_path, data_path)
         return attach_provenance(
             compute_azimuthal_mean(
-                uxds, variable_name, center_lon, center_lat, outer_radius, radius_step
+                uxds,
+                variable_name,
+                center_lon,
+                center_lat,
+                outer_radius,
+                radius_step,
+                time_index,
             ),
             tool="calculate_azimuthal_mean",
             inputs=inputs,
@@ -529,6 +540,7 @@ def calculate_azimuthal_mean(
                 center_lat,
                 outer_radius,
                 radius_step,
+                time_index,
             )
         ),
     )

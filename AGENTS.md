@@ -31,8 +31,8 @@ The tool surface is built by `uxarray_mcp.registry.build_registry()`:
   No deferred tools, no BM25 discovery.  This is what clients see by
   default when running `uxarray-mcp serve`.
 
-- **`deferred-full` (~64 loaded, ~32 visible)** — core set stays visible.
-  32 raw implementation tools are loaded with `defer=True` so they don't
+- **`deferred-full` (~65 loaded, ~32 visible)** — core set stays visible.
+  33 raw implementation tools are loaded with `defer=True` so they don't
   appear in the initial tool list, plus `discover_tools`.  Agents discover
   the deferred tools via `discover_tools` (BM25 search), and operators
   promote them from the admin panel.

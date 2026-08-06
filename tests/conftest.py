@@ -368,6 +368,41 @@ def multi_level_mesh_files(tmp_path):
 
 
 @pytest.fixture
+def time_level_mesh_files(tmp_path):
+    """Mesh plus a field with three times AND four vertical levels.
+
+    ``multi_level_mesh_files`` cannot catch a dropped ``time_index`` because
+    it has no time axis. Here the value is ``1000*t + 100*(level+1)``, so the
+    magnitude alone identifies which slice was taken: picking the wrong time
+    is off by a thousand, the wrong level by a hundred.
+    """
+    lon = np.arange(0, 360, 30.0)
+    lat = np.arange(-75, 76, 30.0)
+    grid = ux.Grid.from_structured(lon=lon, lat=lat)
+    grid_file = tmp_path / "time_level_grid.nc"
+    data_file = tmp_path / "time_level_data.nc"
+    grid.to_xarray().to_netcdf(grid_file)
+
+    n_time, n_level = 3, 4
+    values = np.stack(
+        [
+            np.stack(
+                [
+                    np.full(grid.n_face, 1000.0 * t + 100.0 * (k + 1))
+                    for k in range(n_level)
+                ]
+            )
+            for t in range(n_time)
+        ]
+    )
+    xr.Dataset(
+        {"temperature": (["time", "n_level", "n_face"], values)},
+        coords={"time": np.arange(n_time), "n_level": np.arange(n_level)},
+    ).to_netcdf(data_file)
+    return str(grid_file), str(data_file)
+
+
+@pytest.fixture
 def masked_mesh_files(tmp_path):
     """Mesh plus a field whose southern half is missing (#92).
 

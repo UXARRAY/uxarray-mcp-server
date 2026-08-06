@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from mcp.types import ImageContent, TextContent
 
-from uxarray_mcp.domain.mesh import load_dataset, load_grid
+from uxarray_mcp.domain.mesh import is_healpix_spec, load_dataset, load_grid
 from uxarray_mcp.domain.plotting import (
     render_mesh,
     render_mesh_geo,
@@ -73,7 +73,7 @@ def _plot_mesh_local(
     """
     grid_path, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
 
-    grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
+    grid_file = Path(grid_path) if not is_healpix_spec(grid_path) else None
     if grid_file:
         if not grid_file.exists():
             raise FileNotFoundError(f"Grid file not found: {grid_path}")
@@ -255,7 +255,7 @@ def plot_mesh_geo(
     """
     grid_path, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
 
-    if not grid_path.lower().startswith("healpix"):
+    if not is_healpix_spec(grid_path):
         grid_file = Path(grid_path)
         if not grid_file.exists():
             raise FileNotFoundError(f"Grid file not found: {grid_path}")
@@ -597,7 +597,7 @@ def _plot_variable_local(
             "Provide data_path directly or register a dataset with a data file."
         )
 
-    grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
+    grid_file = Path(grid_path) if not is_healpix_spec(grid_path) else None
     data_file = Path(data_path)
     if grid_file:
         if not grid_file.exists():
@@ -709,6 +709,7 @@ def _plot_zonal_mean_local(
     title: Optional[str] = None,
     session_id: Optional[str] = None,
     dataset_handle: Optional[str] = None,
+    time_index: int = 0,
 ) -> list[Any]:
     """Plot a zonal mean profile (latitude vs value).
 
@@ -775,7 +776,7 @@ def _plot_zonal_mean_local(
     if variable_name is None:
         raise ValueError("variable_name is required for plot_zonal_mean.")
 
-    grid_file = Path(grid_path) if not grid_path.lower().startswith("healpix") else None
+    grid_file = Path(grid_path) if not is_healpix_spec(grid_path) else None
     data_file = Path(data_path)
     if grid_file:
         if not grid_file.exists():
@@ -796,7 +797,11 @@ def _plot_zonal_mean_local(
     uxds = load_dataset(grid_path, data_path)
 
     zonal_result = compute_zonal_mean_stats(
-        uxds, variable_name, lat_spec=lat_spec, conservative=conservative
+        uxds,
+        variable_name,
+        lat_spec=lat_spec,
+        conservative=conservative,
+        time_index=time_index,
     )
 
     latitudes = zonal_result["latitudes"]
@@ -818,6 +823,9 @@ def _plot_zonal_mean_local(
         "variable_name": variable_name,
         "latitudes": latitudes,
         "zonal_mean_values": values,
+        # Say which extra axes were collapsed to get a 1-D line, so a caller
+        # never mistakes one vertical level for the whole field.
+        "reduced_dims": zonal_result.get("reduced_dims", {}),
     }
 
     provenance = attach_provenance(

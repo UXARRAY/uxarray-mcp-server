@@ -235,3 +235,7 @@ evals/results/
 
 # Paper drafts and supporting material (kept in a separate repo).
 papers/
+
+# Heavy benchmark artifacts (generated meshes + run reports)
+benchmarks/heavy/meshes/
+benchmarks/heavy/results/
