@@ -132,6 +132,7 @@ _DEFERRED_TOOLS: dict[str, tuple[str, ...]] = {
         "write_result",
     ),
     "agent": ("run_scientific_agent",),
+    "hpc": ("check_remote_yac",),
 }
 
 
@@ -457,6 +458,10 @@ _TAG_OVERRIDES: dict[str, tuple[set[ToolTag], set[str]]] = {
         set(),
     ),
     "validate_hpc_setup": ({ToolTag.READ_ONLY, ToolTag.NETWORK}, set()),
+    "check_remote_yac": (
+        {ToolTag.READ_ONLY, ToolTag.NETWORK, ToolTag.SLOW},
+        set(),
+    ),
     "set_execution_mode": ({ToolTag.FILE_SYSTEM}, set()),
     # IO
     "list_datasets": ({ToolTag.READ_ONLY, ToolTag.FILE_SYSTEM}, set()),
@@ -547,6 +552,7 @@ def _apply_tags(
 # ---------------------------------------------------------------------------
 
 _SEARCH_HINTS: dict[str, str] = {
+    "check_remote_yac": "yac native remap conservative interpolation worker library build smoke test hpc",
     "calculate_curl": "vorticity rotation circulation wind curl cross product compute vector field zeta",
     "calculate_divergence": "compression expansion source sink wind divergence",
     "calculate_gradient": "spatial derivative slope field gradient",

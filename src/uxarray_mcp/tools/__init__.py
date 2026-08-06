@@ -21,6 +21,7 @@ from .capabilities import get_capabilities
 from .catalog import list_datasets
 from .contracts import describe_response_contract, validate_response
 from .execution_control import (
+    check_remote_yac,
     endpoint_status,
     get_execution_mode,
     probe_path_access,
@@ -35,7 +36,7 @@ from .frontdoor import (
     plot_dataset,
     run_analysis,
 )
-from .inspection import calculate_zonal_anomaly, validate_dataset
+from .inspection import calculate_zonal_anomaly
 from .orchestration import analyze_dataset
 
 # Public tool surface for inspection and plotting. Each function is a
@@ -52,6 +53,7 @@ from .remote_tools import (
     plot_mesh,
     plot_variable,
     plot_zonal_mean,
+    validate_dataset,
 )
 from .scientific_agent import run_scientific_agent
 from .stateful import (
@@ -123,6 +125,7 @@ __all__ = [
     "calculate_azimuthal_mean",
     "endpoint_status",
     "get_execution_mode",
+    "check_remote_yac",
     "probe_path_access",
     "set_execution_mode",
     "validate_hpc_setup",

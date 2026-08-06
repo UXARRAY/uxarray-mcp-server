@@ -224,6 +224,145 @@ def probe_path_access(
     return result
 
 
+def check_remote_yac(
+    endpoint: str | None = None,
+    probe_timeout_seconds: int = 300,
+    session_id: str | None = None,
+) -> Dict[str, Any]:
+    """Check whether native YAC is importable and usable on the HPC worker.
+
+    YAC is an optional worker-side dependency used for conservative remapping.
+    It is built separately from the Python environment (see
+    ``scripts/hpc_build_yac.py``), so it can be missing or broken on a worker
+    that is otherwise perfectly healthy. This runs the YAC import inside a
+    worker-side subprocess, because some YAC/MPI builds abort the importing
+    process outright when their runtime library path is incomplete -- that
+    would otherwise surface as an opaque ``WorkerLost`` instead of a
+    diagnosable result.
+    """
+    tracker = OperationTracker("check_remote_yac", session_id=session_id)
+    tracker.stage("config", "Loading HPC configuration.")
+    base_config, _ = _load_config_for_tools()
+    config = base_config.for_endpoint(endpoint=endpoint)
+
+    inputs = {
+        "endpoint": endpoint,
+        "probe_timeout_seconds": probe_timeout_seconds,
+        "session_id": session_id,
+    }
+
+    if not config.endpoint_id:
+        result = attach_provenance(
+            {
+                "available": False,
+                "reason": "no_endpoint",
+                "endpoint": config.endpoint_name,
+            },
+            tool="check_remote_yac",
+            inputs=inputs,
+            venue="local",
+        )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.fail("No HPC endpoint configured; YAC runs on the worker only.")
+        return result
+
+    try:
+        _, Executor, AllCodeStrategies, ComputeSerializer = _load_globus_compute_sdk()
+    except ImportError as exc:
+        result = attach_provenance(
+            {
+                "available": False,
+                "reason": "missing_local_dependencies",
+                "endpoint": config.endpoint_name,
+                **_exception_details(exc),
+            },
+            tool="check_remote_yac",
+            inputs=inputs,
+            venue="local",
+        )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.fail("Local HPC dependencies are not installed.")
+        return result
+
+    from uxarray_mcp.remote.compute_functions import remote_yac_remap_smoke
+
+    tracker.stage("submitted", "Submitting YAC smoke test to the worker.")
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
+                category=UserWarning,
+            )
+            executor = Executor(
+                endpoint_id=config.endpoint_id,
+                serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
+            )
+            future = executor.submit(remote_yac_remap_smoke)
+            payload = future.result(
+                timeout=min(config.timeout_seconds, probe_timeout_seconds)
+            )
+    except Exception as exc:
+        result = attach_provenance(
+            {
+                "available": False,
+                "reason": "probe_failed",
+                "endpoint": config.endpoint_name,
+                **_exception_details(exc),
+            },
+            tool="check_remote_yac",
+            inputs=inputs,
+            venue="hpc",
+        )
+        result["_provenance"]["operation_id"] = tracker.operation_id
+        tracker.fail("YAC smoke test did not complete on the worker.")
+        return result
+
+    worker_runtime = payload.pop("_worker_runtime", None) or {}
+    # YAC is only genuinely usable when the loader uxarray actually calls
+    # succeeds *and* a real remap completes. yac.core importing on its own is
+    # not enough to promise a working remap.
+    available = bool(payload.get("yac_helper_ok") and payload.get("remap_ok"))
+
+    # Worker tracebacks and captured stdout run to several thousand characters
+    # each. Keep them only when something failed, and cap them, so a healthy
+    # check stays small in an agent's context window.
+    verbose_keys = (
+        "yac_core_traceback",
+        "yac_helper_traceback",
+        "remap_traceback",
+        "stdout_tail",
+        "stderr_tail",
+    )
+    if available:
+        for key in verbose_keys:
+            payload.pop(key, None)
+    else:
+        for key in verbose_keys:
+            if isinstance(payload.get(key), str):
+                payload[key] = payload[key][-800:]
+
+    result = attach_provenance(
+        {
+            "available": available,
+            "endpoint": config.endpoint_name,
+            **payload,
+        },
+        tool="check_remote_yac",
+        inputs=inputs,
+        venue="hpc",
+    )
+    for key in ("hostname", "python_version", "slurm_job_id", "pbs_job_id"):
+        if worker_runtime.get(key):
+            result["_provenance"][f"remote_{key}"] = worker_runtime[key]
+    result["_provenance"]["operation_id"] = tracker.operation_id
+    if available:
+        tracker.succeed("Native YAC is importable on the HPC worker.")
+    else:
+        tracker.succeed("YAC smoke test ran; native YAC is not usable on the worker.")
+    return result
+
+
 def validate_hpc_setup(
     run_remote_probe: bool = True,
     probe_timeout_seconds: int = 30,

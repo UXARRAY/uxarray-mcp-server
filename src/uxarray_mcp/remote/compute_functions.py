@@ -59,6 +59,15 @@ def remote_runtime_probe() -> Dict[str, Any]:
     modules["yac"] = yac_info
 
     return {
+        "_worker_runtime": {
+            "hostname": socket.gethostname(),
+            "python_version": platform.python_version(),
+            "uxarray_version": (modules.get("uxarray") or {}).get("version")
+            or "unknown",
+            "xarray_version": (modules.get("xarray") or {}).get("version") or "unknown",
+            "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": os.environ.get("PBS_JOBID"),
+        },
         "hostname": socket.gethostname(),
         "user": getpass.getuser(),
         "cwd": os.getcwd(),
@@ -124,6 +133,23 @@ def remote_probe_path(file_path: str, inspect_netcdf: bool = True) -> Dict[str, 
                 "error": str(exc),
             }
 
+    try:
+        _ux_version = getattr(__import__("uxarray"), "__version__", "unknown")
+    except Exception:
+        _ux_version = "unavailable"
+    try:
+        _xr_version = getattr(__import__("xarray"), "__version__", "unknown")
+    except Exception:
+        _xr_version = "unavailable"
+    result["_worker_runtime"] = {
+        "hostname": socket.gethostname(),
+        "python_version": __import__("platform").python_version(),
+        "uxarray_version": _ux_version,
+        "xarray_version": _xr_version,
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "pbs_job_id": os.environ.get("PBS_JOBID"),
+    }
+
     return result
 
 
@@ -149,7 +175,7 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
 
     import uxarray as ux
 
-    if file_path.startswith("healpix:"):
+    if file_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(file_path.split(":")[1]))
     elif os.path.splitext(file_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(file_path, backend="geopandas")
@@ -161,20 +187,25 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
         "n_node": int(grid.n_node),
         "n_edge": int(grid.n_edge),
         "source": file_path,
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
 def remote_validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
     """Validate numeric variables on the worker that can read the dataset."""
     import os
-    import platform
 
     import numpy as np
     import uxarray as ux
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         xr_ds = __import__("xarray").open_dataset(data_path)
         uxds = ux.UxDataset(xr_ds, uxgrid=grid)
@@ -234,8 +265,14 @@ def remote_validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
         "n_variables_failed": sum(not item["passed"] for item in results),
         "variables": results,
         "issues": all_warnings,
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": platform.python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -262,7 +299,7 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
     import numpy as np
     import uxarray as ux
 
-    if file_path.startswith("healpix:"):
+    if file_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(file_path.split(":")[1]))
     elif os.path.splitext(file_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(file_path, backend="geopandas")
@@ -285,8 +322,14 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
         "max_area": float(np.max(values)),
         "area_units": units,
         "n_face": int(grid.n_face),
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -319,7 +362,7 @@ def remote_inspect_variable(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -396,8 +439,14 @@ def remote_inspect_variable(
             "n_node": int(uxds.uxgrid.n_node),
             "n_edge": int(uxds.uxgrid.n_edge),
         },
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -435,7 +484,7 @@ def remote_plot_mesh(
     import matplotlib.pyplot as plt
     import uxarray as ux
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
@@ -470,6 +519,14 @@ def remote_plot_mesh(
             "n_face": int(grid.n_face),
             "n_node": int(grid.n_node),
             "n_edge": int(grid.n_edge),
+        },
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
     }
 
@@ -529,7 +586,7 @@ def remote_plot_variable(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -610,6 +667,14 @@ def remote_plot_variable(
             "n_node": int(uxds.uxgrid.n_node),
             "n_edge": int(uxds.uxgrid.n_edge),
         },
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -623,6 +688,7 @@ def remote_plot_zonal_mean(
     conservative: bool = False,
     line_color: str = "#1f77b4",
     title: Optional[str] = None,
+    time_index: int = 0,
 ) -> Dict[str, Any]:
     """Render a zonal mean profile on the remote HPC node and return base64 PNG.
 
@@ -668,7 +734,7 @@ def remote_plot_zonal_mean(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -693,7 +759,26 @@ def remote_plot_zonal_mean(
     else:
         result = var.zonal_mean(lat=lat_spec)
 
-    latitudes = result.coords[result.dims[0]].values.tolist()
+    # ``latitudes`` replaces the face axis, which is not axis 0 when the
+    # variable has a time dimension; selecting positionally would plot time
+    # indices as degrees.  Inlined rather than shared because module-level
+    # helpers do not survive AllCodeStrategies serialization.
+    _coord = "latitudes" if "latitudes" in result.coords else result.dims[-1]
+    latitudes = result.coords[_coord].values.tolist()
+    _reduced = {}
+    _sel = {}
+    for _d in result.dims:
+        if _d == _coord:
+            continue
+        _n = int(result.sizes[_d])
+        if _n == 1:
+            _sel[_d] = 0
+            continue
+        _i = time_index if "time" in str(_d).lower() else 0
+        _sel[_d] = _i
+        _reduced[str(_d)] = {"index": _i, "size": _n}
+    if _sel:
+        result = result.isel(**_sel)
     values = result.values.tolist()
 
     dpi = 100
@@ -719,6 +804,14 @@ def remote_plot_zonal_mean(
         "variable_name": variable_name,
         "latitudes": latitudes,
         "zonal_mean_values": values,
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -728,6 +821,7 @@ def remote_calculate_zonal_mean(
     variable_name: str,
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
+    time_index: int = 0,
 ) -> Dict[str, Any]:
     """Calculate zonal mean on remote HPC node.
 
@@ -758,7 +852,7 @@ def remote_calculate_zonal_mean(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -783,18 +877,48 @@ def remote_calculate_zonal_mean(
     else:
         result = var.zonal_mean(lat=lat_spec)
 
+    # Look the coordinate up by name: with a time dimension present the
+    # reduced latitude axis is the trailing one, not ``dims[0]``.  Any other
+    # surviving axis (vertical level, ensemble member) is collapsed to one
+    # index and reported, so a single level is never mistaken for the whole
+    # answer.  Inlined because module-level helpers do not survive
+    # AllCodeStrategies serialization.
+    _coord = "latitudes" if "latitudes" in result.coords else result.dims[-1]
+    latitudes = result.coords[_coord].values.tolist()
+    _reduced = {}
+    _sel = {}
+    for _d in result.dims:
+        if _d == _coord:
+            continue
+        _n = int(result.sizes[_d])
+        if _n == 1:
+            _sel[_d] = 0
+            continue
+        _i = time_index if "time" in str(_d).lower() else 0
+        _sel[_d] = _i
+        _reduced[str(_d)] = {"index": _i, "size": _n}
+    if _sel:
+        result = result.isel(**_sel)
+
     return {
         "variable_name": variable_name,
-        "latitudes": result.coords[result.dims[0]].values.tolist(),
+        "latitudes": latitudes,
         "zonal_mean_values": result.values.tolist(),
         "conservative": conservative,
+        "reduced_dims": _reduced,
         "grid_info": {
             "n_face": int(uxds.uxgrid.n_face),
             "n_node": int(uxds.uxgrid.n_node),
             "n_edge": int(uxds.uxgrid.n_edge),
         },
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -862,7 +986,7 @@ def remote_subset_bbox_plot(
     import matplotlib.pyplot as plt
     import uxarray as ux
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
@@ -960,6 +1084,14 @@ def remote_subset_bbox_plot(
             "width_px": width,
             "height_px": height,
             "dpi": dpi,
+        },
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": ux_version,
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
         "n_face_total": n_face_total,
         "n_face_subset": n_face_subset,
@@ -1109,6 +1241,14 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
         "subprocess_ok": proc.returncode == 0,
         "subprocess_returncode": proc.returncode,
         "launch_mode": launch_mode,
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(__import__("uxarray"), "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": os.environ.get("PBS_JOBID"),
+        },
     }
     stdout = proc.stdout.strip()
     stderr = proc.stderr.strip()
@@ -1151,7 +1291,7 @@ def remote_calculate_gradient(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -1242,8 +1382,14 @@ def remote_calculate_gradient(
             ),
             "warnings": uxarray_warnings,
         },
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -1267,7 +1413,7 @@ def remote_calculate_curl(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -1391,8 +1537,14 @@ def remote_calculate_curl(
             "warning_codes": warning_codes,
             "warnings": component_warnings,
         },
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -1414,7 +1566,7 @@ def remote_calculate_divergence(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -1518,8 +1670,14 @@ def remote_calculate_divergence(
             "warning_codes": warning_codes,
             "warnings": component_warnings,
         },
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -1531,6 +1689,7 @@ def remote_calculate_azimuthal_mean(
     center_lat: float,
     outer_radius: float,
     radius_step: float,
+    time_index: int = 0,
 ) -> Dict[str, Any]:
     """Compute the azimuthal (radial) mean around a centre point on HPC."""
     import os
@@ -1538,7 +1697,7 @@ def remote_calculate_azimuthal_mean(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -1562,7 +1721,26 @@ def remote_calculate_azimuthal_mean(
         outer_radius=outer_radius,
         radius_step=radius_step,
     )
-    radii = result.coords[result.dims[0]].values.tolist()
+    # ``radius`` replaces the face axis, which is not axis 0 when a time
+    # dimension is present.  Other surviving axes are collapsed to one index
+    # and reported.  Inlined because module-level helpers do not survive
+    # AllCodeStrategies serialization.
+    _coord = "radius" if "radius" in result.coords else result.dims[-1]
+    radii = result.coords[_coord].values.tolist()
+    _reduced = {}
+    _sel = {}
+    for _d in result.dims:
+        if _d == _coord:
+            continue
+        _n = int(result.sizes[_d])
+        if _n == 1:
+            _sel[_d] = 0
+            continue
+        _i = time_index if "time" in str(_d).lower() else 0
+        _sel[_d] = _i
+        _reduced[str(_d)] = {"index": _i, "size": _n}
+    if _sel:
+        result = result.isel(**_sel)
     values = result.values.tolist()
 
     return {
@@ -1572,9 +1750,16 @@ def remote_calculate_azimuthal_mean(
         "radius_step_deg": radius_step,
         "radii_deg": radii,
         "azimuthal_mean_values": values,
+        "reduced_dims": _reduced,
         "n_face": int(uxds.uxgrid.n_face),
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -1601,7 +1786,7 @@ def remote_grid_facts(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         grid_format = "HEALPix"
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -1616,14 +1801,20 @@ def remote_grid_facts(
         "n_face": int(grid.n_face) if hasattr(grid, "n_face") else 0,
         "n_node": int(grid.n_node) if hasattr(grid, "n_node") else 0,
         "n_edge": int(grid.n_edge) if hasattr(grid, "n_edge") else 0,
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
     if data_path is not None:
-        if grid_path.startswith("healpix:") or os.path.splitext(grid_path.lower())[
-            1
-        ] in [".shp", ".geojson"]:
+        if grid_path.lower().startswith("healpix:") or os.path.splitext(
+            grid_path.lower()
+        )[1] in [".shp", ".geojson"]:
             uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
         else:
             uxds = ux.open_dataset(grid_path, data_path)
@@ -1675,7 +1866,7 @@ def remote_remap_variable(
     import uxarray as ux
 
     def _open_ds(gp, dp):
-        if gp.startswith("healpix:"):
+        if gp.lower().startswith("healpix:"):
             g = ux.Grid.from_healpix(int(gp.split(":")[1]))
             return ux.open_dataset(g.to_xarray(), dp)
         if os.path.splitext(gp.lower())[1] in [".shp", ".geojson"]:
@@ -1684,7 +1875,7 @@ def remote_remap_variable(
         return ux.open_dataset(gp, dp)
 
     def _open_grid(gp):
-        if gp.startswith("healpix:"):
+        if gp.lower().startswith("healpix:"):
             return ux.Grid.from_healpix(int(gp.split(":")[1]))
         if os.path.splitext(gp.lower())[1] in [".shp", ".geojson"]:
             return ux.Grid.from_file(gp, backend="geopandas")
@@ -1735,8 +1926,14 @@ def remote_remap_variable(
         },
         "result_shape": list(remapped.shape),
         "stats": stats,
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -1758,7 +1955,7 @@ def remote_regrid_dataset(
     import uxarray as ux
 
     def _open_ds(gp, dp):
-        if gp.startswith("healpix:"):
+        if gp.lower().startswith("healpix:"):
             g = ux.Grid.from_healpix(int(gp.split(":")[1]))
             return ux.open_dataset(g.to_xarray(), dp)
         if os.path.splitext(gp.lower())[1] in [".shp", ".geojson"]:
@@ -1767,7 +1964,7 @@ def remote_regrid_dataset(
         return ux.open_dataset(gp, dp)
 
     def _open_grid(gp):
-        if gp.startswith("healpix:"):
+        if gp.lower().startswith("healpix:"):
             return ux.Grid.from_healpix(int(gp.split(":")[1]))
         if os.path.splitext(gp.lower())[1] in [".shp", ".geojson"]:
             return ux.Grid.from_file(gp, backend="geopandas")
@@ -1817,8 +2014,14 @@ def remote_regrid_dataset(
             "n_edge": int(target_grid.n_edge),
         },
         "per_variable_stats": per_variable,
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -1841,7 +2044,7 @@ def remote_remap_to_rectilinear(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -1930,8 +2133,14 @@ def remote_remap_to_rectilinear(
         "values": vals.tolist(),
         "target_lon": lon,
         "target_lat": lat,
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
 
 
@@ -1954,7 +2163,7 @@ def remote_calculate_zonal_anomaly(
     import uxarray as ux
     import xarray as xr
 
-    if grid_path.startswith("healpix:"):
+    if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         uxds = ux.UxDataset(xr.open_dataset(data_path), uxgrid=grid)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
@@ -2010,6 +2219,12 @@ def remote_calculate_zonal_anomaly(
             "n_node": int(uxds.uxgrid.n_node),
             "n_edge": int(uxds.uxgrid.n_edge),
         },
-        "_worker_uxarray_version": getattr(ux, "__version__", "unknown"),
-        "_worker_python_version": __import__("platform").python_version(),
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
     }
