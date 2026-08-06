@@ -1,0 +1,159 @@
+"""Fixtures with a physical radius, a vertical coordinate, and a mask (#92).
+
+Every other mesh in this suite sits on a unit sphere with a single level
+and no missing data. That is fine for exercising code paths and hides
+three classes of bug: on R=1 a wrong radius-scaling default is invisible
+(#87 was exactly that), a wrong level selection is invisible when there
+is only one level, and averaging over a mask is invisible when nothing
+is masked. These tests exist to make each of the three visible.
+"""
+
+from __future__ import annotations
+
+import warnings
+
+import numpy as np
+import pytest
+import uxarray as ux
+
+from uxarray_mcp.postconditions import mesh_is_closed
+from uxarray_mcp.tools.frontdoor import run_analysis
+from uxarray_mcp.tools.vector_calc import calculate_gradient
+
+EARTH_RADIUS_M = 6371000.0
+
+
+class TestPhysicalRadius:
+    def test_grid_declares_earth_radius(self, earth_radius_mesh_files):
+        grid_file, _ = earth_radius_mesh_files
+        grid = ux.open_grid(grid_file)
+        assert grid.sphere_radius == pytest.approx(EARTH_RADIUS_M)
+
+    def test_radius_scaling_changes_the_answer(
+        self, earth_radius_mesh_files, structured_mesh_files
+    ):
+        """The check #87 could not have failed on a unit sphere.
+
+        Same mesh, same field, same default: dividing by R either happens
+        or it does not, and only a physical radius makes the difference
+        observable.
+        """
+        earth_grid, earth_data = earth_radius_mesh_files
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            scaled = calculate_gradient(earth_grid, earth_data, "u")
+            unscaled = calculate_gradient(
+                earth_grid, earth_data, "u", scale_by_radius=False
+            )
+
+        assert scaled["scale_by_radius"] is True
+        scaled_max = scaled["component_stats"]["zonal_gradient"]["max"]
+        unscaled_max = unscaled["component_stats"]["zonal_gradient"]["max"]
+        assert unscaled_max / scaled_max == pytest.approx(EARTH_RADIUS_M, rel=1e-6)
+
+    def test_unit_sphere_grid_warns_that_scaling_did_not_apply(
+        self, structured_mesh_files
+    ):
+        grid_file, data_file = structured_mesh_files
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = calculate_gradient(grid_file, data_file, "temperature")
+        joined = " ".join(result["component_warnings"])
+        assert "sphere_radius" in joined
+
+    def test_area_postcondition_reports_the_radius_it_saw(
+        self, state_dir, earth_radius_mesh_files
+    ):
+        """A unit-sphere answer must not pass by a hidden unit-sphere reference.
+
+        UXarray returns unscaled areas here, so ``4*pi`` is the right
+        reference -- but the check has to say that the declared radius was
+        not applied, otherwise the caller cannot tell which quantity it
+        just verified.
+        """
+        grid_file, _ = earth_radius_mesh_files
+        result = run_analysis(operation="calculate_area", grid_path=grid_file)
+
+        check = result["postconditions"]["checks"][0]
+        assert result["postconditions"]["status"] == "checked"
+        assert check["passed"] is True
+        assert check["reference"] == pytest.approx(4 * np.pi)
+        assert "6.371e+06" in check["reference_source"]
+        assert "not applied" in check["reference_source"]
+
+    def test_open_mesh_gets_no_area_verdict(self, state_dir, regional_mesh_files):
+        """``4*pi`` is not the reference for a mesh with a boundary."""
+        grid_file, _ = regional_mesh_files
+        result = run_analysis(operation="calculate_area", grid_path=grid_file)
+
+        assert not mesh_is_closed(ux.open_grid(grid_file))
+        assert result["postconditions"]["status"] == "not_evaluated"
+
+
+class TestVerticalCoordinate:
+    def test_variable_reports_all_levels(self, state_dir, multi_level_mesh_files):
+        grid_file, data_file = multi_level_mesh_files
+        result = run_analysis(
+            operation="inspect_variable",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+        )
+        variable = result["variables"][0]
+        assert "n_level" in variable["dims"]
+        assert variable["shape"][0] == 4
+
+    def test_zonal_mean_silently_collapses_the_vertical_axis(
+        self, state_dir, multi_level_mesh_files
+    ):
+        """Documents a real gap, deliberately, rather than asserting success.
+
+        Levels are 100/200/300/400, so a caller asking for "the" zonal mean
+        of this field gets one row per level with no statement of which
+        level is which, and no parameter to pick one. Selecting a level is
+        not supported today; when it is, this test should change to assert
+        the selection rather than the collapse.
+        """
+        grid_file, data_file = multi_level_mesh_files
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = run_analysis(
+                operation="calculate_zonal_mean",
+                grid_path=grid_file,
+                data_path=data_file,
+                variable_name="temperature",
+            )
+        values = np.asarray(result["zonal_mean_values"], dtype=float)
+        assert values.ndim == 2 and values.shape[0] == 4
+        # Every level is uniform, so each row must equal its own level value.
+        for level, row in enumerate(values):
+            finite = row[np.isfinite(row)]
+            assert finite == pytest.approx(100.0 * (level + 1))
+
+
+class TestMaskedField:
+    def test_validation_reports_the_mask(self, state_dir, masked_mesh_files):
+        grid_file, data_file = masked_mesh_files
+        result = run_analysis(
+            operation="validate_dataset", grid_path=grid_file, data_path=data_file
+        )
+        variable = result["variables"][0]
+        assert result["passed"] is False
+        assert variable["n_nan"] > 0
+        assert variable["nan_percentage"] == pytest.approx(50.0, abs=5.0)
+
+    def test_statistics_skip_the_mask_rather_than_averaging_over_it(
+        self, state_dir, masked_mesh_files
+    ):
+        """Unmasked cells are all exactly 1.0, so any other mean folded in NaN."""
+        grid_file, data_file = masked_mesh_files
+        result = run_analysis(
+            operation="inspect_variable",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="salinity",
+        )
+        stats = result["variables"][0]["statistics"]
+        assert stats["mean"] == pytest.approx(1.0)
+        assert stats["min"] == pytest.approx(1.0)
+        assert stats["max"] == pytest.approx(1.0)

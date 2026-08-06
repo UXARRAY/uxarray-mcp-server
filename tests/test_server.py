@@ -25,7 +25,7 @@ from uxarray_mcp.registry import (
 
 EXPECTED_FRONTDOOR = 11
 EXPECTED_CONTROL = 12  # 8 session + 4 hpc
-EXPECTED_CORE_EXTRA = 1  # list_datasets
+EXPECTED_CORE_EXTRA = 3  # list_datasets + 2 response-contract tools
 EXPECTED_PROMPTS = 7  # first_look, vorticity_analysis, cyclone_structure,
 # eddy_activity, model_evaluation, climatology_anomaly, hpc_diagnose
 EXPECTED_DEFERRED = 32  # +zonal_anomaly, +remap_to_rectilinear

@@ -19,6 +19,33 @@ uses Semantic Versioning for public releases.
   values.
 
 ### Added
+- `remap_to_rectilinear` refuses when source coverage is zero, using the same
+  `input_required` payload as the vector preconditions. Every value in a
+  zero-coverage remap is an extrapolation, so a warning beside the numbers was
+  not enough. Partial coverage and a non-conservative method remain warnings.
+- Analysis results carry a `postconditions` block that is explicit about not
+  having checked. `calculate_area` verifies the closed-mesh identity
+  `sum(face_areas) == 4*pi*R^2` and abstains with `not_evaluated` on open or
+  regional meshes rather than reporting a verdict it cannot support.
+- `run_analysis` accepts `verdict_policy` (`full`, `reference_only`, `off`,
+  also readable from `UXARRAY_MCP_VERDICT_POLICY`) so a caller can ask for the
+  reference and tolerance without the server's own verdict. An unrecognized
+  policy is rejected before the computation runs.
+- Two tools under a new `contract/` namespace: `describe_response_contract`
+  declares the fields a named response shape requires, and `validate_response`
+  checks a candidate payload against it. This makes "right answer, wrong
+  envelope" separately detectable instead of scoring as a wrong answer.
+- Physical test fixtures: a global mesh carrying a real Earth `sphere_radius`,
+  a four-level field whose levels are far enough apart that a mis-selection is
+  unmistakable, and a half-masked field where any mean other than 1.0 means
+  NaNs were folded in. Every previous fixture sat on a unit sphere, where
+  radius scaling is invisible.
+- `evals/multi_turn/` measures what one-call benchmarks cannot: whether a run
+  chains the calls a task requires, reuses minted handles instead of inventing
+  or dropping them, and recovers from an injected mid-sequence fault. Two
+  injected faults, a precondition refusal and an interrupted workflow, give the
+  refusal machinery something to be validated against. Two scripted adapters
+  bracket the score range so the harness runs offline.
 - `curl` and `divergence` declare their preconditions as data and refuse
   instead of returning an unphysical number. The refusal is shaped after the
   MCP `2026-07-28` multi-round-trip request flow: `result_type:
