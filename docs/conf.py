@@ -50,7 +50,6 @@ exclude_patterns = [
     "_build",
     "Thumbs.db",
     ".DS_Store",
-    "onepager-uxarray-mcp.md",
 ]
 
 # -- Options for HTML output -------------------------------------------------
