@@ -172,8 +172,8 @@ config.yaml.example       # Template — private config is normally written by t
 ## Tech stack
 
 - **Python** ≥ 3.12, < 3.13 (pinned for Globus Compute pickle compat)
-- **toolregistry** ≥ 0.11.0 — tool registration, schema generation, policy tags
-- **toolregistry-server** ≥ 0.4.0 — MCP + OpenAPI adapters
+- **toolregistry** ≥ 0.15.0 — tool registration, schema generation, policy tags
+- **toolregistry-server** ≥ 0.4.3 — MCP + OpenAPI adapters
 - **UXarray** ≥ 2026.6.0 — unstructured mesh analysis
 - **Matplotlib** ≥ 3.9.0 + **Holoviews** ≥ 1.19.0 — visualization
 - **PyYAML** ≥ 6.0 — config file parsing
