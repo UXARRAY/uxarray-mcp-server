@@ -5,6 +5,18 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+### Changed
+- `recommended_next_steps` no longer interpolates the caller's own file paths
+  into every suggestion. A four-step list used to repeat the same absolute
+  path four times; on an MPAS QU480 mesh those echoed paths alone were 28% of
+  an `inspect_mesh` result and 36% of an `inspect_variable` result, more bytes
+  than every computed number in either reply. Steps now reference a
+  caller-supplied value by parameter name (`plot_mesh(grid_path)`), spell out
+  only values the server discovered (`plot_variable(grid_path, data_path,
+  "temperature")`), and bracket what is still missing (`<data_path>`). Results
+  shrank 18-34% and the computed answer went from 25-49% of a payload to
+  39-61% (#83).
+
 ### Fixed
 - Preserve the original remote worker exception when synchronous MCP tools run
   inside an event loop instead of masking it with a nested `asyncio.run` error.
