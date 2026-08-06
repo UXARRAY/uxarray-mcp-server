@@ -65,6 +65,14 @@ def _finalize_analysis_result(operation: str, result: dict[str, Any]) -> dict[st
                 warning_codes.append("VECTOR_COMPONENTS_UNVERIFIED")
             if metadata_supported and not scaling_supported:
                 warning_codes.append("PHYSICAL_SCALING_UNVERIFIED")
+    elif operation == "remap_to_rectilinear" and "source_coverage" in result:
+        # Absent coverage stays unknown rather than becoming a claim of
+        # interpretability: a remote worker on an older build may not send it.
+        codes = list(result["source_coverage"].get("warning_codes", []))
+        physically_interpretable = not codes
+        if codes:
+            status = "warning"
+            warning_codes.extend(codes)
 
     result["scientific_status"] = {
         "status": status,

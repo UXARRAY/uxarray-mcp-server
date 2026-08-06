@@ -6,6 +6,7 @@ Functions here contain the pure domain logic used by both local tools
 
 from .area import compute_area_stats
 from .mesh import load_dataset, load_grid
+from .remap_coverage import compute_target_coverage, method_is_conservative
 from .variable import compute_variable_info
 from .vector_calc import (
     compute_azimuthal_mean,
@@ -19,6 +20,8 @@ __all__ = [
     "load_grid",
     "load_dataset",
     "compute_area_stats",
+    "compute_target_coverage",
+    "method_is_conservative",
     "compute_variable_info",
     "compute_zonal_mean_stats",
     "compute_zonal_anomaly_stats",

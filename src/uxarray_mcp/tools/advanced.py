@@ -13,6 +13,7 @@ import xarray as xr
 from matplotlib.path import Path as MplPath
 
 from uxarray_mcp.domain.mesh import load_dataset, load_grid
+from uxarray_mcp.domain.remap_coverage import compute_target_coverage
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.state import (
     OperationTracker,
@@ -29,6 +30,31 @@ from uxarray_mcp.state import (
     write_grid_artifact,
     write_json_artifact,
 )
+
+
+def _coverage_warnings(coverage: dict[str, Any]) -> list[str]:
+    """Turn coverage warning codes into caller-readable sentences."""
+    codes = coverage.get("warning_codes", [])
+    n_in = coverage.get("points_in_source")
+    n_total = coverage.get("n_target_points")
+    messages: list[str] = []
+    if "REMAP_COVERAGE_ZERO" in codes:
+        messages.append(
+            f"REMAP_COVERAGE_ZERO: none of the {n_total} target points fall "
+            "inside the source mesh; every returned value is extrapolated and "
+            "should not be interpreted physically."
+        )
+    elif "REMAP_COVERAGE_PARTIAL" in codes:
+        messages.append(
+            f"REMAP_COVERAGE_PARTIAL: only {n_in} of {n_total} target points "
+            "fall inside the source mesh; values outside are extrapolated."
+        )
+    if "REMAP_METHOD_NOT_CONSERVATIVE" in codes:
+        messages.append(
+            "REMAP_METHOD_NOT_CONSERVATIVE: nearest-neighbor remapping does "
+            "not conserve the field integral and is unsuitable for fluxes."
+        )
+    return messages
 
 
 def _resolve_paths(
@@ -890,8 +916,9 @@ def remap_to_rectilinear(
     -------
     dict
         Keys: ``variable_name``, ``backend``, ``target_shape`` (n_lat, n_lon),
-        ``stats`` (min/max/mean of the remapped field), ``result_handle``, and
-        ``_provenance``.
+        ``stats`` (min/max/mean of the remapped field), ``source_coverage``
+        (how many target points fall inside the source mesh, and whether the
+        method conserves), ``result_handle``, and ``_provenance``.
 
     Raises
     ------
@@ -969,6 +996,11 @@ def remap_to_rectilinear(
                 )
                 remote_result["result_handle"] = result_handle
             remote_result["_provenance"]["operation_id"] = tracker.operation_id
+            remote_coverage = remote_result.get("source_coverage")
+            if remote_coverage:
+                remote_result["_provenance"].setdefault("warnings", []).extend(
+                    _coverage_warnings(remote_coverage)
+                )
             tracker.succeed("Rectilinear remap complete (remote).")
             return remote_result
         if not _path_is_locally_reachable(resolved_grid):
@@ -990,6 +1022,9 @@ def remap_to_rectilinear(
 
     lon = list(target_lon)
     lat = list(target_lat)
+    # Coverage is measured before remapping so a zero-coverage request is
+    # reported even when the interpolation happily fills every target point.
+    coverage = compute_target_coverage(uxda.uxgrid, lon, lat, method="nearest_neighbor")
     tracker.stage("remapping", f"Remapping {selected} to {len(lat)}x{len(lon)} grid.")
     remapped = uxda.remap.to_rectilinear(lon, lat, backend=backend)
 
@@ -1028,11 +1063,13 @@ def remap_to_rectilinear(
         "backend": backend,
         "target_shape": [len(lat), len(lon)],
         "stats": stats,
+        "source_coverage": coverage,
         "result_handle": result_handle,
     }
     result = attach_provenance(
         result,
         tool="remap_to_rectilinear",
+        warnings=_coverage_warnings(coverage),
         inputs={
             "variable_name": variable_name,
             "target_lon": lon,
