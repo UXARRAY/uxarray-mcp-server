@@ -13,6 +13,7 @@ import base64
 import json
 from typing import Any, Optional
 
+from uxarray_mcp.next_steps import call, literal, needed
 from uxarray_mcp.provenance import attach_provenance
 
 
@@ -280,8 +281,12 @@ def analyze_dataset(
     next_steps: list[str] = []
     if resolved_data is None:
         next_steps.append(
-            f'inspect_variable("{resolved_grid}", "<data_path>") '
-            "— rerun with a data file to unlock variable analysis"
+            call(
+                "inspect_variable",
+                "grid_path",
+                needed("data_path"),
+                note="rerun with a data file to unlock variable analysis",
+            )
         )
     if validation is not None and validation.get("passed") is False:
         next_steps.append(
@@ -289,22 +294,43 @@ def analyze_dataset(
             "trusting downstream results."
         )
     if selected_variable and resolved_data is not None:
+        # selected_variable was chosen by the server, so it is spelled out.
         next_steps.append(
-            f'plot_zonal_mean("{resolved_grid}", "{resolved_data}", '
-            f'"{selected_variable}") — render the zonal profile'
+            call(
+                "plot_zonal_mean",
+                "grid_path",
+                "data_path",
+                literal(selected_variable),
+                note="render the zonal profile",
+            )
         )
         next_steps.append(
-            f'extract_cross_section(latitude=0.0, grid_path="{resolved_grid}", '
-            f'data_path="{resolved_data}", variable_name="{selected_variable}")'
+            call(
+                "extract_cross_section",
+                latitude="0.0",
+                grid_path="grid_path",
+                data_path="data_path",
+                variable_name=literal(selected_variable),
+            )
         )
         next_steps.append(
-            f"subset_bbox(lon_bounds=[-180, 180], lat_bounds=[-90, 90], "
-            f'grid_path="{resolved_grid}", data_path="{resolved_data}", '
-            f'variable_name="{selected_variable}") — focus on a region'
+            call(
+                "subset_bbox",
+                lon_bounds="[-180, 180]",
+                lat_bounds="[-90, 90]",
+                grid_path="grid_path",
+                data_path="data_path",
+                variable_name=literal(selected_variable),
+                note="focus on a region",
+            )
         )
     if not next_steps:
         next_steps.append(
-            f'plot_mesh(grid_path="{resolved_grid}") — visualize the mesh wireframe'
+            call(
+                "plot_mesh",
+                grid_path="grid_path",
+                note="visualize the mesh wireframe",
+            )
         )
 
     result: dict[str, Any] = {

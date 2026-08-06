@@ -6,8 +6,8 @@ tests treat result shape as an interface contract: they fail loudly with the
 measured number, because knowing what it grew to is the useful part.
 
 The budgets are ratchets, not aspirations -- they sit just above today's
-measurements. Tighten them when #83 and #89 land; do not loosen them without
-saying why.
+measurements. They were tightened when #83 landed; tighten them again when
+#89 lands, and do not loosen them without saying why.
 """
 
 from __future__ import annotations
@@ -35,23 +35,26 @@ NON_SIGNAL_KEYS = DISCOVERY_ONLY_KEYS | {
 }
 
 #: Upper bound on serialized result bytes, per operation family. Measured
-#: values sit roughly 20% below each budget; the slack absorbs the varying
+#: values sit roughly 15% below each budget; the slack absorbs the varying
 #: length of the temporary file paths echoed back in ``_provenance.inputs``.
+#: Lowered across the board when #83 removed the caller paths that
+#: ``recommended_next_steps`` used to interpolate into every suggestion.
 RESULT_BYTE_BUDGETS = {
-    "inspect_mesh": 1600,
-    # Raised from 1600 for the postcondition block (#84/#90): ~440 bytes
-    # that took correct verification answers from 11/20 to 20/20 in the
-    # study, which is the one payload increase we have evidence pays back.
-    "calculate_area": 1900,
-    "inspect_variable": 2600,
-    "calculate_zonal_mean": 2800,
-    "validate_dataset": 2600,
+    "inspect_mesh": 1150,
+    # Kept above inspect_mesh for the postcondition block (#84/#90): ~440
+    # bytes that took correct verification answers from 11/20 to 20/20 in
+    # the study, which is the one payload increase we have evidence for.
+    "calculate_area": 1550,
+    "inspect_variable": 1700,
+    "calculate_zonal_mean": 2050,
+    "validate_dataset": 2050,
 }
 
 #: Floor on the fraction of a result that is the computed answer plus status.
-#: Measured at 0.20-0.36 today. #83 argues for something closer to 0.5; raise
-#: this as the catalog and provenance payload shrink.
-SIGNAL_FRACTION_FLOOR = 0.15
+#: Measured at 0.37-0.59 after #83, up from 0.25-0.48 before it. #83 argues
+#: for something closer to 0.5 everywhere; the remaining gap is
+#: ``_provenance``, which is now the largest key in every result.
+SIGNAL_FRACTION_FLOOR = 0.30
 
 #: Upper bound on the serialized core tool specification, sent every request.
 TOOL_SPEC_BYTE_BUDGET = 42000
