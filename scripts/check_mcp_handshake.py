@@ -25,10 +25,10 @@ async def _check(command: str) -> None:
             result = await session.call_tool(
                 "get_capabilities", {"grid_path": "healpix:1"}
             )
-            if result.isError:
+            if result.is_error:
                 raise RuntimeError(f"get_capabilities failed: {result.content}")
             print(
-                f"MCP handshake passed: {initialized.serverInfo.name} "
+                f"MCP handshake passed: {initialized.server_info.name} "
                 f"with {len(listed.tools)} tools"
             )
 
