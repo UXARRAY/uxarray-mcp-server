@@ -11,7 +11,8 @@ Three sources feed this list.
 
 1. **The eScience 2026 evaluation** — a 480-run study that held six tasks and
    their inputs fixed and varied only what the server returned. Notes and
-   provenance in [`issues-from-escience-study/`](issues-from-escience-study/).
+   provenance are kept alongside the study data in the repository working
+   notes directory `docs/issues-from-escience-study/`.
 2. **Reviewer feedback on that paper** — methodological criticism, most of it
    fair, and much of it pointing at server work rather than paper work. Logged
    below.
