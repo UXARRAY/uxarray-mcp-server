@@ -171,13 +171,12 @@ Intent-shaped tools, not raw UXarray bindings — all local by default:
 Full schema: [docs/tools.md](docs/tools.md).
 
 **Protocol version.** We do not implement MCP directly; servers are built
-through `toolregistry-server`, which depends on the `mcp` Python SDK. The
-pinned SDK (1.27.1) negotiates spec **`2025-11-25`** at best. Spec `2026-07-28`
-(stateless core, cacheable list results, MRTR) needs `mcp` 2.0.0, which
-`toolregistry-server` does not support yet — hence the `mcp<2` cap in
-`pyproject.toml`. See
+through `toolregistry-server`, which depends on the `mcp` Python SDK. As of
+`toolregistry-server` 0.4.3 and `toolregistry` 0.15.0 the SDK cap is lifted, so
+we resolve `mcp` 2.0.0 and negotiate spec **`2026-07-28`** (stateless core,
+cacheable list results, MRTR). See
 [docs/mcp-2026-07-28-assessment.md](docs/mcp-2026-07-28-assessment.md) for what
-that release would change here and who controls the upgrade.
+that release changes here.
 
 **Once you've configured an HPC endpoint** (optional — see
 [Going beyond your laptop](#going-beyond-your-laptop) below): most tools above

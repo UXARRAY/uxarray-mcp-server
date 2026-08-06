@@ -159,13 +159,24 @@ def test_low_level_implementation_tools_hidden_in_core():
     assert hidden.isdisjoint(tools), f"leaked: {hidden & tools}"
 
 
+def _result_text(entry: object) -> str:
+    """Unwrap an ``execute_tool_calls`` entry.
+
+    toolregistry 0.15 returns a ``ToolCallResult`` where 0.11 returned a bare
+    string; accept either so the test tracks the payload, not the wrapper.
+    """
+    return getattr(entry, "result", entry)  # type: ignore[return-value]
+
+
 def test_front_door_dispatch_tools_accept_remote_kwargs():
     """Remote execution is available through the intent-shaped tools."""
     registry = make_registry(profile="core")
     for name in ("analyze_dataset", "run_analysis", "plot_dataset"):
         tool = registry.get_tool(name)
         assert tool is not None, name
-        sig = inspect.signature(tool.callable)
+        # toolregistry 0.15 wraps ``callable`` as (*args, **kwargs); the
+        # declared surface lives on ``fn`` and in the generated schema.
+        sig = inspect.signature(tool.fn)
         assert "use_remote" in sig.parameters, name
         assert "endpoint" in sig.parameters, name
         assert "session_id" in sig.parameters, name
@@ -208,7 +219,7 @@ def test_prompt_tool_returns_text():
             }
         ]
     )
-    text = result["call_1"]
+    text = _result_text(result["call_1"])
     assert "first-look analysis" in text.lower()
     assert "/tmp/test.nc" in text
 
@@ -325,7 +336,7 @@ def test_live_call_through_registry():
             }
         ]
     )
-    payload = json.loads(result["call_1"])
+    payload = json.loads(_result_text(result["call_1"]))
     assert "_provenance" in payload
     assert payload["_provenance"]["tool"] == "get_execution_mode"
     assert payload["mode"] in {"local", "auto", "remote"}

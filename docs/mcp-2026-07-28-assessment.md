@@ -4,18 +4,26 @@ Spec: <https://modelcontextprotocol.io/specification/2026-07-28>
 Release notes: <https://blog.modelcontextprotocol.io/posts/2026-07-28/>
 Anthropic rollout: <https://claude.com/blog/bringing-mcp-2026-07-28-to-claude>
 
-Written 2026-07-31. Everything below was checked against the installed
-dependency tree and the published 2.0.0 wheel, not inferred from documentation.
+Written 2026-07-31; **resolved 2026-08-06**. Everything below was checked
+against the installed dependency tree and the published 2.0.0 wheel, not
+inferred from documentation.
+
+> **Update (2026-08-06).** `toolregistry` 0.15.0 and `toolregistry-server`
+> 0.4.3 add `mcp` 2.x support, so the cap described below is lifted. We now
+> depend on `mcp>=1.24,<3`, resolve 2.0.0, and negotiate `2026-07-28`. The
+> historical analysis is kept because it explains the MRTR path for #86, which
+> is now reachable.
 
 ## Do we have access to this version?
 
-No, and not by choice. We ship whatever protocol version our SDK implements.
+Yes, as of 2026-08-06. We ship whatever protocol version our SDK implements,
+and the SDK now implements this one.
 
 ```
 uxarray-mcp
-  └── toolregistry-server[mcp] >= 0.4.0
-        └── mcp >= 1.20, < 2          (we cap it; see below)
-              └── resolved to 1.27.1  (uv.lock)
+  └── toolregistry-server[mcp] >= 0.4.3
+        └── mcp >= 1.24, < 3
+              └── resolved to 2.0.0   (uv.lock)
 ```
 
 At `mcp` 1.27.1, verified at runtime:
