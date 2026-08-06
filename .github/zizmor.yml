@@ -9,6 +9,7 @@ rules:
   unpinned-uses:
     ignore:
       - ci.yml
+      - upstream-compat.yml
       - monthly-release.yml
       - release.yml
       - zizmor.yml
