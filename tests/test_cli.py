@@ -222,7 +222,7 @@ def test_load_config_parses_canonical_endpoints(tmp_path):
                     "endpoints": {
                         "improv": {
                             "endpoint_id": "11111111-1111-1111-1111-111111111111",
-                            "path_prefixes": ["/lus/", "/home/jain/"],
+                            "path_prefixes": ["/lus/", "/home/testuser/"],
                             "timeout_seconds": 600,
                         },
                         "ucar": {
@@ -239,7 +239,7 @@ def test_load_config_parses_canonical_endpoints(tmp_path):
     assert set(cfg.endpoints) == {"improv", "ucar"}
     improv = cfg.endpoints["improv"]
     assert improv.endpoint_id == "11111111-1111-1111-1111-111111111111"
-    assert improv.path_prefixes == ("/lus/", "/home/jain/")
+    assert improv.path_prefixes == ("/lus/", "/home/testuser/")
     assert improv.timeout_seconds == 600
     # Default resolves to improv profile
     resolved = cfg.resolve_endpoint()

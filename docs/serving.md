@@ -34,8 +34,8 @@ The visible tool surface is selected by `--profile`:
 
 | Profile | Visible tools | Use when |
 |---|---|---|
-| `core` (default) | 31 | Most clients. Front-door gateway tools, session/HPC control, `list_datasets`, and prompts. Predictable, conservative. |
-| `deferred-full` | 65 total (31 core + `discover_tools` + 33 deferred) | You want the full low-level surface. The 33 raw implementation tools load with `defer=True`, so they do not appear in the initial list; agents find them with `discover_tools`. |
+| `core` (default) | 33 | Most clients. Front-door gateway tools, session/HPC control, `list_datasets`, response-contract helpers, and prompts. Predictable, conservative. |
+| `deferred-full` | 67 total (33 core + `discover_tools` + 33 deferred) | You want the full low-level surface. The 33 raw implementation tools load with `defer=True`, so they do not appear in the initial list; agents find them with `discover_tools`. |
 
 ```bash
 uxarray-mcp serve --profile deferred-full

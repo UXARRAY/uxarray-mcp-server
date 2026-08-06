@@ -1,6 +1,6 @@
 """Refusable preconditions for analysis operations (issue #86).
 
-A warning that does not stop the next step is advice. The eScience study
+A warning that does not stop the next step is advice. Benchmarking
 measured what that costs: across four model deployments, returning
 ``VECTOR_COMPONENTS_UNVERIFIED`` alongside a number changed nothing --
 9/20, 10/20, and 10/20 correct regardless of how much warning text came

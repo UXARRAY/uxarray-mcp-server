@@ -2,9 +2,9 @@
 
 This server ships a lot of multi-step machinery — `create_session`,
 `dataset_handle`, `result_handle`, `run_workflow`, `resume_workflow` —
-and almost none of it was measured with a model in the loop. In the
-eScience study the median run made one or two tool calls, so nothing in
-the numbers reflected whether a model can actually carry state across
+and almost none of it was measured with a model in the loop. In earlier
+benchmark runs the median session made one or two tool calls, so nothing
+in those numbers reflected whether a model can actually carry state across
 calls.
 
 Every task here is **impossible to satisfy in a single call**. That is

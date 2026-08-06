@@ -594,8 +594,8 @@ print(f"slurm job: {ep_info['slurm_job_id']}")
 # %%
 import time as _time
 
-MPAS_GRID = "/home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc"
-MPAS_DATA = "/home/jain/uxarray/test/meshfiles/mpas/QU/480/data.nc"
+MPAS_GRID = "/home/<user>/uxarray/test/meshfiles/mpas/QU/480/grid.nc"
+MPAS_DATA = "/home/<user>/uxarray/test/meshfiles/mpas/QU/480/data.nc"
 
 t0 = _time.time()
 mesh = run_analysis(
@@ -616,8 +616,12 @@ show(f"remote calculate_area ({_time.time() - t0:.1f}s)", area)
 # ## 6.2 Remote vector calculus on MPAS dyamond-30km
 
 # %%
-DYA_GRID = "/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc"
-DYA_DATA = "/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_data_subset.nc"
+DYA_GRID = (
+    "/home/<user>/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc"
+)
+DYA_DATA = (
+    "/home/<user>/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_data_subset.nc"
+)
 
 t0 = _time.time()
 grad = run_analysis(

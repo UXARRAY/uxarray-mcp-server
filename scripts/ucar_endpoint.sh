@@ -5,7 +5,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # USER CONFIG — change these to match your account before running
 # ---------------------------------------------------------------------------
-USERNAME="rajeevj"   # your NCAR username
+USERNAME="${NCAR_USERNAME:-$USER}"   # override with NCAR_USERNAME if it differs
 # ---------------------------------------------------------------------------
 
 ENDPOINT_NAME="${ENDPOINT_NAME:-ucar-uxarray-yac}"
