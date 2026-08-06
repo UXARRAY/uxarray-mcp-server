@@ -1,9 +1,9 @@
 """Task definitions for the multi-turn eval (issue #93).
 
 Every task here is deliberately impossible to finish in a single tool
-call. That is the whole point: the median run in the eScience study made
-one or two calls, so a benchmark that can be satisfied by one call
-measures nothing about the machinery this server actually ships --
+call. That is the whole point: the median session in earlier benchmark
+runs made one or two calls, so a benchmark that can be satisfied by one
+call measures nothing about the machinery this server actually ships --
 ``create_session``, ``dataset_handle``, ``result_handle``,
 ``run_workflow``, ``resume_workflow``.
 

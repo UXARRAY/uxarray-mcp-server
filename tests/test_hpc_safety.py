@@ -96,8 +96,8 @@ class TestCheckEndpointHealth:
     def test_yac_pythonpath_is_expected_runtime_path(self):
         """Endpoint-side YAC source/runtime paths are not a worker leak."""
         pythonpath = (
-            "/home/jain/src/yac/build/python:"
-            "/home/jain/local/yac-3.17/lib/python3.12/site-packages:"
+            "/home/testuser/src/yac/build/python:"
+            "/home/testuser/local/yac-3.17/lib/python3.12/site-packages:"
             "/lcrc/group/e3sm/jain/uxarray-yac-src"
         )
 
@@ -105,7 +105,9 @@ class TestCheckEndpointHealth:
 
     def test_conda_env_pythonpath_is_not_expected_yac_runtime_path(self):
         """A broad conda env site-packages path can still leak pydantic/dill."""
-        pythonpath = "/home/jain/.conda/envs/uxarray-yac/lib/python3.12/site-packages"
+        pythonpath = (
+            "/home/testuser/.conda/envs/uxarray-yac/lib/python3.12/site-packages"
+        )
 
         assert health._is_expected_yac_pythonpath(pythonpath) is False
 
@@ -595,7 +597,7 @@ class TestDefaultRouteIsDisclosed:
 
     def test_prefix_match_is_not_flagged(self):
         config = _two_cluster_config()
-        scoped = config.for_endpoint(path="/gpfs/fs1/home/jain/grid.nc")
+        scoped = config.for_endpoint(path="/gpfs/fs1/home/testuser/grid.nc")
 
         assert scoped.endpoint_name == "improv"
         assert scoped.routed_by_default_guess is False

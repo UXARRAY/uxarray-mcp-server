@@ -27,15 +27,29 @@ uv run pre-commit run --all-files
 uv run pytest tests/ --ignore=tests/test_remote_agent.py -v
 ```
 
-Full coding conventions and architecture notes are in [AGENTS.md](AGENTS.md).
+Architecture notes — layer boundaries, tool profiles, and the key design
+decisions behind them — are in
+[docs/architecture.md](docs/architecture.md).
 
 ## Making Changes
 
 - Work on a feature branch (`git checkout -b your-name/short-description`).
-- Keep changes focused — one logical change per PR.
+  `main` must always be deployable; never commit to it directly.
+- Keep changes focused — one logical change per PR. Rebase onto `main` (do not
+  merge) to resolve conflicts before opening the PR.
 - All new tools must call `attach_provenance()`, be assigned to a bucket in
-  `registry.py`, and be exported from `tools/__init__.py`.
-- All new tool functions need tests (see `tests/` for patterns).
+  `registry.py` (`_CONTROL_TOOLS`, `_CORE_EXTRA_TOOLS`, or `_DEFERRED_TOOLS`),
+  be exported from `tools/__init__.py`, and be documented in `docs/tools.md`.
+  `test_namespace_plan_covers_every_public_tool` fails if a tool in `__all__`
+  is not assigned to a bucket.
+- Prefer a new *operation* behind an existing front door (`run_analysis`,
+  `plot_dataset`, `diagnose_endpoint`, `manage_session`) over a new public
+  tool. New operations start deferred and graduate to `core` once stable.
+- Deferred tools need a `search_hint` in `_SEARCH_HINTS`; BM25 discovery works
+  much better with domain synonyms.
+- All new tool functions need tests (see `tests/` for patterns). Add a test for
+  every new error path and every bug fix. Behavior-preserving refactors should
+  not need existing tests changed.
 - Run the full check suite before pushing:
 
 ```bash
@@ -43,7 +57,29 @@ uv run pre-commit run --all-files
 uv run pytest tests/ --ignore=tests/test_remote_agent.py -v
 ```
 
+HPC-dependent tests need the optional extra:
+
+```bash
+uv sync --extra hpc --dev
+uv run pytest tests/test_remote_agent.py tests/test_hpc_safety.py -v
+```
+
 CI must be green before a PR is merged.
+
+## Common Mistakes
+
+- Importing `mcp` or `toolregistry` inside `domain/`. Domain functions must
+  import without server dependencies — they run on remote workers that do not
+  have `uxarray_mcp` installed.
+- Calling a module-level helper from a function in `remote/compute_functions.py`.
+  Only the submitted function body is serialized, so the helper is undefined on
+  the worker; keep shared logic inlined.
+- Returning a plain dict from a tool without `attach_provenance()`.
+- Using a `/home/...` path on a cluster where the file actually lives under the
+  canonical shared mount (for example `/gpfs/fs1/home/...`). Check
+  `probe_path_access` first on a new cluster.
+- Importing `io` inside a function when it is used for byte I/O that tests need
+  to patch — import it at module level instead.
 
 ## Pull Request Process
 

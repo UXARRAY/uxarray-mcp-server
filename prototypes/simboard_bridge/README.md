@@ -4,8 +4,8 @@ Two thin tools that let an MCP agent chain
 **SimBoard (find runs)** → **uxarray-mcp (analyze them)** in one conversation.
 
 This lives under `prototypes/` and is intentionally **not** wired into the
-registry (`registry.py`) yet. It's a proof of concept to share with Tom Vo
-(SimBoard lead) and Rob Jacob before committing to the integration.
+registry (`registry.py`). It is a proof of concept for review by the SimBoard
+maintainers before committing to the integration.
 
 ## What the demo looks like
 
@@ -74,27 +74,19 @@ uv run python -m prototypes.simboard_bridge.smoke
 OpenAPI schema: <https://simboard-dev-api.e3sm.org/openapi.json>
 Frontend: <https://simboard-dev.e3sm.org>
 
-## Status / next steps
+## Open questions before graduating this
 
-- [x] Confirmed live dev API at `simboard-dev-api.e3sm.org`.
-- [x] Verified case + simulation list endpoints return rich metadata.
-- [x] Verified simulation-detail returns archive/output/run_script paths
-      with machine identity (Perlmutter/NERSC).
-- [ ] Decide on auth model for production (today the dev API is open;
-      production will need either OAuth token or service-account creds).
-- [ ] Path translation: SimBoard returns NERSC paths; we'd route to the
-      `nersc`-named Globus Compute endpoint via uxarray-mcp's existing
-      `path_prefix` mechanism. No new code, just config.
-- [ ] If we move past prototype: graduate `tools.py` to
-      `src/uxarray_mcp/tools/simboard.py`, add unit tests, decide whether
-      to expose as front-door tools or under `analyze_dataset` enrichment.
+- **Auth model.** The dev API is open today; production will need either an
+  OAuth token or service-account credentials.
+- **Path translation.** SimBoard returns facility-native paths (for example
+  NERSC), which route to the matching named Globus Compute endpoint through
+  the existing `path_prefix` mechanism — config, not new code.
+- **Placement.** Graduating means moving `tools.py` to
+  `src/uxarray_mcp/tools/simboard.py` with unit tests, and deciding between
+  front-door tools and `analyze_dataset` enrichment.
 
-## Why this stays out of the main server (for now)
+## Why this stays out of the main server
 
-Until Tom blesses the integration, this is speculative work against a dev
-deployment. Putting it in `src/` would advertise it as supported. The
-prototype is enough to:
-
-1. Demo the workflow to Rob/Tom.
-2. Validate the API surface is what we need.
-3. Quantify the work it would take to ship.
+Putting it in `src/` would advertise it as supported while it still targets a
+dev deployment with an undecided auth model. The prototype is enough to
+validate the API surface and size the remaining work.

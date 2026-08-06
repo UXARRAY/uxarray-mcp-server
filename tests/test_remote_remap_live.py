@@ -8,9 +8,9 @@ noted when the remap tools were first added while the endpoint was offline.
 Run them explicitly with::
 
     UXMCP_LIVE_ENDPOINT=chrysalis \\
-    UXMCP_LIVE_GRID=/home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc \\
-    UXMCP_LIVE_DATA=/home/jain/uxarray/test/meshfiles/mpas/QU/480/data.nc \\
-    UXMCP_LIVE_TARGET_GRID=/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc \\
+    UXMCP_LIVE_GRID=/home/<user>/uxarray/test/meshfiles/mpas/QU/480/grid.nc \\
+    UXMCP_LIVE_DATA=/home/<user>/uxarray/test/meshfiles/mpas/QU/480/data.nc \\
+    UXMCP_LIVE_TARGET_GRID=/home/<user>/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc \\
     UXMCP_LIVE_VARIABLE=bottomDepth \\
     uv run pytest tests/test_remote_remap_live.py -v
 

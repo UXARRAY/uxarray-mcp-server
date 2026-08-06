@@ -14,6 +14,10 @@ sample, and error.  Run after workers are live, for example:
     --endpoints chrysalis improv ucar --repetitions 10 \
     --native-manifest artifacts/facility_matrix/native_paths.json
 
+Copy ``native_paths.example.json`` to ``native_paths.json`` and fill in the
+facility-native grid paths for your accounts; the real manifest is
+gitignored because those paths are account-specific.
+
 The optional manifest is ``{endpoint: {grid_path: ..., label: ...}}``.
 """
 

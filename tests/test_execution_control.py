@@ -241,7 +241,7 @@ def test_validate_hpc_setup_can_probe_sample_path(monkeypatch, tmp_path):
     }
     mock_path_future = MagicMock()
     mock_path_future.result.return_value = {
-        "path": "/home/jain/test.nc",
+        "path": "/home/testuser/test.nc",
         "exists": True,
         "is_file": True,
         "readable": True,
@@ -260,12 +260,12 @@ def test_validate_hpc_setup_can_probe_sample_path(monkeypatch, tmp_path):
     ):
         result = execution_control.validate_hpc_setup(
             run_remote_probe=True,
-            sample_path="/home/jain/test.nc",
+            sample_path="/home/testuser/test.nc",
         )
 
     sample_check = next(c for c in result["checks"] if c["name"] == "sample_path_probe")
     assert sample_check["passed"] is True
-    assert result["sample_path_probe"]["path"] == "/home/jain/test.nc"
+    assert result["sample_path_probe"]["path"] == "/home/testuser/test.nc"
 
 
 def test_validate_hpc_setup_selects_named_endpoint(monkeypatch, tmp_path):
@@ -337,7 +337,7 @@ hpc:
         return_value=(mock_client_cls, MagicMock(), MagicMock(), MagicMock()),
     ):
         result = execution_control.validate_hpc_setup(
-            sample_path="/glade/u/home/rajeevj/test.nc",
+            sample_path="/glade/u/home/testuser/test.nc",
             run_remote_probe=False,
         )
 

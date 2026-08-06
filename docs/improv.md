@@ -104,10 +104,10 @@ uv run python scripts/hpc_doctor.py \
 ## Reference Mesh Files on Improv
 
 ```
-/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc
-/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/QU/480/data.nc
-/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc
-/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_data_subset.nc
+/gpfs/fs1/home/<user>/uxarray/test/meshfiles/mpas/QU/480/grid.nc
+/gpfs/fs1/home/<user>/uxarray/test/meshfiles/mpas/QU/480/data.nc
+/gpfs/fs1/home/<user>/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc
+/gpfs/fs1/home/<user>/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_data_subset.nc
 ```
 
 Use canonical `/gpfs/fs1/home/...` paths — the `/home/...` alias resolves
