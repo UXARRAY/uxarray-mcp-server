@@ -1,38 +1,28 @@
 #!/usr/bin/env python3
-"""Validate gradient/curl/divergence against analytic vector-calculus identities.
+"""Validate UXarray vector calculus through the MCP front-door path.
 
-Runs four identities through the same `run_analysis` tool path used by the
-MCP server (not raw UXarray calls), so the numbers reported here are exactly
-what an agent would see:
+This is a bounded operator-regression evaluation, not a proof of convergence
+on arbitrary unstructured meshes.  It runs a manufactured scalar field over a
+nested structured spherical-grid family and records L-infinity and
+area-weighted L2 residuals for the identities exposed by the MCP server.
 
-  1. grad(const)            == 0
-  2. curl(const, const)     == 0
-  3. div(const, const)      == 0
-  4. curl(grad(phi))        == 0   (Gaussian phi; the stringent, double-
-                                    differentiation identity)
-
-Identity 4 requires `scale_by_radius=True` to hold near machine precision —
-`gradient()`/`curl()` are independently-computed, per-face first-order
-finite-volume operators, so on the unit sphere (`scale_by_radius=False`,
-the MCP server's own hardcoded default for other calls) they do not
-discretely cancel and the residual is O(1)-O(1e2), not O(1e-10). This
-script always passes `scale_by_radius=True` explicitly for identity 4 to
-get the correct, reproducible comparison.
-
-Uses a self-contained synthetic structured grid (no external mesh file
-needed) so this script runs anywhere with no data dependencies.
+The chained curl(gradient(phi)) check is intentionally local-only.  Its
+intermediate gradient file is constructed on the submitter filesystem; passing
+``--use-remote`` would therefore be a false remote claim.  Facility execution
+is exercised by :mod:`scripts.facility_matrix`, which creates all fixtures on
+the endpoint-visible filesystem before dispatch.
 
 Usage
 -----
     uv run python scripts/analytic_validation.py
-    uv run python scripts/analytic_validation.py --resolution-deg 2.0
-    uv run python scripts/analytic_validation.py --use-remote --endpoint chrysalis
+    uv run python scripts/analytic_validation.py --resolutions 8 4 2 1
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import tempfile
 import time
 from pathlib import Path
@@ -40,18 +30,7 @@ from typing import Any
 
 
 def _build_fixture(resolution_deg: float, tmp_dir: Path) -> tuple[str, str, str]:
-    """Build a synthetic structured grid + a data file with const/Gaussian fields.
-
-    Returns (grid_path, data_path, grad_of_phi_data_path). A structured
-    lon/lat grid is used (rather than HEALPix) because it can carry a
-    `sphere_radius` grid attribute that survives a real file round-trip via
-    `ux.open_grid`/`ux.open_dataset` — required for identity 4
-    (curl-of-gradient) to hold near machine precision, since
-    `scale_by_radius=True` silently falls back to unit-sphere behavior on
-    any grid lacking `sphere_radius` (e.g. HEALPix, which does not define
-    one). The third path is filled in by the caller after computing the
-    gradient of phi (needed to chain gradient -> curl for identity 4).
-    """
+    """Build a structured spherical grid and constant/Gaussian data files."""
     import numpy as np
     import uxarray as ux
     import xarray as xr
@@ -63,75 +42,48 @@ def _build_fixture(resolution_deg: float, tmp_dir: Path) -> tuple[str, str, str]
     grid = ux.Grid.from_structured(lon=lon, lat=lat)
     grid._ds.attrs["sphere_radius"] = 6.371e6
 
-    grid_path = str(tmp_dir / "grid.nc")
+    grid_path = str(tmp_dir / f"grid_{resolution_deg:g}deg.nc")
     grid.to_xarray().to_netcdf(grid_path)
-    grid = ux.open_grid(grid_path)  # reload so downstream calls see sphere_radius
+    grid = ux.open_grid(grid_path)
 
-    lon = np.asarray(grid.face_lon.values)
-    lat = np.asarray(grid.face_lat.values)
+    face_lon = np.asarray(grid.face_lon.values)
+    face_lat = np.asarray(grid.face_lat.values)
     lon0, lat0, sigma = 30.0, 20.0, 25.0
-    dlon = (lon - lon0 + 180) % 360 - 180
-    phi = np.exp(-((dlon**2 + (lat - lat0) ** 2) / (2 * sigma**2)))
-
+    dlon = (face_lon - lon0 + 180) % 360 - 180
+    phi = np.exp(-((dlon**2 + (face_lat - lat0) ** 2) / (2 * sigma**2)))
     ds = xr.Dataset(
         {
-            "phi": (["n_face"], phi, {"units": "K"}),
-            "const1": (["n_face"], np.full(grid.n_face, 5.0), {"units": "m s-1"}),
-            "const2": (["n_face"], np.full(grid.n_face, 7.0), {"units": "m s-1"}),
+            "phi": ("n_face", phi, {"units": "K"}),
+            "const1": ("n_face", np.full(grid.n_face, 5.0), {"units": "m s-1"}),
+            "const2": ("n_face", np.full(grid.n_face, 7.0), {"units": "m s-1"}),
         }
     )
-    data_path = tmp_dir / "data.nc"
+    data_path = tmp_dir / f"data_{resolution_deg:g}deg.nc"
     ds.to_netcdf(data_path)
+    return grid_path, str(data_path), str(tmp_dir / f"grad_{resolution_deg:g}deg.nc")
 
-    return grid_path, str(data_path), str(tmp_dir / "grad_of_phi.nc")
 
+def _norms(values: Any, weights: Any | None = None) -> dict[str, float]:
+    import numpy as np
 
-def _write_gradient_components(
-    grid_path: str,
-    data_path: str,
-    out_path: str,
-    use_remote: bool,
-    endpoint: str | None,
-) -> dict:
-    """Compute grad(phi) via run_analysis, write components for the curl step."""
-    import xarray as xr
-
-    from uxarray_mcp.tools import run_analysis
-
-    result = run_analysis(
-        operation="gradient",
-        grid_path=grid_path,
-        data_path=data_path,
-        variable_name="phi",
-        scale_by_radius=True,
-        use_remote=use_remote,
-        endpoint=endpoint,
+    values = np.asarray(values, dtype=float).ravel()
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return {"linf": math.nan, "l2_area_weighted": math.nan}
+    output = {"linf": float(np.max(np.abs(finite)))}
+    if weights is None:
+        output["l2_area_weighted"] = float(np.sqrt(np.mean(finite**2)))
+        return output
+    weights = np.asarray(weights, dtype=float).ravel()
+    mask = np.isfinite(values) & np.isfinite(weights) & (weights >= 0)
+    output["l2_area_weighted"] = float(
+        np.sqrt(np.sum(weights[mask] * values[mask] ** 2) / np.sum(weights[mask]))
     )
-    # run_analysis only returns summary stats, not the raw per-face arrays,
-    # so recompute the same call directly against UXarray to get the field
-    # (identical code path: UxDataArray.gradient, same scale_by_radius).
-    from uxarray_mcp.domain.mesh import load_dataset
-
-    uxds = load_dataset(grid_path, data_path)
-    grad = uxds["phi"].gradient(scale_by_radius=True)
-    comp_names = list(grad.data_vars)
-    xr.Dataset(
-        {
-            "grad_u": (["n_face"], grad[comp_names[0]].values, {"units": "K m-1"}),
-            "grad_v": (["n_face"], grad[comp_names[1]].values, {"units": "K m-1"}),
-        }
-    ).to_netcdf(out_path)
-    return result
+    return output
 
 
-def run_identity(
-    label: str,
-    operation: str,
-    grid_path: str,
-    data_path: str,
-    kwargs: dict[str, Any],
-    use_remote: bool,
-    endpoint: str | None,
+def _run_analysis(
+    operation: str, grid_path: str, data_path: str, **kwargs: Any
 ) -> dict:
     from uxarray_mcp.tools import run_analysis
 
@@ -140,126 +92,163 @@ def run_identity(
         operation=operation,
         grid_path=grid_path,
         data_path=data_path,
-        use_remote=use_remote,
-        endpoint=endpoint,
         **kwargs,
     )
-    elapsed = time.perf_counter() - t0
+    return {"result": result, "elapsed_seconds": time.perf_counter() - t0}
 
-    stats = result.get("stats") or result.get("component_stats")
-    if operation == "gradient":
-        max_abs = max(
-            abs(v) for comp in stats.values() for v in (comp["min"], comp["max"])
+
+def _gradient_file(grid_path: str, data_path: str, output_path: str) -> None:
+    """Persist gradient components for the chained identity locally."""
+    import xarray as xr
+
+    from uxarray_mcp.domain.mesh import load_dataset
+
+    uxds = load_dataset(grid_path, data_path)
+    grad = uxds["phi"].gradient(scale_by_radius=True)
+    names = list(grad.data_vars)
+    xr.Dataset(
+        {
+            "grad_u": ("n_face", grad[names[0]].values, {"units": "K m-1"}),
+            "grad_v": ("n_face", grad[names[1]].values, {"units": "K m-1"}),
+        }
+    ).to_netcdf(output_path)
+
+
+def _curl_values(grid_path: str, data_path: str) -> tuple[Any, Any]:
+    """Read the same curl implementation for norm computation after MCP call."""
+    from uxarray_mcp.domain.mesh import load_dataset
+
+    uxds = load_dataset(grid_path, data_path)
+    curl = uxds["grad_u"].curl(uxds["grad_v"], scale_by_radius=True)
+    return curl.values, uxds.uxgrid.face_areas.values
+
+
+def run_resolution(resolution_deg: float, work_dir: Path) -> dict[str, Any]:
+    grid_path, data_path, gradient_path = _build_fixture(resolution_deg, work_dir)
+    import uxarray as ux
+
+    grid = ux.open_grid(grid_path)
+    cases: list[dict[str, Any]] = []
+    for label, operation, kwargs in (
+        (
+            "grad(const)=0",
+            "gradient",
+            {"variable_name": "const1", "scale_by_radius": True},
+        ),
+        (
+            "curl(const,const)=0",
+            "curl",
+            {"u_variable": "const1", "v_variable": "const2", "scale_by_radius": True},
+        ),
+        (
+            "div(const,const)=0",
+            "divergence",
+            {"u_variable": "const1", "v_variable": "const2"},
+        ),
+    ):
+        run = _run_analysis(operation, grid_path, data_path, **kwargs)
+        stats = run["result"].get("stats") or run["result"].get("component_stats")
+        if operation == "gradient":
+            residual = max(
+                abs(v)
+                for component in stats.values()
+                for v in (component["min"], component["max"])
+            )
+        else:
+            residual = max(abs(stats["min"]), abs(stats["max"]))
+        cases.append(
+            {
+                "identity": label,
+                "norms": {"linf": float(residual), "l2_area_weighted": float(residual)},
+                "elapsed_seconds": run["elapsed_seconds"],
+                "provenance": run["result"]["_provenance"],
+            }
         )
-    else:
-        max_abs = max(abs(stats["min"]), abs(stats["max"]))
 
+    # The front-door curl call is exercised first; direct re-read below only
+    # obtains every face value needed for an L2 metric, which summaries omit.
+    _gradient_file(grid_path, data_path, gradient_path)
+    run = _run_analysis(
+        "curl",
+        grid_path,
+        gradient_path,
+        u_variable="grad_u",
+        v_variable="grad_v",
+        scale_by_radius=True,
+    )
+    values, weights = _curl_values(grid_path, gradient_path)
+    cases.append(
+        {
+            "identity": "curl(grad(phi))=0 (Gaussian)",
+            "norms": _norms(values, weights),
+            "elapsed_seconds": run["elapsed_seconds"],
+            "provenance": run["result"]["_provenance"],
+        }
+    )
     return {
-        "label": label,
-        "operation": operation,
-        "elapsed_seconds": round(elapsed, 4),
-        "max_abs_residual": max_abs,
-        "execution_venue": result["_provenance"]["execution_venue"],
-        "warnings": result["_provenance"]["warnings"],
+        "resolution_deg": resolution_deg,
+        "n_face": int(grid.n_face),
+        "cases": cases,
     }
+
+
+def _observed_rates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Report ratios; do not call them convergence rates without a study design."""
+    target = [r for r in rows if r["identity"].startswith("curl(grad")]
+    target.sort(key=lambda r: r["resolution_deg"], reverse=True)
+    rates = []
+    for coarse, fine in zip(target, target[1:]):
+        coarse_error = coarse["norms"]["linf"]
+        fine_error = fine["norms"]["linf"]
+        rates.append(
+            {
+                "coarse_resolution_deg": coarse["resolution_deg"],
+                "fine_resolution_deg": fine["resolution_deg"],
+                "linf_ratio": coarse_error / fine_error if fine_error else None,
+            }
+        )
+    return rates
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--resolution-deg",
-        type=float,
-        default=4.0,
-        help="Synthetic grid spacing in degrees",
+        "--resolutions", type=float, nargs="+", default=[8.0, 4.0, 2.0, 1.0]
     )
-    parser.add_argument("--use-remote", action="store_true")
-    parser.add_argument("--endpoint", default=None)
+    parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 
+    rows: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="analytic_validation_") as td:
-        tmp_dir = Path(td)
-        grid_path, data_path, grad_of_phi_path = _build_fixture(
-            args.resolution_deg, tmp_dir
-        )
+        work_dir = Path(td)
+        for resolution in args.resolutions:
+            report = run_resolution(resolution, work_dir)
+            for case in report.pop("cases"):
+                rows.append({**report, **case})
 
-        results = []
-        results.append(
-            run_identity(
-                "grad(const) == 0",
-                "gradient",
-                grid_path,
-                data_path,
-                {"variable_name": "const1", "scale_by_radius": True},
-                args.use_remote,
-                args.endpoint,
-            )
+    payload = {
+        "scope": "local structured-grid operator regression; not a general unstructured convergence proof",
+        "resolutions_deg": args.resolutions,
+        "rows": rows,
+        "curl_grad_linf_ratios": _observed_rates(rows),
+    }
+    output = args.output or (
+        Path(__file__).resolve().parent.parent
+        / "evals"
+        / "results"
+        / "analytic_refinement.json"
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, indent=2))
+    print(
+        f"{'resolution':>10} {'faces':>8} {'identity':38s} {'Linf':>12} {'L2(area)':>12}"
+    )
+    print("-" * 92)
+    for row in rows:
+        print(
+            f"{row['resolution_deg']:10g} {row['n_face']:8d} {row['identity']:38s} {row['norms']['linf']:12.3e} {row['norms']['l2_area_weighted']:12.3e}"
         )
-        results.append(
-            run_identity(
-                "curl(const, const) == 0",
-                "curl",
-                grid_path,
-                data_path,
-                {
-                    "u_variable": "const1",
-                    "v_variable": "const2",
-                    "scale_by_radius": True,
-                },
-                args.use_remote,
-                args.endpoint,
-            )
-        )
-        results.append(
-            run_identity(
-                "div(const, const) == 0",
-                "divergence",
-                grid_path,
-                data_path,
-                {"u_variable": "const1", "v_variable": "const2"},
-                args.use_remote,
-                args.endpoint,
-            )
-        )
-
-        # Identity 4: curl(grad(phi)) == 0 — chain gradient output into curl.
-        _write_gradient_components(
-            grid_path, data_path, grad_of_phi_path, args.use_remote, args.endpoint
-        )
-        results.append(
-            run_identity(
-                "curl(grad(phi)) == 0 (Gaussian field)",
-                "curl",
-                grid_path,
-                grad_of_phi_path,
-                {
-                    "u_variable": "grad_u",
-                    "v_variable": "grad_v",
-                    "scale_by_radius": True,
-                },
-                args.use_remote,
-                args.endpoint,
-            )
-        )
-
-        print(f"{'identity':40s} {'max|residual|':>16s} {'venue':>14s}")
-        print("-" * 74)
-        for r in results:
-            print(
-                f"{r['label']:40s} {r['max_abs_residual']:16.3e} {r['execution_venue']:>14s}"
-            )
-            for w in r["warnings"]:
-                print(f"    warning: {w}")
-
-        out_dir = Path(__file__).resolve().parent.parent / "evals" / "results"
-        out_dir.mkdir(exist_ok=True, parents=True)
-        out_path = out_dir / f"analytic_validation_{args.resolution_deg}deg.json"
-        out_path.write_text(
-            json.dumps(
-                {"resolution_deg": args.resolution_deg, "results": results}, indent=2
-            )
-        )
-        print(f"\nWrote {out_path}")
-
+    print(f"\nWrote {output}")
     return 0
 
 

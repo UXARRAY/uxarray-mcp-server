@@ -163,6 +163,42 @@ def evaluate_validation_preconditions(result: dict[str, Any]) -> list[dict[str, 
     ]
 
 
+def evaluate_remap_preconditions(coverage: dict[str, Any]) -> list[dict[str, Any]]:
+    """Declare that a remap target must overlap its source mesh.
+
+    #85 shipped ``REMAP_COVERAGE_ZERO`` as a warning printed beside the
+    numbers. Zero coverage means *every* returned value is extrapolated
+    from outside the source mesh, so the field is not a remap of anything
+    -- that is the one coverage state worth refusing over.
+
+    Partial coverage and a non-conservative method stay warnings: both
+    describe results a caller can still reason about, and refusing on
+    them would make ordinary regional remaps unusable.
+    """
+    codes = list(coverage.get("warning_codes", []) or [])
+    n_total = coverage.get("n_target_points")
+    n_in = coverage.get("points_in_source")
+    bbox = coverage.get("source_bbox") or {}
+    if bbox:
+        extent = (
+            f"lon [{bbox.get('lon_min')}, {bbox.get('lon_max')}], "
+            f"lat [{bbox.get('lat_min')}, {bbox.get('lat_max')}]"
+        )
+    else:
+        extent = "unknown (source bounding box not reported)"
+    return [
+        _check(
+            "remap_coverage_nonzero",
+            "REMAP_COVERAGE_ZERO" not in codes,
+            f"{n_in} of {n_total} target points fall inside the source mesh; "
+            f"the source covers {extent}.",
+            "Choose target_lon/target_lat ranges that overlap the source "
+            "mesh extent reported above, so at least some target points "
+            "are interpolated rather than extrapolated.",
+        )
+    ]
+
+
 def _request_state(operation: str, failed: list[dict[str, Any]]) -> str:
     """An opaque token identifying exactly this refusal.
 

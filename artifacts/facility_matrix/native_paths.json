@@ -1,0 +1,14 @@
+{
+  "chrysalis": {
+    "grid_path": "/lcrc/group/e3sm/data/inputdata/ocn/mpas-o/oQU120/oQU120.grid.nc",
+    "label": "oQU120 MPAS-O production grid"
+  },
+  "improv": {
+    "grid_path": "/gpfs/fs1/home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc",
+    "label": "QU/480 MPAS grid"
+  },
+  "ucar-uxarray-yac": {
+    "grid_path": "/glade/u/home/rajeevj/uxarray/test/meshfiles/mpas/QU/mesh.QU.1920km.151026.nc",
+    "label": "QU/1920km MPAS grid"
+  }
+}

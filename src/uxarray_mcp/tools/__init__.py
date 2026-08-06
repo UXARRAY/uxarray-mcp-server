@@ -19,6 +19,7 @@ from .advanced import (
 )
 from .capabilities import get_capabilities
 from .catalog import list_datasets
+from .contracts import describe_response_contract, validate_response
 from .execution_control import (
     endpoint_status,
     get_execution_mode,
@@ -75,6 +76,8 @@ from .vector_calc import (
 __all__ = [
     "get_capabilities",
     "list_datasets",
+    "describe_response_contract",
+    "validate_response",
     "analyze_dataset",
     "run_scientific_agent",
     "run_workflow",

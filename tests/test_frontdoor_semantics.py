@@ -183,27 +183,74 @@ def test_dataset_handle_keeps_strict_session_resolution():
     )
 
 
-def test_remap_zero_coverage_is_not_physically_interpretable():
+ZERO_COVERAGE_RESULT = {
+    "stats": {"mean": 1.0},
+    "source_coverage": {
+        "points_in_source": 0,
+        "n_target_points": 25,
+        "source_bbox": {
+            "lon_min": 40.0,
+            "lon_max": 47.0,
+            "lat_min": -2.0,
+            "lat_max": 2.0,
+        },
+        "warning_codes": [
+            "REMAP_COVERAGE_ZERO",
+            "REMAP_METHOD_NOT_CONSERVATIVE",
+        ],
+    },
+}
+
+
+def test_remap_zero_coverage_refuses():
+    with pytest.raises(PreconditionRefusal) as excinfo:
+        _finalize_analysis_result("remap_to_rectilinear", dict(ZERO_COVERAGE_RESULT))
+
+    payload = excinfo.value.payload
+    assert payload["result_type"] == "input_required"
+    assert [c["id"] for c in payload["refusal"]["failed_checks"]] == [
+        "remap_coverage_nonzero"
+    ]
+    # The refusal names the extent the caller has to overlap, otherwise the
+    # only available repair is guessing.
+    assert "40" in payload["refusal"]["failed_checks"][0]["detail"]
+
+
+def test_remap_zero_coverage_override_is_unverified():
+    result = _finalize_analysis_result(
+        "remap_to_rectilinear",
+        dict(ZERO_COVERAGE_RESULT),
+        acknowledge=OVERRIDE_TOKEN,
+    )
+
+    assert result["preconditions"]["status"] == "overridden"
+    assert result["scientific_status"] == {
+        "status": "unverified",
+        "physically_interpretable": False,
+        "warning_codes": [
+            "REMAP_COVERAGE_ZERO",
+            "REMAP_METHOD_NOT_CONSERVATIVE",
+            "PRECONDITION_FAILED_REMAP_COVERAGE_NONZERO",
+        ],
+    }
+
+
+def test_remap_partial_coverage_still_only_warns():
     result = _finalize_analysis_result(
         "remap_to_rectilinear",
         {
             "stats": {"mean": 1.0},
             "source_coverage": {
-                "points_in_source": 0,
+                "points_in_source": 9,
                 "n_target_points": 25,
-                "warning_codes": [
-                    "REMAP_COVERAGE_ZERO",
-                    "REMAP_METHOD_NOT_CONSERVATIVE",
-                ],
+                "warning_codes": ["REMAP_COVERAGE_PARTIAL"],
             },
         },
     )
 
+    assert result["preconditions"]["status"] == "satisfied"
     assert result["scientific_status"] == {
         "status": "warning",
         "physically_interpretable": False,
-        "warning_codes": [
-            "REMAP_COVERAGE_ZERO",
-            "REMAP_METHOD_NOT_CONSERVATIVE",
-        ],
+        "warning_codes": ["REMAP_COVERAGE_PARTIAL"],
     }

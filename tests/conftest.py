@@ -310,3 +310,85 @@ def regional_mesh_files(tmp_path):
         {"temperature": (["n_face"], 0.1 + 0.06 * rng.random(grid.n_face))}
     ).to_netcdf(data_file)
     return str(grid_file), str(data_file)
+
+
+@pytest.fixture
+def earth_radius_mesh_files(tmp_path):
+    """Closed global mesh that declares a physical Earth radius (#92).
+
+    Every other mesh fixture here sits on a unit sphere, where scaling by
+    R is invisible and the area identity happens to be ``4*pi``. That
+    hides a whole class of bug -- #87 was exactly a unit-sphere blind
+    spot -- so at least one fixture has to carry a real radius.
+    """
+    lon = np.arange(0, 360, 20.0)
+    lat = np.arange(-80, 81, 20.0)
+    grid = ux.Grid.from_structured(lon=lon, lat=lat)
+    grid_file = tmp_path / "earth_grid.nc"
+    data_file = tmp_path / "earth_data.nc"
+
+    grid_ds = grid.to_xarray()
+    grid_ds.attrs["sphere_radius"] = 6371000.0
+    grid_ds.to_netcdf(grid_file)
+
+    rng = np.random.default_rng(23)
+    xr.Dataset(
+        {
+            "u": (["n_face"], 10 * rng.standard_normal(grid.n_face)),
+            "v": (["n_face"], 10 * rng.standard_normal(grid.n_face)),
+        }
+    ).to_netcdf(data_file)
+    return str(grid_file), str(data_file)
+
+
+@pytest.fixture
+def multi_level_mesh_files(tmp_path):
+    """Mesh plus a field with four vertical levels (#92).
+
+    Level selection is untested against any fixture where picking the
+    wrong level produces a plausible-looking wrong number, so the levels
+    here are separated far enough that a mis-selection is unmistakable.
+    """
+    lon = np.arange(0, 360, 30.0)
+    lat = np.arange(-75, 76, 30.0)
+    grid = ux.Grid.from_structured(lon=lon, lat=lat)
+    grid_file = tmp_path / "level_grid.nc"
+    data_file = tmp_path / "level_data.nc"
+    grid.to_xarray().to_netcdf(grid_file)
+
+    n_level = 4
+    # Level k is centered on 100*(k+1), so a mean of ~200 can only come
+    # from level 1 and nothing else.
+    values = np.stack([np.full(grid.n_face, 100.0 * (k + 1)) for k in range(n_level)])
+    xr.Dataset(
+        {"temperature": (["n_level", "n_face"], values)},
+        coords={"n_level": np.arange(n_level)},
+    ).to_netcdf(data_file)
+    return str(grid_file), str(data_file)
+
+
+@pytest.fixture
+def masked_mesh_files(tmp_path):
+    """Mesh plus a field whose southern half is missing (#92).
+
+    Nothing else in the suite exercises masked data, so no operation is
+    checked for whether it quietly averages over a mask. Here the unmasked
+    cells are all exactly 1.0: any mean other than 1.0 means NaNs were
+    folded in.
+    """
+    lon = np.arange(0, 360, 30.0)
+    lat = np.arange(-75, 76, 30.0)
+    grid = ux.Grid.from_structured(lon=lon, lat=lat)
+    grid_file = tmp_path / "masked_grid.nc"
+    data_file = tmp_path / "masked_data.nc"
+    grid.to_xarray().to_netcdf(grid_file)
+
+    values = np.ones(grid.n_face)
+    face_lat = np.asarray(grid.face_lat)
+    masked = face_lat < 0
+    values[masked] = np.nan
+    xr.Dataset(
+        {"salinity": (["n_face"], values)},
+        attrs={"n_masked_faces": int(masked.sum())},
+    ).to_netcdf(data_file)
+    return str(grid_file), str(data_file)

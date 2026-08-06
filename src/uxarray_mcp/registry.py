@@ -83,6 +83,9 @@ _CONTROL_TOOLS: dict[str, tuple[str, ...]] = {
 # Core-extra: tools with no front-door equivalent that are read-only.
 _CORE_EXTRA_TOOLS: dict[str, tuple[str, ...]] = {
     "io": ("list_datasets",),
+    # #91: the declared response shape is served on request, never bundled
+    # into every result -- that would repeat the payload mistake #83 tracks.
+    "contract": ("describe_response_contract", "validate_response"),
 }
 
 # Deferred pool — loaded only in ``deferred-full``.

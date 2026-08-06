@@ -39,7 +39,10 @@ NON_SIGNAL_KEYS = DISCOVERY_ONLY_KEYS | {
 #: length of the temporary file paths echoed back in ``_provenance.inputs``.
 RESULT_BYTE_BUDGETS = {
     "inspect_mesh": 1600,
-    "calculate_area": 1600,
+    # Raised from 1600 for the postcondition block (#84/#90): ~440 bytes
+    # that took correct verification answers from 11/20 to 20/20 in the
+    # study, which is the one payload increase we have evidence pays back.
+    "calculate_area": 1900,
     "inspect_variable": 2600,
     "calculate_zonal_mean": 2800,
     "validate_dataset": 2600,

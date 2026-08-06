@@ -9,6 +9,7 @@ from uxarray_mcp.domain.remap_coverage import (
     compute_target_coverage,
     method_is_conservative,
 )
+from uxarray_mcp.preconditions import OVERRIDE_TOKEN
 from uxarray_mcp.tools.advanced import remap_to_rectilinear
 from uxarray_mcp.tools.frontdoor import run_analysis
 
@@ -97,7 +98,27 @@ class TestRemapToRectilinearCoverage:
         assert "REMAP_COVERAGE_ZERO" in joined
         assert "REMAP_METHOD_NOT_CONSERVATIVE" in joined
 
-    def test_front_door_marks_zero_coverage_not_interpretable(
+    def test_front_door_refuses_zero_coverage(self, state_dir, regional_mesh_files):
+        grid_file, data_file = regional_mesh_files
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = run_analysis(
+                operation="remap_to_rectilinear",
+                grid_path=grid_file,
+                data_path=data_file,
+                variable_name="temperature",
+                target_lon=list(np.arange(-180, 180, 72.0)),
+                target_lat=list(np.arange(-60, 61, 30.0)),
+            )
+        assert result["result_type"] == "input_required"
+        assert [c["id"] for c in result["refusal"]["failed_checks"]] == [
+            "remap_coverage_nonzero"
+        ]
+        # No number came back, which is the whole point: a mean computed
+        # entirely outside the source mesh is not a remap of anything.
+        assert "stats" not in result
+
+    def test_front_door_zero_coverage_override_returns_unverified(
         self, state_dir, regional_mesh_files
     ):
         grid_file, data_file = regional_mesh_files
@@ -110,11 +131,13 @@ class TestRemapToRectilinearCoverage:
                 variable_name="temperature",
                 target_lon=list(np.arange(-180, 180, 72.0)),
                 target_lat=list(np.arange(-60, 61, 30.0)),
+                acknowledge=OVERRIDE_TOKEN,
             )
         status = result["scientific_status"]
-        assert status["status"] == "warning"
+        assert status["status"] == "unverified"
         assert status["physically_interpretable"] is False
         assert "REMAP_COVERAGE_ZERO" in status["warning_codes"]
+        assert result["stats"]["mean"] is not None
 
     def test_full_coverage_still_flags_non_conservative(
         self, state_dir, regional_mesh_files

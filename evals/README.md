@@ -34,15 +34,19 @@ regressions ("we used to pick the right tool 90% of the time, now it's
 |---|---|
 | [`schema_rejection/`](schema_rejection/) | How often the typed tool boundary catches malformed calls before any work happens — the "did we waste compute on garbage?" number |
 | [`tool_retrieval/`](tool_retrieval/) | How often a simple text retriever (BM25) finds the right tool by description — the "is our tool catalog still navigable as it grows?" number |
+| [`multi_turn/`](multi_turn/) | How often a multi-step session keeps its own state — session/result handles carried instead of invented, refusals repaired, interrupted workflows resumed |
 
-Both run end-to-end in under 30 seconds on a laptop with no external
-dependencies. They are cheap enough to add to CI.
+All three run end-to-end in under 30 seconds on a laptop with no external
+dependencies. They are cheap enough to add to CI. `multi_turn/` ships two
+scripted adapters so it is offline-runnable by default; an LLM adapter is
+optional. (`indirect_injection/`, below, is the exception — it needs a model.)
 
 ## How to run
 
 ```bash
 uv run python -m evals.schema_rejection.run
 uv run python -m evals.tool_retrieval.run
+uv run python -m evals.multi_turn.run
 ```
 
 Each runner writes a JSON file under `results/` named with a timestamp.
@@ -63,3 +67,15 @@ Bad triggers (use `tests/` instead):
 - Asserting a single specific output for a single specific input.
 - Checking a function's signature or contract.
 - Anything that should be a unit test of a Python function.
+
+## New paper-revision protocols
+
+- `indirect_injection/` is a safe, isolated **LLM-dependent** study of
+  untrusted tool output. It is intentionally not run in normal CI: a pinned
+  Argo model/deployment adapter and the pre-registered 10-trial protocol are
+  required.
+- `scripts/analytic_validation.py` is a local structured-grid refinement
+  regression. It is not a remote test and must not be cited as one.
+- `scripts/facility_matrix.py` is the live three-endpoint protocol. It keeps
+  portable-fixture comparisons separate from facility-native data
+  demonstrations and retains every failure in its JSON output.
