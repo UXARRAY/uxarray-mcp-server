@@ -58,3 +58,16 @@ through them: cacheable `tools/list` results weaken the argument for repeating
 catalog material inside results (#83), and Multi Round-Trip Requests give a
 server a way to halt a call pending acknowledgment rather than warning and
 computing anyway (#86).
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+01-run-analysis-is-too-general
+02-capability-catalog-dominates-every-reply
+03-results-cannot-say-whether-anything-was-checked
+04-remap-extrapolates-silently
+05-warnings-inform-but-never-block
+06-scale-by-radius-default-disagrees-with-uxarray
+07-no-result-size-budget
+```
