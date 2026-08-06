@@ -1,0 +1,132 @@
+name: Upstream Compatibility
+
+# We sit downstream of four independently-released packages: toolregistry,
+# toolregistry-server, mcp, and uxarray. A break in any of them shows up in
+# our tools long before it shows up in our lockfile, so probe them on a
+# schedule instead of waiting for a user to hit it.
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"  # Monday 05:23 UTC
+
+  # Allow an upstream release to notify us immediately.
+  repository_dispatch:
+    types: [upstream-release]
+
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package to force-upgrade (blank = upgrade all to latest)"
+        required: false
+        default: ""
+      version:
+        description: "Version for that package (blank = latest)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  latest:
+    name: latest ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Probe each upstream on its own so a failure names the culprit
+        # directly instead of forcing a bisect across four packages.
+        target: [toolregistry, toolregistry-server, mcp, uxarray, all]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dependencies
+        run: uv sync --dev
+
+      - name: Upgrade upstream to latest
+        id: upgrade
+        env:
+          TARGET: ${{ matrix.target }}
+          INPUT_PACKAGE: ${{ github.event.inputs.package || github.event.client_payload.package }}
+          INPUT_VERSION: ${{ github.event.inputs.version || github.event.client_payload.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_PACKAGE" ]; then
+            SPEC="$INPUT_PACKAGE"
+            if [ -n "$INPUT_VERSION" ]; then
+              VERSION="${INPUT_VERSION#v}"
+              if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+'; then
+                echo "::error::Invalid version format: '$INPUT_VERSION'"
+                exit 1
+              fi
+              SPEC="$INPUT_PACKAGE==$VERSION"
+            fi
+            uv pip install --upgrade "$SPEC"
+          elif [ "$TARGET" = "all" ]; then
+            uv pip install --upgrade toolregistry toolregistry-server mcp uxarray
+          else
+            uv pip install --upgrade "$TARGET"
+          fi
+          {
+            echo "versions<<EOF"
+            uv pip list | grep -E '^(toolregistry|toolregistry-server|mcp|uxarray) ' || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Show resolved versions
+        run: uv pip list | grep -E '^(toolregistry|toolregistry-server|mcp|uxarray) '
+
+      - name: Run test suite
+        run: uv run pytest tests/ --ignore=tests/test_remote_agent.py -v --tb=long
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET: ${{ matrix.target }}
+          VERSIONS: ${{ steps.upgrade.outputs.versions }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "::error::Upstream '$TARGET' at latest breaks the test suite"
+          echo "$VERSIONS"
+          echo "See $RUN_URL"
+
+  floor:
+    name: declared floor versions
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install lowest-compatible dependency versions
+        # Our pyproject declares ranges (e.g. mcp>=1.24,<3) but CI otherwise
+        # only ever exercises the top of those ranges. Issue #54 upstream was
+        # exactly this class of bug, so test the bottom too.
+        run: uv sync --dev --resolution lowest-direct
+
+      - name: Show resolved versions
+        run: uv pip list | grep -E '^(toolregistry|toolregistry-server|mcp|uxarray) '
+
+      - name: Run test suite
+        run: uv run pytest tests/ --ignore=tests/test_remote_agent.py -v --tb=long
