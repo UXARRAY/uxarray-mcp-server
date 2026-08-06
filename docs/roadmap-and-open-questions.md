@@ -26,7 +26,6 @@ Three sources feed this list.
 | [#89](https://github.com/UXARRAY/uxarray-mcp-server/issues/89) | `run_analysis` is a single tool with 38 parameters and 32 operations | study; root cause of #83 |
 | [#88](https://github.com/UXARRAY/uxarray-mcp-server/issues/88) | No result-size budget or regression test | study |
 | [#87](https://github.com/UXARRAY/uxarray-mcp-server/issues/87) | `scale_by_radius` default disagrees with the UXarray Python API | study |
-| [#86](https://github.com/UXARRAY/uxarray-mcp-server/issues/86) | Warnings inform but never block | study; MRTR noted |
 | [#85](https://github.com/UXARRAY/uxarray-mcp-server/issues/85) | Remapping returns confident numbers outside source coverage | study |
 | [#84](https://github.com/UXARRAY/uxarray-mcp-server/issues/84) | Results cannot say whether anything was checked | study; the one measured win |
 | [#83](https://github.com/UXARRAY/uxarray-mcp-server/issues/83) | A tool catalog is 74% of what the server sends back | study |
@@ -40,15 +39,18 @@ Three sources feed this list.
 
 | Issue | What landed |
 |---|---|
-| [#85](https://github.com/UXARRAY/uxarray-mcp-server/issues/85) | `remap_to_rectilinear` returns a `source_coverage` block (`points_in_source` / `n_target_points`, source bounding box, point-in-cell or bounding-box test) and raises `REMAP_COVERAGE_ZERO`, `REMAP_COVERAGE_PARTIAL`, and `REMAP_METHOD_NOT_CONSERVATIVE`. Refusing on zero coverage still depends on #86. |
+| [#85](https://github.com/UXARRAY/uxarray-mcp-server/issues/85) | `remap_to_rectilinear` returns a `source_coverage` block (`points_in_source` / `n_target_points`, source bounding box, point-in-cell or bounding-box test) and raises `REMAP_COVERAGE_ZERO`, `REMAP_COVERAGE_PARTIAL`, and `REMAP_METHOD_NOT_CONSERVATIVE`. Refusing on zero coverage is now possible via the #86 precondition machinery and is tracked separately. |
 | [#87](https://github.com/UXARRAY/uxarray-mcp-server/issues/87) | `scale_by_radius` already defaults to `True` on `main`, matching the UXarray accessor; the issue describes a state that predates the readiness-contract work. Verify and close. |
+| [#86](https://github.com/UXARRAY/uxarray-mcp-server/issues/86) | `curl` and `divergence` declare preconditions as data and refuse instead of returning an unphysical number. The refusal is shaped after the MCP `2026-07-28` MRTR flow (`result_type: "input_required"`, an `elicitation/create` request, an opaque `request_state`) and names the specific repair for each failed check. `acknowledge` runs it anyway, marked `unverified` and never `physically_interpretable`. |
 | [#88](https://github.com/UXARRAY/uxarray-mcp-server/issues/88) | `tests/test_payload_budget.py` asserts per-operation result byte budgets, a signal-fraction floor, absence of discovery-only keys in results, and a ceiling on the serialized core tool specification. Budgets are ratchets to tighten as #83 and #89 land. |
 
-Upstream, blocking us:
+Upstream, resolved:
 
 - [Oaklight/toolregistry-server#54](https://github.com/Oaklight/toolregistry-server/issues/54)
-  — `mcp` 2.0.0 breaks the MCP adapter. Until this lands we cannot reach spec
-  `2026-07-28`, so MRTR (#86) and cacheable list results are unavailable.
+  — `mcp` 2.0.0 broke the MCP adapter through an unbounded `mcp>=1.8.0`. Fixed
+  upstream with a compatibility shim and a widened pin, released as
+  `toolregistry-server` 0.4.3 / `toolregistry` 0.15.0. We now negotiate spec
+  `2026-07-28`, which is what made the MRTR-shaped refusal in #86 buildable.
 
 ## Reviewer feedback, and what we do about it
 
@@ -145,9 +147,10 @@ from a failure.
    addressing the format-versus-science confound in item 4.
 4. **Realistic fixtures** — physical radius, vertical coordinate, mask (#92).
 5. **Multi-turn eval** in `evals/` covering handles, chaining, and recovery (#93).
-6. **Precondition enforcement** (#86), designed so it can surface as a refusal
-   now and as MRTR `input_required` once the SDK allows.
-7. **Result-size budget in CI** (#88) so payloads cannot grow back.
+6. ~~**Precondition enforcement** (#86).~~ **Done** — refuses now and is
+   already shaped as MRTR `input_required`, so adapter support turns it into a
+   passthrough rather than a redesign.
+7. ~~**Result-size budget in CI** (#88).~~ **Done.**
 
 ## Explicitly not doing
 

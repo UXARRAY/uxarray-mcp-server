@@ -10,6 +10,14 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any
 
+from uxarray_mcp.preconditions import (
+    RESULT_TYPE_COMPLETE,
+    PreconditionRefusal,
+    enforce,
+    evaluate_validation_preconditions,
+    evaluate_vector_preconditions,
+)
+
 
 def _require(value: Any, name: str, operation: str) -> Any:
     if value is None:
@@ -35,11 +43,16 @@ def _reject_unsupported_remote(use_remote: bool, operation: str) -> None:
         )
 
 
-def _finalize_analysis_result(operation: str, result: dict[str, Any]) -> dict[str, Any]:
+def _finalize_analysis_result(
+    operation: str,
+    result: dict[str, Any],
+    acknowledge: str | None = None,
+) -> dict[str, Any]:
     """Attach front-door semantics without changing low-level operation results."""
     status = "complete"
     physically_interpretable: bool | None = None
     warning_codes: list[str] = []
+    preconditions: list[dict[str, Any]] | None = None
 
     if operation == "validate_dataset":
         passed = result.get("passed", result.get("is_valid"))
@@ -47,6 +60,7 @@ def _finalize_analysis_result(operation: str, result: dict[str, Any]) -> dict[st
         if passed is False:
             status = "invalid"
             warning_codes.append("DATASET_VALIDATION_FAILED")
+        preconditions = evaluate_validation_preconditions(result)
     elif operation in {"curl", "divergence"}:
         evidence = result.get("component_evidence", {})
         metadata_supported = bool(
@@ -58,6 +72,13 @@ def _finalize_analysis_result(operation: str, result: dict[str, Any]) -> dict[st
             metadata_supported
             and scaling_supported
             and not result.get("component_warnings")
+        )
+        preconditions = evaluate_vector_preconditions(
+            operation,
+            str(result.get("u_variable", "")),
+            str(result.get("v_variable", "")),
+            evidence,
+            result.get("scale_by_radius"),
         )
         if not physically_interpretable:
             status = "warning"
@@ -74,6 +95,43 @@ def _finalize_analysis_result(operation: str, result: dict[str, Any]) -> dict[st
             status = "warning"
             warning_codes.extend(codes)
 
+    # Refuses by default when a declared precondition fails: raises
+    # PreconditionRefusal unless the caller passed the override token.
+    # `validate_dataset` is exempt from refusal -- reporting that a dataset
+    # is invalid IS its answer, so refusing to report it would be circular.
+    if preconditions is not None and operation != "validate_dataset":
+        precondition_block = enforce(operation, preconditions, acknowledge)
+    elif preconditions is not None:
+        precondition_block = {
+            "status": "satisfied"
+            if all(c["passed"] for c in preconditions)
+            else "failed",
+            "checks": preconditions,
+            "failed_checks": [c["id"] for c in preconditions if not c["passed"]],
+            "override_used": False,
+        }
+    else:
+        # Distinct from "failed": #84's `not_evaluated` means we did not
+        # check, not that a check came back negative.
+        precondition_block = {
+            "status": "not_evaluated",
+            "checks": [],
+            "failed_checks": [],
+            "override_used": False,
+        }
+
+    if precondition_block["override_used"]:
+        # An overridden result is never allowed to claim interpretability,
+        # whatever the individual warning heuristics concluded.
+        status = "unverified"
+        physically_interpretable = False
+        for check in precondition_block["failed_checks"]:
+            code = f"PRECONDITION_FAILED_{check.upper()}"
+            if code not in warning_codes:
+                warning_codes.append(code)
+
+    result["result_type"] = RESULT_TYPE_COMPLETE
+    result["preconditions"] = precondition_block
     result["scientific_status"] = {
         "status": status,
         "physically_interpretable": physically_interpretable,
@@ -88,13 +146,28 @@ def _finalize_analysis_result(operation: str, result: dict[str, Any]) -> dict[st
 
 
 def _with_analysis_contract(func: Any) -> Any:
-    """Preserve the MCP schema signature while finalizing successful results."""
+    """Preserve the MCP schema signature while finalizing successful results.
+
+    A refused precondition comes back as a structured ``input_required``
+    result rather than an exception, so an MCP client sees a payload it can
+    act on instead of an error string it has to parse.
+    """
 
     @wraps(func)
     def wrapped(operation: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        acknowledge = kwargs.get("acknowledge")
         result = func(operation, *args, **kwargs)
         normalized = operation.strip().lower().replace("-", "_")
-        return _finalize_analysis_result(normalized, result)
+        try:
+            return _finalize_analysis_result(normalized, result, acknowledge)
+        except PreconditionRefusal as refusal:
+            # The computation already ran to produce the metadata evidence the
+            # checks read, but the number is deliberately dropped: the point of
+            # #86 is that the caller does not get an unphysical value without
+            # asking for it. Only the reason and the repairs come back.
+            payload = dict(refusal.payload)
+            payload["_provenance"] = result.get("_provenance", {})
+            return payload
 
     return wrapped
 
@@ -154,6 +227,7 @@ def run_analysis(
     target_lat: list[float] | None = None,
     use_remote: bool = False,
     endpoint: str | None = None,
+    acknowledge: str | None = None,
 ) -> dict[str, Any]:
     """Run one analysis operation by intent instead of exposing many tools.
 
@@ -176,6 +250,13 @@ def run_analysis(
     ``zonal_anomaly`` accepts ``lat_spec`` and
     ``conservative``. ``remap_to_rectilinear`` accepts ``target_lon`` and
     ``target_lat`` (1-D coordinate arrays).
+
+    ``curl`` and ``divergence`` declare preconditions and refuse rather than
+    return an unphysical number: if the components are not verifiably a
+    vector field, the call returns ``result_type='input_required'`` with the
+    failed checks and the repairs that would fix them. Pass ``acknowledge``
+    with the token named in that response to run it anyway; the result is
+    then marked ``unverified``.
     """
     from uxarray_mcp.tools.advanced import (
         calculate_anomaly,
