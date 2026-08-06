@@ -64,8 +64,12 @@ Add the UUID to your private local config on your laptop/workstation, never to
 the repository:
 
 ```bash
-uxarray-mcp endpoints add ucar <uuid> --set-default
+uxarray-mcp endpoints add ucar <uuid> --path-prefix /glade/
 ```
+
+Always register the `--path-prefix`. Without it this endpoint claims no paths
+of its own, so `/glade/...` work will fall through to whatever endpoint happens
+to be the configured default — quite possibly at another facility.
 
 ## Validation
 

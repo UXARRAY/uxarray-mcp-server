@@ -64,8 +64,13 @@ laptop/workstation, never to the repository:
 
 ```bash
 # On your laptop:
-uxarray-mcp endpoints add chrysalis <uuid> --set-default
+uxarray-mcp endpoints add chrysalis <uuid> --path-prefix /lcrc/ --set-default
 ```
+
+Always register the `--path-prefix`. Without it this endpoint claims no paths
+of its own, so it only ever gets work as the fallback default — and any path
+another endpoint claims (Improv also mounts `/home/`) silently routes there
+instead, even when the file is really on Chrysalis.
 
 ## Validation
 
@@ -95,16 +100,32 @@ bash scripts/chrysalis_endpoint.sh logs
 squeue -u "$USER"
 ```
 
-## E3SM Next-Generation Ocean Meshes
+## E3SM Ocean Meshes
 
-Available at `/lcrc/group/e3sm/ac.xylar/polaris_1.0/chrysalis/test_20260520/unified-mesh-topo-cull2/`:
+Use the curated input-data tree, which is stable:
 
-| Mesh | Faces | Size | Notes |
-|---|---|---|---|
-| `mesh/.../u.oi240.lr240/base_mesh/build/base_mesh.nc` | 10,302 | 12 MB | Full globe, unculled |
-| `e3sm/init/u.oi240.lr240/.../culled_ocean_no_cavities_mesh.nc` | 7,293 | 8.5 MB | Ocean only |
-| `e3sm/init/u.oi30.lr10/.../culled_ocean_no_cavities_mesh.nc` | 462,919 | 561 MB | Ocean only |
-| `e3sm/init/u.oi6to18.lr6to10/.../culled_ocean_no_cavities_mesh.nc` | 4,015,940 | 4.8 GB | Variable-res 6–18 km |
+```
+/lcrc/group/e3sm/data/inputdata/ocn/mpas-o/<mesh-name>/
+```
+
+Verified loadable with `ux.open_grid` on a Chrysalis worker:
+
+| Path (under the base above) | Faces | Size |
+|---|---|---|
+| `IcoswISC240E3r8/ocean.IcoswISC240E3r8.nomask.scrip.20240806.nc` | 7,302 | 0.9 MB |
+| `IcoswISC240E3r8/mpaso.IcoswISC240E3r8.20240806.nc` | 7,302 | 26 MB |
+| `IcosXISC30E3r7/mpaso.IcosXISC30E3r7.20240314.nc` | 463,013 | 3.9 GB |
+
+Do not point at a personal scratch tree such as
+`/lcrc/group/e3sm/ac.<user>/polaris_1.0/...`. Those hold per-run
+`test_<YYYYMMDD>` directories that are rotated and deleted, so a path that
+worked last month will simply be gone. Not every `.nc` file in these
+directories is a mesh — forcing and initial-condition files raise
+`RuntimeError: Failed to parse uxgrid information`. Probe first:
+
+```python
+diagnose_endpoint(action="probe_path", file_path="<path>", endpoint="chrysalis")
+```
 
 ## Troubleshooting
 

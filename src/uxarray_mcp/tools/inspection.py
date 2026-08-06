@@ -12,6 +12,7 @@ from uxarray_mcp.domain import (
     compute_variable_info,
     compute_zonal_anomaly_stats,
     compute_zonal_mean_stats,
+    is_healpix_spec,
     load_dataset,
     load_grid,
 )
@@ -50,7 +51,7 @@ def _inspect_mesh_local(file_path: str) -> Dict[str, Any]:
             "file_size_mb": 4.6
         }
     """
-    if file_path.lower().startswith("healpix"):
+    if is_healpix_spec(file_path):
         try:
             grid = load_grid(file_path)
             return attach_provenance(
@@ -147,7 +148,7 @@ def _inspect_variable_local(
             "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
         }
     """
-    if not Path(grid_path).exists():
+    if not is_healpix_spec(grid_path) and not Path(grid_path).exists():
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
     if not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
@@ -223,7 +224,7 @@ def _calculate_area_local(file_path: str) -> Dict[str, Any]:
             "n_face": 40962
         }
     """
-    if not file_path.lower().startswith("healpix"):
+    if not is_healpix_spec(file_path):
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Mesh file not found: {file_path}")
@@ -263,6 +264,7 @@ def _calculate_zonal_mean_local(
     variable_name: str,
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
+    time_index: int = 0,
 ) -> Dict[str, Any]:
     """
     Calculate zonal mean of a face-centered variable along latitude bands.
@@ -281,6 +283,8 @@ def _calculate_zonal_mean_local(
             - list: Explicit latitudes or band edges
         conservative: If True, performs area-weighted averaging over latitude bands.
                      If False, performs intersection-weighted averaging at latitude lines.
+        time_index: Index used to reduce any non-latitude dimension (e.g. time)
+                    so the returned profile is one-dimensional.
 
     Returns:
         Dictionary containing:
@@ -300,7 +304,7 @@ def _calculate_zonal_mean_local(
             "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
         }
     """
-    if not Path(grid_path).exists():
+    if not is_healpix_spec(grid_path) and not Path(grid_path).exists():
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
     if not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
@@ -311,7 +315,9 @@ def _calculate_zonal_mean_local(
         raise RuntimeError(f"Failed to load dataset: {str(e)}")
 
     try:
-        result = compute_zonal_mean_stats(uxds, variable_name, lat_spec, conservative)
+        result = compute_zonal_mean_stats(
+            uxds, variable_name, lat_spec, conservative, time_index=time_index
+        )
     except ValueError:
         raise
     except Exception as e:
@@ -393,7 +399,7 @@ def calculate_zonal_anomaly(
     }
 
     def _local() -> Dict[str, Any]:
-        if not Path(grid_path).exists():
+        if not is_healpix_spec(grid_path) and not Path(grid_path).exists():
             raise FileNotFoundError(f"Grid file not found: {grid_path}")
         if not Path(data_path).exists():
             raise FileNotFoundError(f"Data file not found: {data_path}")
@@ -478,7 +484,7 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
             ]
         }
     """
-    if not Path(grid_path).exists():
+    if not is_healpix_spec(grid_path) and not Path(grid_path).exists():
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
     if not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")

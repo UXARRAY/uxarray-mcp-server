@@ -136,6 +136,11 @@ class HPCConfig:
         self.endpoint_id = endpoint_id
         self.execution_mode = normalize_execution_mode(execution_mode)
         self.timeout_seconds = timeout_seconds
+        # Set by for_endpoint(); declared here so the routing provenance is
+        # part of the type rather than an attribute that appears out of
+        # nowhere on some instances and not others.
+        self.routed_by_default_guess: bool = False
+        self.routed_path: str | None = None
 
     @property
     def has_endpoint(self) -> bool:
@@ -163,6 +168,7 @@ class HPCConfig:
         self, endpoint: str | None = None, path: str | None = None
     ) -> EndpointProfile | None:
         """Resolve an explicit endpoint, matching path prefix, or default."""
+        self._last_route_was_guess = False
         if endpoint:
             if endpoint in self.endpoints:
                 return self.endpoints[endpoint]
@@ -191,6 +197,12 @@ class HPCConfig:
                 for prefix in profile.path_prefixes:
                     if path.startswith(prefix):
                         matches.append((len(prefix), profile, prefix))
+            if not matches and self.default_endpoint:
+                # No prefix claimed this path, so it is about to fall through to
+                # the default endpoint. That is a silent cross-facility misroute
+                # when the file actually lives on a different cluster, so make
+                # the guess explicit instead of letting it look deliberate.
+                self._last_route_was_guess = True
             if matches:
                 longest = max(length for length, _, _ in matches)
                 best = [item for item in matches if item[0] == longest]
@@ -231,7 +243,7 @@ class HPCConfig:
                 default_endpoint=self.default_endpoint,
             )
 
-        return HPCConfig(
+        scoped = HPCConfig(
             endpoint_id=profile.endpoint_id,
             execution_mode=self.execution_mode,
             timeout_seconds=profile.timeout_seconds or self.timeout_seconds,
@@ -239,6 +251,13 @@ class HPCConfig:
             default_endpoint=self.default_endpoint,
             endpoint_name=profile.name,
         )
+        # Propagate whether this endpoint was chosen because a prefix claimed
+        # the path, or merely because it is the default.
+        scoped.routed_by_default_guess = bool(
+            path and getattr(self, "_last_route_was_guess", False)
+        )
+        scoped.routed_path = path
+        return scoped
 
 
 def _coerce_prefixes(value: Any) -> tuple[str, ...]:

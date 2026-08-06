@@ -2,7 +2,7 @@
 
 If/when graduated, these would live at ``src/uxarray_mcp/tools/simboard.py``.
 For now they sit under ``prototypes/`` to keep them out of the supported
-server surface until Tom Vo blesses the integration.
+server surface until the integration is agreed with the SimBoard maintainers.
 
 The two tools, in plain English:
 

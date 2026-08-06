@@ -72,7 +72,7 @@ def list_datasets(
 
         Scan an HPC directory without mounting it locally::
 
-            list_datasets("/home/jain/uxarray/data", use_remote=True)
+            list_datasets("/scratch/<user>/uxarray/data", use_remote=True)
 
         Scan recursively with a higher limit::
 

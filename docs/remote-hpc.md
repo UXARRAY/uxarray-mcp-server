@@ -125,6 +125,13 @@ uxarray-mcp endpoints add chrysalis 3cca8be6-55ec-4386-b7fd-f6c1e161d52b \
 should route to this endpoint." You can give multiple. The `--set-default`
 makes this endpoint the fallback when no path matches.
 
+Give every endpoint a prefix. Clusters share conventional mount names — both
+Improv and Chrysalis expose `/home/` — so an endpoint registered without one
+never wins a match, and paths it should have claimed go to the default
+endpoint instead. When a run is routed that way the result carries an explicit
+provenance warning rather than silently reporting success from the wrong
+facility.
+
 Verify:
 
 ```bash
@@ -218,9 +225,9 @@ default** and only runs when the required environment variables are set:
 
 ```bash
 UXMCP_LIVE_ENDPOINT=chrysalis \
-UXMCP_LIVE_GRID=/home/jain/uxarray/test/meshfiles/mpas/QU/480/grid.nc \
-UXMCP_LIVE_DATA=/home/jain/uxarray/test/meshfiles/mpas/QU/480/data.nc \
-UXMCP_LIVE_TARGET_GRID=/home/jain/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc \
+UXMCP_LIVE_GRID=/home/<user>/uxarray/test/meshfiles/mpas/QU/480/grid.nc \
+UXMCP_LIVE_DATA=/home/<user>/uxarray/test/meshfiles/mpas/QU/480/data.nc \
+UXMCP_LIVE_TARGET_GRID=/home/<user>/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc \
 UXMCP_LIVE_VARIABLE=bottomDepth \
 uv run pytest tests/test_remote_remap_live.py -v
 ```

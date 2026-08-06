@@ -2,10 +2,10 @@
 
 A precondition asks whether an operation *should* run. A postcondition
 asks whether the number it produced is consistent with something already
-known. The eScience study measured what the second one is worth: on a
-task where every interface computed the identical total area, adding a
-block stating reference, residual, tolerance, and verdict took correct
-answers from 11/20 to 20/20, and every deployment reached 5/5.
+known. Benchmarking showed what the second one is worth: on a task where
+every interface computed the identical total area, adding a block stating
+reference, residual, tolerance, and verdict took correct answers from
+11/20 to 20/20, and every model deployment reached 5/5.
 
 Two design constraints come straight out of that result.
 

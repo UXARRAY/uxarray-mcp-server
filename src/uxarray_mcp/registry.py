@@ -2,12 +2,13 @@
 
 Two profiles are supported:
 
-* ``"core"`` (default) — small, predictable surface visible to LLMs.
-  Mirrors the original MCP server's 11 front-door tools, adds 12
-  control/status tools, the ``list_datasets`` discovery helper, and
-  seven prompt-as-tool helpers (former ``@mcp.prompt()`` decorators).
-* ``"deferred-full"`` — loads every public function with the core set
-  enabled and 32 raw implementation tools marked ``defer=True``.
+* ``"core"`` (default, 33 tools) — small, predictable surface visible
+  to LLMs.  Mirrors the original MCP server's 11 front-door tools, adds
+  12 control/status tools, the ``list_datasets`` discovery helper, two
+  response-contract helpers, and seven prompt-as-tool helpers (former
+  ``@mcp.prompt()`` decorators).
+* ``"deferred-full"`` (67 tools) — loads every public function with the
+  core set enabled and 33 raw implementation tools marked ``defer=True``.
   Includes ``discover_tools`` (BM25 search) so LLMs find deferred
   tools by intent.
 
@@ -132,6 +133,7 @@ _DEFERRED_TOOLS: dict[str, tuple[str, ...]] = {
         "write_result",
     ),
     "agent": ("run_scientific_agent",),
+    "hpc": ("check_remote_yac",),
 }
 
 
@@ -457,6 +459,10 @@ _TAG_OVERRIDES: dict[str, tuple[set[ToolTag], set[str]]] = {
         set(),
     ),
     "validate_hpc_setup": ({ToolTag.READ_ONLY, ToolTag.NETWORK}, set()),
+    "check_remote_yac": (
+        {ToolTag.READ_ONLY, ToolTag.NETWORK, ToolTag.SLOW},
+        set(),
+    ),
     "set_execution_mode": ({ToolTag.FILE_SYSTEM}, set()),
     # IO
     "list_datasets": ({ToolTag.READ_ONLY, ToolTag.FILE_SYSTEM}, set()),
@@ -547,6 +553,7 @@ def _apply_tags(
 # ---------------------------------------------------------------------------
 
 _SEARCH_HINTS: dict[str, str] = {
+    "check_remote_yac": "yac native remap conservative interpolation worker library build smoke test hpc",
     "calculate_curl": "vorticity rotation circulation wind curl cross product compute vector field zeta",
     "calculate_divergence": "compression expansion source sink wind divergence",
     "calculate_gradient": "spatial derivative slope field gradient",
@@ -595,9 +602,9 @@ def build_registry(
     """Build a ``ToolRegistry`` for the chosen profile.
 
     Args:
-        profile: ``"core"`` for the small default surface (~31 tools),
-            ``"deferred-full"`` for the complete pool (core visible,
-            32 raw tools deferred, ``discover_tools`` added).
+        profile: ``"core"`` for the small default surface (33 tools),
+            ``"deferred-full"`` for the complete pool (33 core visible,
+            33 raw tools deferred, ``discover_tools`` added).
         registry_name: Identifier for server titles and labels.
 
     Returns:

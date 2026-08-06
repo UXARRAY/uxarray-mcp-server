@@ -235,3 +235,11 @@ evals/results/
 
 # Paper drafts and supporting material (kept in a separate repo).
 papers/
+
+# Facility-native path manifest — account-specific absolute paths.
+# Copy artifacts/facility_matrix/native_paths.example.json to fill it in.
+artifacts/facility_matrix/native_paths.json
+
+# Heavy benchmark artifacts (generated meshes + run reports)
+benchmarks/heavy/meshes/
+benchmarks/heavy/results/

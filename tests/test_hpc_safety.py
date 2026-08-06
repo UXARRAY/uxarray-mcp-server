@@ -96,8 +96,8 @@ class TestCheckEndpointHealth:
     def test_yac_pythonpath_is_expected_runtime_path(self):
         """Endpoint-side YAC source/runtime paths are not a worker leak."""
         pythonpath = (
-            "/home/jain/src/yac/build/python:"
-            "/home/jain/local/yac-3.17/lib/python3.12/site-packages:"
+            "/home/testuser/src/yac/build/python:"
+            "/home/testuser/local/yac-3.17/lib/python3.12/site-packages:"
             "/lcrc/group/e3sm/jain/uxarray-yac-src"
         )
 
@@ -105,7 +105,9 @@ class TestCheckEndpointHealth:
 
     def test_conda_env_pythonpath_is_not_expected_yac_runtime_path(self):
         """A broad conda env site-packages path can still leak pydantic/dill."""
-        pythonpath = "/home/jain/.conda/envs/uxarray-yac/lib/python3.12/site-packages"
+        pythonpath = (
+            "/home/testuser/.conda/envs/uxarray-yac/lib/python3.12/site-packages"
+        )
 
         assert health._is_expected_yac_pythonpath(pythonpath) is False
 
@@ -407,35 +409,50 @@ class TestWorkerVersionProvenance:
     """All compute/analysis remote functions report the worker's UXarray version,
     and _run_on_hpc surfaces it plus a drift warning."""
 
-    COMPUTE_REMOTE_FUNCS = [
-        "remote_inspect_mesh",
-        "remote_calculate_area",
-        "remote_inspect_variable",
-        "remote_calculate_zonal_mean",
-        "remote_calculate_zonal_anomaly",
-        "remote_calculate_gradient",
-        "remote_calculate_curl",
-        "remote_calculate_divergence",
-        "remote_calculate_azimuthal_mean",
-        "remote_grid_facts",
-        "remote_remap_variable",
-        "remote_regrid_dataset",
-        "remote_remap_to_rectilinear",
-    ]
+    def test_every_remote_function_emits_worker_runtime(self):
+        """Every remote_* function must report the worker's runtime envelope.
 
-    def test_all_compute_functions_emit_worker_version(self):
-        """Guard against regressions: every compute remote function's source
-        includes the _worker_uxarray_version key."""
+        Enumerated by reflection rather than a hand-maintained list: the old
+        list silently omitted the plot functions and remote_probe_path, so
+        their results carried the submitter's Python version instead of the
+        worker's.
+        """
         import inspect as _inspect
 
         from uxarray_mcp.remote import compute_functions as cf
 
-        for name in self.COMPUTE_REMOTE_FUNCS:
-            fn = getattr(cf, name)
-            src = _inspect.getsource(fn)
-            assert "_worker_uxarray_version" in src, (
-                f"{name} does not report _worker_uxarray_version"
-            )
+        remote_funcs = [
+            name
+            for name in dir(cf)
+            if name.startswith("remote_") and callable(getattr(cf, name))
+        ]
+        assert remote_funcs, "no remote_* functions discovered"
+
+        missing = [
+            name
+            for name in remote_funcs
+            if "_worker_runtime" not in _inspect.getsource(getattr(cf, name))
+        ]
+        assert not missing, (
+            f"{len(missing)} remote function(s) do not emit _worker_runtime: "
+            f"{sorted(missing)}"
+        )
+
+    def test_worker_runtime_envelope_reports_python_and_host(self):
+        """The envelope must carry the worker's Python version and hostname."""
+        import inspect as _inspect
+
+        from uxarray_mcp.remote import compute_functions as cf
+
+        remote_funcs = [
+            name
+            for name in dir(cf)
+            if name.startswith("remote_") and callable(getattr(cf, name))
+        ]
+        for name in remote_funcs:
+            src = _inspect.getsource(getattr(cf, name))
+            assert "python_version" in src, f"{name} omits worker python_version"
+            assert "hostname" in src, f"{name} omits worker hostname"
 
     @requires_globus
     def test_run_on_hpc_surfaces_worker_version_and_drift(self):
@@ -477,3 +494,368 @@ class TestWorkerVersionProvenance:
         assert any("drift" in w for w in prov["warnings"])
         # Internal key must not leak into the user-facing result.
         assert "_worker_uxarray_version" not in result
+
+
+class TestWorkerRuntimeProvenancePromotion:
+    """A remote result must describe the worker, not the laptop that submitted it."""
+
+    @staticmethod
+    def _run(payload):
+        import asyncio
+
+        from uxarray_mcp.remote.agent import UXarrayComputeAgent
+
+        agent = UXarrayComputeAgent(
+            HPCConfig(
+                endpoint_id="fake", endpoint_name="chrysalis", execution_mode="hpc"
+            )
+        )
+
+        class _Fut:
+            def result(self, timeout=None):
+                return dict(payload)
+
+        class _Exec:
+            def submit(self, func, *a, **k):
+                return _Fut()
+
+        agent._executor = _Exec()
+
+        def _fake_func():
+            return None
+
+        _fake_func.__name__ = "remote_inspect_mesh"
+        return asyncio.run(agent._run_on_hpc(_fake_func))
+
+    @requires_globus
+    def test_worker_runtime_overwrites_submitter_python_version(self):
+        result = self._run(
+            {
+                "n_face": 1,
+                "_worker_runtime": {
+                    "hostname": "chr-0123",
+                    "python_version": "3.12.13",
+                    "uxarray_version": "2026.6.0",
+                    "slurm_job_id": "987654",
+                },
+            }
+        )
+        prov = result["_provenance"]
+
+        # Top-level runtime fields describe the machine that did the work.
+        assert prov["python_version"] == "3.12.13"
+        assert prov["remote_hostname"] == "chr-0123"
+        assert prov["remote_slurm_job_id"] == "987654"
+        # The submitter's own interpreter is preserved, not silently dropped.
+        assert prov["submitter_python_version"] != "3.12.13"
+        assert "_worker_runtime" not in result
+
+    @requires_globus
+    def test_matching_versions_do_not_add_submitter_keys(self):
+        import platform
+
+        result = self._run(
+            {
+                "n_face": 1,
+                "_worker_runtime": {
+                    "hostname": "chr-0123",
+                    "python_version": platform.python_version(),
+                },
+            }
+        )
+        prov = result["_provenance"]
+
+        # Nothing drifted, so there is no second version worth reporting.
+        assert "submitter_python_version" not in prov
+        assert prov["python_version"] == platform.python_version()
+
+
+def _two_cluster_config() -> HPCConfig:
+    """improv claims a prefix; chrysalis is the default and claims nothing."""
+    from uxarray_mcp.remote.config import EndpointProfile
+
+    return HPCConfig(
+        endpoints={
+            "improv": EndpointProfile(
+                name="improv", endpoint_id="a", path_prefixes=("/gpfs/fs1/",)
+            ),
+            "chrysalis": EndpointProfile(name="chrysalis", endpoint_id="b"),
+        },
+        default_endpoint="chrysalis",
+    )
+
+
+class TestDefaultRouteIsDisclosed:
+    """Falling through to the default endpoint must not look deliberate."""
+
+    def test_unclaimed_path_is_flagged_as_a_guess(self):
+        config = _two_cluster_config()
+        scoped = config.for_endpoint(path="/lcrc/group/e3sm/data/grid.nc")
+
+        assert scoped.endpoint_name == "chrysalis"
+        assert scoped.routed_by_default_guess is True
+
+    def test_prefix_match_is_not_flagged(self):
+        config = _two_cluster_config()
+        scoped = config.for_endpoint(path="/gpfs/fs1/home/testuser/grid.nc")
+
+        assert scoped.endpoint_name == "improv"
+        assert scoped.routed_by_default_guess is False
+
+    def test_explicit_endpoint_is_not_flagged(self):
+        config = _two_cluster_config()
+        scoped = config.for_endpoint(
+            endpoint="chrysalis", path="/lcrc/group/e3sm/grid.nc"
+        )
+
+        assert scoped.routed_by_default_guess is False
+
+    @requires_globus
+    def test_guess_surfaces_as_a_provenance_warning(self):
+        import asyncio
+
+        from uxarray_mcp.remote.agent import UXarrayComputeAgent
+
+        config = HPCConfig(
+            endpoint_id="b", endpoint_name="chrysalis", execution_mode="hpc"
+        )
+        config.routed_by_default_guess = True
+        agent = UXarrayComputeAgent(config)
+
+        class _Fut:
+            def result(self, timeout=None):
+                return {"n_face": 1}
+
+        class _Exec:
+            def submit(self, func, *a, **k):
+                return _Fut()
+
+        agent._executor = _Exec()
+
+        def _fake_func():
+            return None
+
+        _fake_func.__name__ = "remote_inspect_mesh"
+        prov = asyncio.run(agent._run_on_hpc(_fake_func))["_provenance"]
+
+        assert any("configured default" in w for w in prov["warnings"])
+
+
+class TestRemoteErrorNormalization:
+    """Worker tracebacks must not be forwarded verbatim into an agent's context."""
+
+    def test_missing_file_traceback_collapses_to_one_line(self):
+        from uxarray_mcp.remote.agent import _normalize_remote_error
+
+        traceback_text = (
+            "Traceback (most recent call last):\n"
+            + "".join(
+                f'  File "/lcrc/sw/lib/python3.12/frame{i}.py", line {i}, in load\n'
+                f"    return _open(path)\n"
+                for i in range(40)
+            )
+            + "FileNotFoundError: [Errno 2] No such file or directory: "
+            "'/lcrc/group/e3sm/nope.nc'\n"
+        )
+        config = HPCConfig(endpoint_id="b", endpoint_name="chrysalis")
+
+        normalized = _normalize_remote_error(Exception(traceback_text), config)
+
+        assert isinstance(normalized, FileNotFoundError)
+        message = str(normalized)
+        assert len(traceback_text) > 2000
+        assert len(message) < 300
+        assert "/lcrc/group/e3sm/nope.nc" in message
+        assert "chrysalis" in message
+        assert "Traceback" not in message
+        assert "probe_path_access" in message
+
+    def test_unknown_long_failure_keeps_only_the_cause_line(self):
+        from uxarray_mcp.remote.agent import _normalize_remote_error
+
+        text = (
+            "Traceback:\n" + ("  frame padding line\n" * 200) + "ValueError: bad mesh"
+        )
+        config = HPCConfig(endpoint_id="b", endpoint_name="ucar-uxarray-yac")
+
+        normalized = _normalize_remote_error(Exception(text), config)
+
+        assert "ValueError: bad mesh" in str(normalized)
+        assert len(str(normalized)) < 200
+        assert "ucar-uxarray-yac" in str(normalized)
+
+    def test_short_errors_pass_through_untouched(self):
+        from uxarray_mcp.remote.agent import _normalize_remote_error
+
+        original = ValueError("endpoint offline")
+        config = HPCConfig(endpoint_id="b", endpoint_name="chrysalis")
+
+        assert _normalize_remote_error(original, config) is original
+
+    def test_timeout_is_preserved_for_callers_that_branch_on_it(self):
+        from uxarray_mcp.remote.agent import _normalize_remote_error
+
+        original = TimeoutError("x" * 900)
+        config = HPCConfig(endpoint_id="b", endpoint_name="chrysalis")
+
+        assert _normalize_remote_error(original, config) is original
+
+
+class TestCheckRemoteYacTool:
+    """The YAC smoke test is reachable as a tool, not just a standalone script."""
+
+    @staticmethod
+    def _patch_executor(monkeypatch, payload):
+        """Point check_remote_yac at a fake worker returning ``payload``."""
+        from uxarray_mcp.remote.config import EndpointProfile
+        from uxarray_mcp.tools import execution_control
+
+        config = HPCConfig(
+            endpoints={
+                "chrysalis": EndpointProfile(name="chrysalis", endpoint_id="fake-uuid")
+            },
+            default_endpoint="chrysalis",
+        )
+        monkeypatch.setattr(
+            execution_control, "_load_config_for_tools", lambda: (config, None)
+        )
+
+        class _Fut:
+            def result(self, timeout=None):
+                if isinstance(payload, Exception):
+                    raise payload
+                return dict(payload)
+
+        class _Exec:
+            def __init__(self, *a, **k):
+                pass
+
+            def submit(self, func, *a, **k):
+                return _Fut()
+
+        monkeypatch.setattr(
+            execution_control,
+            "_load_globus_compute_sdk",
+            lambda: (MagicMock(), _Exec, MagicMock(), MagicMock()),
+        )
+        return execution_control
+
+    def test_working_yac_reports_available(self, monkeypatch):
+        ec = self._patch_executor(
+            monkeypatch,
+            {
+                "subprocess_ok": True,
+                "yac_helper_ok": True,
+                "remap_ok": True,
+                "remap_seconds": 1.2,
+                "_worker_runtime": {"hostname": "chr-0007", "slurm_job_id": "42"},
+            },
+        )
+
+        result = ec.check_remote_yac(endpoint="chrysalis")
+
+        assert result["available"] is True
+        assert result["_provenance"]["remote_hostname"] == "chr-0007"
+        assert result["_provenance"]["remote_slurm_job_id"] == "42"
+        assert result["_provenance"]["execution_venue"] == "hpc"
+
+    def test_importable_but_broken_remap_is_not_available(self, monkeypatch):
+        """yac.core importing is not a promise that a remap actually works."""
+        ec = self._patch_executor(
+            monkeypatch,
+            {
+                "subprocess_ok": False,
+                "yac_core_ok": True,
+                "yac_helper_ok": True,
+                "remap_ok": False,
+                "remap_error": "RuntimeError: MPI_Init failed",
+            },
+        )
+
+        result = ec.check_remote_yac(endpoint="chrysalis")
+
+        assert result["available"] is False
+        assert "MPI_Init failed" in result["remap_error"]
+
+    def test_healthy_result_drops_bulky_worker_output(self, monkeypatch):
+        """A passing check must not dump kilobytes of stdout into the context."""
+        ec = self._patch_executor(
+            monkeypatch,
+            {
+                "yac_helper_ok": True,
+                "remap_ok": True,
+                "stdout_tail": "x" * 4000,
+                "stderr_tail": "y" * 4000,
+            },
+        )
+
+        result = ec.check_remote_yac(endpoint="chrysalis")
+
+        assert result["available"] is True
+        assert "stdout_tail" not in result
+        assert "stderr_tail" not in result
+
+    def test_failed_result_keeps_a_bounded_traceback(self, monkeypatch):
+        """On failure the diagnostics are kept, but capped."""
+        ec = self._patch_executor(
+            monkeypatch,
+            {
+                "yac_helper_ok": False,
+                "remap_ok": False,
+                "yac_helper_traceback": "T" * 5000,
+            },
+        )
+
+        result = ec.check_remote_yac(endpoint="chrysalis")
+
+        assert result["available"] is False
+        assert 0 < len(result["yac_helper_traceback"]) <= 800
+
+    def test_worker_failure_is_reported_not_raised(self, monkeypatch):
+        ec = self._patch_executor(monkeypatch, RuntimeError("WorkerLost: node down"))
+
+        result = ec.check_remote_yac(endpoint="chrysalis")
+
+        assert result["available"] is False
+        assert result["reason"] == "probe_failed"
+        assert "WorkerLost" in result["error"]
+
+    def test_no_endpoint_configured_is_reported_cleanly(self, monkeypatch):
+        from uxarray_mcp.tools import execution_control
+
+        monkeypatch.setattr(
+            execution_control,
+            "_load_config_for_tools",
+            lambda: (HPCConfig(), None),
+        )
+
+        result = execution_control.check_remote_yac()
+
+        assert result["available"] is False
+        assert result["reason"] == "no_endpoint"
+
+    def test_diagnose_endpoint_routes_the_check_yac_action(self, monkeypatch):
+        """The front door exposes YAC without a separate core tool."""
+        from uxarray_mcp.tools import execution_control, frontdoor
+
+        seen = {}
+
+        def _fake(endpoint=None, probe_timeout_seconds=300, session_id=None):
+            seen["endpoint"] = endpoint
+            seen["timeout"] = probe_timeout_seconds
+            return {"available": True}
+
+        monkeypatch.setattr(execution_control, "check_remote_yac", _fake)
+
+        result = frontdoor.diagnose_endpoint(action="check_yac", endpoint="chrysalis")
+
+        assert result == {"available": True}
+        assert seen["endpoint"] == "chrysalis"
+        # YAC builds a grid and remaps; never inherit the short default probe.
+        assert seen["timeout"] >= 300
+
+    def test_unknown_action_names_check_yac(self):
+        from uxarray_mcp.tools.frontdoor import diagnose_endpoint
+
+        with pytest.raises(ValueError, match="check_yac"):
+            diagnose_endpoint(action="not_a_real_action")

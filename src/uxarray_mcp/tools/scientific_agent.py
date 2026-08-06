@@ -69,12 +69,12 @@ def run_scientific_agent(
             ...
         }
     """
-    from uxarray_mcp.tools.inspection import validate_dataset
     from uxarray_mcp.tools.remote_tools import (
         calculate_area,
         calculate_zonal_mean,
         inspect_mesh,
         inspect_variable,
+        validate_dataset,
     )
 
     reasoning_trace: list[dict[str, Any]] = []
@@ -156,7 +156,11 @@ def run_scientific_agent(
             {"stage": "analyze", "action": f"validate_dataset({data_path!r})"}
         )
         try:
-            validation_result = validate_dataset(file_path, data_path)
+            validation_result = validate_dataset(
+                file_path,
+                data_path,
+                use_remote=hpc_path or _is_hpc_path(data_path),
+            )
             validation_summary = {
                 "passed": validation_result["passed"],
                 "n_variables_checked": validation_result["n_variables_checked"],

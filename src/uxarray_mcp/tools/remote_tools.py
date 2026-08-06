@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from mcp.types import ImageContent, TextContent
 
+from uxarray_mcp.domain.mesh import is_healpix_spec
 from uxarray_mcp.state import OperationTracker
 
 
@@ -70,7 +71,7 @@ def _path_is_locally_reachable(path_hint: str | None) -> bool:
     """
     if path_hint is None:
         return True
-    if path_hint.startswith("healpix:"):
+    if is_healpix_spec(path_hint):
         return True
     try:
         return Path(path_hint).exists()
@@ -368,6 +369,7 @@ def calculate_zonal_mean(
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
+    time_index: int = 0,
 ) -> Dict[str, Any]:
     """Calculate zonal mean with optional HPC execution.
 
@@ -385,6 +387,9 @@ def calculate_zonal_mean(
         Use area-weighted averaging over latitude bands
     use_remote : bool
         If True and HPC is configured, execute on remote endpoint
+    time_index : int
+        Index used to reduce any non-latitude dimension (e.g. time) so the
+        returned profile is one-dimensional.
 
     Returns
     -------
@@ -415,11 +420,17 @@ def calculate_zonal_mean(
         path_hint=grid_path,
         session_id=session_id,
         local_call=lambda: _calculate_zonal_mean_local(
-            grid_path, data_path, variable_name, lat_spec, conservative
+            grid_path, data_path, variable_name, lat_spec, conservative, time_index
         ),
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_zonal_mean_remote(
-                grid_path, data_path, variable_name, lat_spec, conservative, use_remote
+                grid_path,
+                data_path,
+                variable_name,
+                lat_spec,
+                conservative,
+                use_remote,
+                time_index,
             )
         ),
     )
@@ -636,6 +647,7 @@ def plot_zonal_mean(
     conservative: bool = False,
     line_color: str = "#1f77b4",
     title: Optional[str] = None,
+    time_index: int = 0,
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
@@ -702,6 +714,7 @@ def plot_zonal_mean(
             conservative=conservative,
             line_color=line_color,
             title=title,
+            time_index=time_index,
         )
         img = items[0]
         meta = json.loads(items[1].text)
@@ -713,6 +726,7 @@ def plot_zonal_mean(
             "variable_name": meta.get("variable_name", variable_name),
             "latitudes": meta.get("latitudes", []),
             "zonal_mean_values": meta.get("zonal_mean_values", []),
+            "reduced_dims": meta.get("reduced_dims", {}),
             "execution_venue": "local",
             "_provenance": meta.get("_provenance", {}),
         }
@@ -736,6 +750,7 @@ def plot_zonal_mean(
                 line_color,
                 title,
                 use_remote,
+                time_index,
             )
         ),
     )

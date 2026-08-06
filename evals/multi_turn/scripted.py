@@ -1,12 +1,12 @@
 """Scripted adapters that stand in for a model (issue #93).
 
 A model-in-the-loop eval that cannot be run without a model is a
-liability: the harness rots silently between paper deadlines. These two
-adapters are deterministic, run offline, and bracket the score range --
-``disciplined`` is what a competent run looks like, ``naive`` reproduces
-the exact failure modes the eScience study observed (paths re-specified
-instead of handles, an override pushed through a refusal, no retry after
-an interruption).
+liability: the harness rots silently between runs. These two adapters are
+deterministic, run offline, and bracket the score range -- ``disciplined``
+is what a competent run looks like, ``naive`` reproduces the exact failure
+modes observed in earlier benchmark runs (paths re-specified instead of
+handles, an override pushed through a refusal, no retry after an
+interruption).
 
 They also serve as the harness's own regression test: if a scoring
 change stops separating these two, the scoring is broken.
