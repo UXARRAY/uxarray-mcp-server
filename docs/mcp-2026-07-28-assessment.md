@@ -115,6 +115,14 @@ what #86 asks for than anything in 2025-11-25.
 Worth recording on #86 now and building later; it is unreachable until the SDK
 path exists.
 
+**Resolved.** `toolregistry-server` 0.4.3 / `toolregistry` 0.15.0 unblocked the
+SDK path, and #86 is implemented in `src/uxarray_mcp/preconditions.py`.
+`curl` and `divergence` declare their preconditions as data and refuse with
+`result_type: "input_required"`, an `elicitation/create` request, and an
+opaque `request_state`. We mirror the `InputRequiredResult` shape rather than
+emit one, because `toolregistry-server` still serializes tool returns into
+`TextContent`; when the adapter grows MRTR support this becomes a passthrough.
+
 ## Plan
 
 ### Now, in this repository
@@ -144,7 +152,7 @@ path exists.
    new spec removes.
 7. Reconsider `--transport sse` given the deprecation.
 8. Evaluate the Tasks extension for long-running HPC submissions.
-9. Revisit #86 with MRTR available.
+9. ~~Revisit #86 with MRTR available.~~ **Done** — see the MRTR section above.
 
 ### Explicitly not doing
 
