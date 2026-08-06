@@ -308,8 +308,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("core", "deferred-full"),
         default="core",
         help=(
-            "core: gateway + control + list_datasets + prompts (~31 tools). "
-            "deferred-full: also load 32 raw tools as deferred, gated "
+            "core: gateway + control + list_datasets + prompts (33 tools). "
+            "deferred-full: also load 33 raw tools as deferred, gated "
             "behind discover_tools / admin promotion."
         ),
     )
@@ -330,8 +330,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("core", "deferred-full"),
         default="core",
         help=(
-            "core: gateway + control + list_datasets + prompts (~31 tools). "
-            "deferred-full: also load 32 raw tools as deferred, gated "
+            "core: gateway + control + list_datasets + prompts (33 tools). "
+            "deferred-full: also load 33 raw tools as deferred, gated "
             "behind discover_tools / admin promotion."
         ),
     )

@@ -68,7 +68,7 @@ Bad triggers (use `tests/` instead):
 - Checking a function's signature or contract.
 - Anything that should be a unit test of a Python function.
 
-## New paper-revision protocols
+## Protocols that are not part of CI
 
 - `indirect_injection/` is a safe, isolated **LLM-dependent** study of
   untrusted tool output. It is intentionally not run in normal CI: a pinned

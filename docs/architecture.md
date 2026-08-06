@@ -75,6 +75,29 @@ The lightweight agent abstraction used in `remote/agent.py` to organize local
 and remote actions. It is a convenience layer inside this repo, not the
 transport itself. Globus Compute is still the actual remote execution system.
 
+## Tool Surface — Two Profiles
+
+The registered tool surface is built by `uxarray_mcp.registry.build_registry()`
+and selected with `--profile`:
+
+- **`core` (default, 33 tools)** — 11 front-door gateway tools at the top
+  level, 12 control/status tools under the `session/` and `hpc/` namespaces,
+  `io-list_datasets`, two response-contract helpers under `contract/`, and
+  7 prompt helpers under `prompt/`. No deferred tools, no BM25 discovery.
+- **`deferred-full` (67 tools)** — the core set stays visible and 33 raw
+  implementation tools are registered with `defer=True`, so they do not
+  appear in the initial tool list. `discover_tools` (BM25 search) is added
+  so agents can find them by intent, and operators can promote them from
+  the admin panel.
+
+Low-level implementation functions such as `inspect_mesh`, `calculate_area`,
+`plot_mesh`, and `calculate_curl` stay importable from `uxarray_mcp.tools`
+for tests, scripts, and internal composition regardless of profile. In
+`core` they are reachable through the front-door dispatchers; they are not
+separately registered.
+
+See {doc}`serving` for the CLI flags and transports.
+
 ## Tools Layer (`tools/`)
 
 The server exposes a small front-door tool surface. Those tools route
@@ -132,6 +155,36 @@ HPC-only tool names.
 
 **Validation gating** — The scientific agent runs dataset validation before zonal mean. If validation fails, zonal mean is skipped rather than producing unreliable results.
 
+**Two-profile promotion path** — The core profile keeps a small, predictable
+baseline for existing clients. New tools start in `deferred-full` and are
+promoted to core once they are stable, commonly useful, documented, and have
+clear provenance and security behavior.
+
+**Policy tags from day one** — Every tool carries `ToolTag` values
+(`READ_ONLY`, `FILE_SYSTEM`, `NETWORK`, `SLOW`) plus custom tags
+(`experimental`, `stateful`), so downstream policy code (admin filters, auth
+gates, audit logs) has concrete metadata to key off.
+
+**Prompt-as-tool** — The former `@mcp.prompt()` decorators are regular tools
+under the `prompt/` namespace. They return instruction text that guides a
+multi-step analysis rather than results, which keeps the surface uniform and
+removes the `fastmcp` dependency.
+
+**Pre-flight health checks** — Remote wrappers check endpoint manager state
+before submitting work. `diagnose_endpoint(action="status")` can additionally
+submit a lightweight worker probe to confirm a real scheduler worker responds.
+
+**AllCodeStrategies serialization** — Remote functions are serialized with
+`AllCodeStrategies`, so the HPC worker does not need `uxarray_mcp` installed —
+only `uxarray`, `xarray`, `netCDF4`, and `h5netcdf`. A practical consequence
+is that worker-side functions in `remote/compute_functions.py` cannot call
+module-level helpers: only the submitted function body travels to the worker,
+so shared logic must stay inlined per function.
+
+**Empty file guard** — Plotting paths check `st_size == 0` before loading and
+check for empty PNG bytes after rendering, raising `ValueError` with a message
+that points at the likely cause.
+
 ## Maintenance Notes
 
 The current implementation favors a small number of broad tool modules while
@@ -146,7 +199,3 @@ contracts settle:
 
 Keep those refactors behavior-preserving and test-backed; they are polish and
 maintainability work, not blockers for the core conda package.
-
-## Interactive Diagram
-
-An interactive architecture diagram is available at `docs/architecture.html` in the repository.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import warnings
 from typing import Any, Dict, Optional
 
@@ -32,6 +33,40 @@ from .compute_functions import (
     remote_probe_path,
 )
 from .config import HPCConfig
+
+
+def _normalize_remote_error(exc: Exception, config: Any) -> Exception:
+    """Collapse a worker traceback into the same concise error a local run raises.
+
+    Globus Compute re-raises worker failures with the full remote traceback
+    embedded in the message. For a missing file that is ~6.7k characters of
+    xarray/netCDF4 frames versus ~48 locally, which is pure noise in an agent's
+    context window. Keep the final exception line, which carries the real
+    cause, and drop the frames.
+    """
+    text = str(exc)
+    endpoint = getattr(config, "endpoint_name", None) or "remote endpoint"
+
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    final = lines[-1] if lines else type(exc).__name__
+
+    # "FileNotFoundError: [Errno 2] No such file or directory: '/path'"
+    if "No such file or directory" in text or "FileNotFoundError" in text:
+        match = re.search(r"['\"]([^'\"]+\.nc[^'\"]*)['\"]", text)
+        missing = match.group(1) if match else "the requested path"
+        return FileNotFoundError(
+            f"File not found on {endpoint}: {missing}. "
+            "Verify the path exists on the cluster filesystem with "
+            "probe_path_access(use_remote=True)."
+        )
+
+    if isinstance(exc, TimeoutError) or "TimeoutError" in type(exc).__name__:
+        return exc
+
+    # Unknown failure: keep the cause line, drop the frames.
+    if len(text) > 600:
+        return RuntimeError(f"Remote execution failed on {endpoint}: {final}")
+    return exc
 
 
 class UXarrayComputeAgent(_AcademyAgent):
@@ -188,6 +223,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         lat_spec: Optional[tuple | float | list] = None,
         conservative: bool = False,
         use_remote: bool = False,
+        time_index: int = 0,
     ) -> Dict[str, Any]:
         """Calculate zonal mean with optional remote execution.
 
@@ -219,10 +255,11 @@ class UXarrayComputeAgent(_AcademyAgent):
                 variable_name,
                 lat_spec,
                 conservative,
+                time_index,
             )
         else:
             return self._run_local_calculate_zonal_mean(
-                grid_path, data_path, variable_name, lat_spec, conservative
+                grid_path, data_path, variable_name, lat_spec, conservative, time_index
             )
 
     @action
@@ -300,6 +337,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         center_lat: float,
         outer_radius: float,
         radius_step: float,
+        time_index: int = 0,
     ) -> Dict[str, Any]:
         """Compute azimuthal mean around a centre point on HPC."""
         return await self._run_on_hpc(
@@ -311,6 +349,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             center_lat,
             outer_radius,
             radius_step,
+            time_index,
         )
 
     @action
@@ -394,6 +433,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         line_color: str = "#1f77b4",
         title: Optional[str] = None,
         use_remote: bool = False,
+        time_index: int = 0,
     ) -> Dict[str, Any]:
         """Render zonal mean profile PNG on HPC and return base64 bytes."""
         if use_remote and self.config.endpoint_id:
@@ -408,6 +448,7 @@ class UXarrayComputeAgent(_AcademyAgent):
                 conservative,
                 line_color,
                 title,
+                time_index,
             )
         else:
             return remote_plot_zonal_mean(
@@ -420,6 +461,7 @@ class UXarrayComputeAgent(_AcademyAgent):
                 conservative,
                 line_color,
                 title,
+                time_index,
             )
 
     async def _run_on_hpc(self, func, *args, **kwargs) -> Dict[str, Any]:
@@ -451,9 +493,12 @@ class UXarrayComputeAgent(_AcademyAgent):
                 category=UserWarning,
             )
             future = executor.submit(func, *args, **kwargs)
-            result = await loop.run_in_executor(
-                None, future.result, self.config.timeout_seconds
-            )
+            try:
+                result = await loop.run_in_executor(
+                    None, future.result, self.config.timeout_seconds
+                )
+            except Exception as exc:
+                raise _normalize_remote_error(exc, self.config) from None
 
         # Attach provenance with the correct HPC venue — the remote functions
         # are self contained and don't call attach_provenance themselves.
@@ -492,6 +537,16 @@ class UXarrayComputeAgent(_AcademyAgent):
             fn_warnings = result.get("component_warnings") or []
             drift_warnings.extend(fn_warnings)
 
+        # A path that no configured prefix claimed lands on the default
+        # endpoint. Say so, because the file may well live on another cluster.
+        if getattr(self.config, "routed_by_default_guess", False):
+            drift_warnings.append(
+                f"Endpoint {endpoint_label!r} was selected as the configured "
+                "default, not because it claims this path. Add a path_prefix "
+                "for the cluster that actually hosts this file to avoid "
+                "cross-facility misroutes."
+            )
+
         annotated = attach_provenance(
             result,
             tool=func.__name__,
@@ -512,6 +567,20 @@ class UXarrayComputeAgent(_AcademyAgent):
         ):
             if worker_runtime.get(key):
                 annotated["_provenance"][f"remote_{key}"] = worker_runtime[key]
+
+        # attach_provenance() stamps the *submitter's* interpreter. For a
+        # remote run that is misleading: the result was computed by the
+        # worker, so the top-level runtime fields must describe the worker and
+        # the submitter's own versions move to submitter_* keys.
+        prov = annotated["_provenance"]
+        for local_key, remote_key in (
+            ("python_version", "remote_python_version"),
+            ("uxarray_version", "remote_uxarray_version"),
+        ):
+            remote_value = prov.get(remote_key)
+            if remote_value and prov.get(local_key) != remote_value:
+                prov[f"submitter_{local_key}"] = prov[local_key]
+                prov[local_key] = remote_value
         return annotated
 
     def _run_local_inspect_mesh(self, file_path: str) -> Dict[str, Any]:
@@ -541,12 +610,18 @@ class UXarrayComputeAgent(_AcademyAgent):
         variable_name: str,
         lat_spec: Optional[tuple | float | list],
         conservative: bool,
+        time_index: int = 0,
     ) -> Dict[str, Any]:
         """Execute calculate_zonal_mean locally as fallback."""
         from uxarray_mcp.tools import calculate_zonal_mean
 
         return calculate_zonal_mean(
-            grid_path, data_path, variable_name, lat_spec, conservative
+            grid_path,
+            data_path,
+            variable_name,
+            lat_spec,
+            conservative,
+            time_index=time_index,
         )
 
 

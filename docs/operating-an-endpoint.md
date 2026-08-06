@@ -158,7 +158,7 @@ If `doctor` reports `active`, you're done. Total time: ~30 min the first time.
 
 You have two choices.
 
-**Personal account** (you, `jain@anl.gov`).
+**Personal account** (your own login, e.g. `<user>@<site>`).
 - Easy: nothing new to request.
 - **High blast radius:** your SSH keys, your shell history, your group
   memberships, your refresh tokens are all reachable from any submitted

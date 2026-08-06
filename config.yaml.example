@@ -27,7 +27,7 @@ hpc:
       # Optional: filesystem prefixes this endpoint owns. Used as a hint when
       # routing path-aware tools.
       path_prefixes:
-        - "/home/jain/"
+        - "/home/<user>/"
         - "/lus/"
       timeout_seconds: 600
     ucar:
@@ -38,7 +38,7 @@ hpc:
       endpoint_id: "00000000-0000-0000-0000-000000000000"
       path_prefixes:
         - "/lcrc/"
-        - "/home/jain/"
+        - "/home/<user>/"
 
   # ---- Legacy single-endpoint form (still supported) ----
   # Keep ``hpc.endpoints`` empty and set this if you only ever submit to one

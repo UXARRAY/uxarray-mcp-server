@@ -103,16 +103,17 @@ class TestVerticalCoordinate:
         assert "n_level" in variable["dims"]
         assert variable["shape"][0] == 4
 
-    def test_zonal_mean_silently_collapses_the_vertical_axis(
+    def test_zonal_mean_discloses_the_collapsed_vertical_axis(
         self, state_dir, multi_level_mesh_files
     ):
-        """Documents a real gap, deliberately, rather than asserting success.
+        """A multi-level field must yield one profile *and* say what was dropped.
 
-        Levels are 100/200/300/400, so a caller asking for "the" zonal mean
-        of this field gets one row per level with no statement of which
-        level is which, and no parameter to pick one. Selecting a level is
-        not supported today; when it is, this test should change to assert
-        the selection rather than the collapse.
+        Levels are 100/200/300/400. Returning all four rows made
+        ``zonal_mean_values`` shape-unstable for every downstream consumer
+        (plotting expects a line); returning one row without comment lets a
+        caller believe a single level is the whole answer. So the result is
+        the first level, and ``reduced_dims`` names the axis, the index used,
+        and how many were available.
         """
         grid_file, data_file = multi_level_mesh_files
         with warnings.catch_warnings():
@@ -124,11 +125,48 @@ class TestVerticalCoordinate:
                 variable_name="temperature",
             )
         values = np.asarray(result["zonal_mean_values"], dtype=float)
-        assert values.ndim == 2 and values.shape[0] == 4
-        # Every level is uniform, so each row must equal its own level value.
-        for level, row in enumerate(values):
-            finite = row[np.isfinite(row)]
-            assert finite == pytest.approx(100.0 * (level + 1))
+        assert values.ndim == 1
+        # Level 0 is uniform at 100.0, so every finite band equals it.
+        finite = values[np.isfinite(values)]
+        assert finite.size > 0
+        assert finite == pytest.approx(100.0)
+        # The collapse is disclosed, not silent.
+        reduced = result["reduced_dims"]
+        assert "n_level" in reduced, reduced
+        assert reduced["n_level"] == {"index": 0, "size": 4}
+
+    def test_remote_zonal_mean_collapses_the_same_axis_as_local(
+        self, state_dir, multi_level_mesh_files
+    ):
+        """The worker copy is inlined by hand, so it can drift from the local one.
+
+        ``remote_calculate_zonal_mean`` cannot call the shared helper --
+        Globus Compute serializes each function body standalone -- so the
+        reduction logic exists twice. If the two ever disagree, the same
+        request answers differently depending on where it ran, which is the
+        worst kind of divergence to debug.
+        """
+        from uxarray_mcp.remote.compute_functions import remote_calculate_zonal_mean
+
+        grid_file, data_file = multi_level_mesh_files
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            local = run_analysis(
+                operation="calculate_zonal_mean",
+                grid_path=grid_file,
+                data_path=data_file,
+                variable_name="temperature",
+            )
+            remote = remote_calculate_zonal_mean(
+                grid_file, data_file, "temperature", None, False
+            )
+        assert remote["reduced_dims"] == local["reduced_dims"]
+        assert remote["latitudes"] == local["latitudes"]
+        assert np.allclose(
+            np.asarray(remote["zonal_mean_values"], dtype=float),
+            np.asarray(local["zonal_mean_values"], dtype=float),
+            equal_nan=True,
+        )
 
 
 class TestMaskedField:

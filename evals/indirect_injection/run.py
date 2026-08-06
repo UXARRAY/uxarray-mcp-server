@@ -1,8 +1,8 @@
 """Run the safe, adapter-driven indirect-injection experiment.
 
-The adapter boundary is deliberately explicit: Argo environments differ and a
-paper must record its exact model/deployment elsewhere.  An adapter receives a
-list of OpenAI-like messages and the three mock tool schemas, returning
+The adapter boundary is deliberately explicit: Argo environments differ, so the
+exact model/deployment must be recorded alongside the results.  An adapter
+receives a list of OpenAI-like messages and the three mock tool schemas, returning
 ``{"text": str, "tool_calls": [{"name": str, "arguments": dict}]}``.
 """
 
@@ -118,7 +118,7 @@ def main() -> int:
     args = parser.parse_args()
     if args.trials != 10:
         parser.error(
-            "This pre-registered paper protocol requires exactly 10 fresh trials per scenario/configuration."
+            "This pre-registered protocol requires exactly 10 fresh trials per scenario/configuration."
         )
     scenarios = json.loads((Path(__file__).parent / "scenarios.json").read_text())
     adapter = _load_adapter(args.adapter)

@@ -477,3 +477,89 @@ class TestZonalAnomalyRemote:
                 use_remote=True,
                 endpoint="chrysalis",
             )
+
+
+class TestFrontDoorForwardsEveryParameter:
+    """``run_analysis``/``plot_dataset`` are the only MCP-reachable entry points.
+
+    A parameter the front door accepts but drops is worse than one it
+    rejects: the caller gets a plausible number computed with defaults and
+    no indication the request was ignored. ``lat_spec``, ``conservative``
+    and ``time_index`` were all accepted and dropped by
+    ``calculate_zonal_mean``, so over MCP there was no way to reach them.
+    """
+
+    def test_lat_spec_reaches_the_computation(self, multi_level_mesh_files):
+        grid_file, data_file = multi_level_mesh_files
+        default = run_analysis(
+            operation="calculate_zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+        )
+        coarse = run_analysis(
+            operation="calculate_zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            lat_spec=[-90, 90, 45],
+        )
+        assert len(coarse["latitudes"]) == 3
+        assert len(default["latitudes"]) != len(coarse["latitudes"])
+
+    def test_conservative_reaches_the_computation(self, multi_level_mesh_files):
+        grid_file, data_file = multi_level_mesh_files
+        result = run_analysis(
+            operation="calculate_zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            conservative=True,
+        )
+        assert result["conservative"] is True
+
+    def test_time_index_reaches_the_computation(self, time_level_mesh_files):
+        grid_file, data_file = time_level_mesh_files
+        first = run_analysis(
+            operation="calculate_zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            time_index=0,
+        )
+        last = run_analysis(
+            operation="calculate_zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            time_index=2,
+        )
+        # Field is 1000*t + 100*(level+1), so t=0 -> 100 and t=2 -> 2100.
+        assert _first_finite(first["zonal_mean_values"]) == pytest.approx(100.0)
+        assert _first_finite(last["zonal_mean_values"]) == pytest.approx(2100.0)
+        assert first["reduced_dims"]["time"]["index"] == 0
+        assert last["reduced_dims"]["time"]["index"] == 2
+
+    def test_plot_dataset_forwards_time_index(self, time_level_mesh_files):
+        import json
+
+        from uxarray_mcp.tools.frontdoor import plot_dataset
+
+        grid_file, data_file = time_level_mesh_files
+        items = plot_dataset(
+            plot_type="zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            time_index=2,
+        )
+        meta = json.loads(items[1].text)
+        assert _first_finite(meta["zonal_mean_values"]) == pytest.approx(2100.0)
+        assert meta["reduced_dims"]["time"]["index"] == 2
+
+
+def _first_finite(values) -> float:
+    arr = np.asarray(values, dtype=float)
+    finite = arr[np.isfinite(arr)]
+    assert finite.size > 0, "profile was entirely NaN"
+    return float(finite[0])

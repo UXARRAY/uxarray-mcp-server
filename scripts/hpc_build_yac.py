@@ -15,7 +15,8 @@ Defaults are tuned for the Improv endpoint at Argonne (ALCF/LCRC):
     because openmpi's .so links against it but the spack RPATH isn't
     on the worker's default ld search path)
   * --disable-mpi-checks because the worker has no mpiexec without a job
-  * Python: /home/jain/venvs/globus-compute/bin/python (3.11)
+  * Python: the endpoint's Globus Compute venv interpreter, passed with
+    --venv-python (for example ~/venvs/globus-compute/bin/python)
 
 For other endpoints, override via --mpi-root, --gcc-lib, --venv-python, etc.
 The shape of the build is the same — the locations differ.
@@ -36,9 +37,9 @@ from uxarray_mcp.remote.config import load_config
 
 def remote_build_yac(
     *,
-    build_root: str = "/home/jain/build/yac",
-    prefix: str = "/home/jain/yac",
-    venv_python: str = "/home/jain/venvs/globus-compute/bin/python",
+    build_root: str = "~/build/yac",
+    prefix: str = "~/yac",
+    venv_python: str = "~/venvs/globus-compute/bin/python",
     mpi_root: str = "/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/openmpi-5.0.1-g3zfkn6",
     gcc_lib: str = "/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-x86_64/gcc-8.5.0/gcc-13.2.0-iyqxotb/lib64",
     yac_version: str = "v3.14.0_p1",
@@ -51,6 +52,10 @@ def remote_build_yac(
     import subprocess
     import time
 
+    # ``~`` must expand against the *worker's* home, not the submitter's.
+    build_root = os.path.expanduser(build_root)
+    prefix = os.path.expanduser(prefix)
+    venv_python = os.path.expanduser(venv_python)
     venv_bin = os.path.dirname(venv_python)
     script = f"""
 set -euxo pipefail
@@ -144,11 +149,9 @@ PY
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--endpoint", default="improv")
-    p.add_argument("--build-root", default="/home/jain/build/yac")
-    p.add_argument("--prefix", default="/home/jain/yac")
-    p.add_argument(
-        "--venv-python", default="/home/jain/venvs/globus-compute/bin/python"
-    )
+    p.add_argument("--build-root", default="~/build/yac")
+    p.add_argument("--prefix", default="~/yac")
+    p.add_argument("--venv-python", default="~/venvs/globus-compute/bin/python")
     p.add_argument(
         "--mpi-root",
         default="/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/openmpi-5.0.1-g3zfkn6",

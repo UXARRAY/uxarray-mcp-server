@@ -379,6 +379,9 @@ def run_analysis(
             _require(grid_path, "grid_path", op),
             _require(data_path, "data_path", op),
             _require(variable_name, "variable_name", op),
+            lat_spec=lat_spec,
+            conservative=conservative,
+            time_index=time_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -440,6 +443,7 @@ def run_analysis(
             _require(center_lat, "center_lat", op),
             _require(outer_radius, "outer_radius", op),
             _require(radius_step, "radius_step", op),
+            time_index=time_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -678,6 +682,7 @@ def plot_dataset(
             conservative=conservative,
             line_color=line_color,
             title=title,
+            time_index=time_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -696,6 +701,7 @@ def diagnose_endpoint(
 ) -> dict[str, Any]:
     """Check whether the HPC Globus Compute endpoint is healthy, active, and reachable — endpoint status, worker setup validation, and remote file readability."""
     from uxarray_mcp.tools.execution_control import (
+        check_remote_yac,
         endpoint_status,
         probe_path_access,
         validate_hpc_setup,
@@ -723,7 +729,12 @@ def diagnose_endpoint(
             inspect_netcdf=inspect_netcdf,
             endpoint=endpoint,
         )
-    raise ValueError("action must be one of: status, validate, probe_path.")
+    if mode == "check_yac":
+        return check_remote_yac(
+            endpoint=endpoint,
+            probe_timeout_seconds=max(probe_timeout_seconds, 300),
+        )
+    raise ValueError("action must be one of: status, validate, probe_path, check_yac.")
 
 
 def manage_session(

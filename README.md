@@ -174,9 +174,7 @@ Full schema: [docs/tools.md](docs/tools.md).
 through `toolregistry-server`, which depends on the `mcp` Python SDK. As of
 `toolregistry-server` 0.4.3 and `toolregistry` 0.15.0 the SDK cap is lifted, so
 we resolve `mcp` 2.0.0 and negotiate spec **`2026-07-28`** (stateless core,
-cacheable list results, MRTR). See
-[docs/mcp-2026-07-28-assessment.md](docs/mcp-2026-07-28-assessment.md) for what
-that release changes here.
+cacheable list results, MRTR).
 
 **Once you've configured an HPC endpoint** (optional — see
 [Going beyond your laptop](#going-beyond-your-laptop) below): most tools above
