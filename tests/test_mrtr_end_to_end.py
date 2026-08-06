@@ -27,12 +27,8 @@ def _write_wind_files(tmp_path, labeled: bool):
 
     rng = np.random.default_rng(5)
     n = grid.n_face
-    u_attrs = (
-        {"units": "m s-1", "standard_name": "eastward_wind"} if labeled else {}
-    )
-    v_attrs = (
-        {"units": "m s-1", "standard_name": "northward_wind"} if labeled else {}
-    )
+    u_attrs = {"units": "m s-1", "standard_name": "eastward_wind"} if labeled else {}
+    v_attrs = {"units": "m s-1", "standard_name": "northward_wind"} if labeled else {}
     xr.Dataset(
         {
             "u": (["n_face"], rng.standard_normal(n), u_attrs),
