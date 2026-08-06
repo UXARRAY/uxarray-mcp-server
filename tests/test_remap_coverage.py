@@ -24,7 +24,9 @@ def regional_grid(regional_mesh_files):
 class TestComputeTargetCoverage:
     def test_global_target_over_regional_source_reports_zero(self, regional_grid):
         coverage = compute_target_coverage(
-            regional_grid, list(np.arange(-180, 180, 72.0)), list(np.arange(-60, 61, 30.0))
+            regional_grid,
+            list(np.arange(-180, 180, 72.0)),
+            list(np.arange(-60, 61, 30.0)),
         )
         assert coverage["n_target_points"] == 25
         assert coverage["points_in_source"] == 0

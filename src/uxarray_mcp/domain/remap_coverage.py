@@ -21,7 +21,11 @@ EXACT_TEST_POINT_LIMIT = 20000
 #: Remap methods that conserve the integral of the field.  Nearest neighbour
 #: and inverse-distance weighting do not, which makes them unsuitable for
 #: fluxes even at full coverage.
-_CONSERVATIVE_METHODS = {"conservative", "conservative_normed", "first_order_conservative"}
+_CONSERVATIVE_METHODS = {
+    "conservative",
+    "conservative_normed",
+    "first_order_conservative",
+}
 
 
 def _wrap_lon(values: np.ndarray) -> np.ndarray:
