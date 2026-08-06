@@ -121,6 +121,56 @@ codes `REMAP_COVERAGE_ZERO` or `REMAP_COVERAGE_PARTIAL`, and a
 non-conservative method raises `REMAP_METHOD_NOT_CONSERVATIVE`; all three
 appear in `scientific_status.warning_codes` and `_provenance.warnings`.
 
+Zero coverage is the one coverage case that **refuses** rather than warns.
+When no target point falls inside the source mesh, every returned value is an
+extrapolation, so `remap_to_rectilinear` returns the same
+`result_type: "input_required"` payload described above with the source bounding
+box in the detail text. Partial coverage and a non-conservative method stay
+warnings, because a partially covered result still contains real values.
+
+## Postconditions and `verdict_policy`
+
+Analysis results carry a **`postconditions`** block alongside
+`preconditions`. The two are deliberately distinct: a failed precondition
+means "we checked and it fails", while `not_evaluated` means "we did not
+check". Reporting no verification at all was previously indistinguishable
+from reporting a passed one, which let a caller imply more confidence than
+the computation supported.
+
+Today `calculate_area` is the operation with a closed-form reference: the
+face areas of a closed mesh must sum to `4*pi*R^2`, or `4*pi` on a unit
+sphere. The check abstains — status `not_evaluated` — whenever it cannot be
+trusted: an open or regional mesh, a missing total, or an unreadable grid.
+
+`run_analysis` accepts `verdict_policy` to control how much of the check
+comes back:
+
+| Value | Behavior |
+|---|---|
+| `full` (default) | reference, tolerance, residual, and a `passed` verdict |
+| `reference_only` | reference and tolerance only; `caller_must_supply` lists `residual` and `passed` |
+| `off` | nothing is evaluated |
+
+The default also reads from the `UXARRAY_MCP_VERDICT_POLICY` environment
+variable, and an unrecognized value is rejected before the computation runs
+rather than after it has already cost something.
+
+## Response contracts (`contract/`)
+
+Two tools under the `contract/` namespace let a caller ask what shape a
+result is expected to take, instead of inferring it from an example:
+
+- `describe_response_contract(name)` returns the required fields, their
+  types, and any format constraint for a named contract
+  (`calculate_area`, `inspect_mesh`, `calculate_zonal_mean`,
+  `validate_dataset`, `verification`).
+- `validate_response(name, response)` checks a candidate payload against
+  that contract and returns the specific violations.
+
+The contract is deliberately **not** attached to every tool result. Repeating
+a schema on every response is how payload budgets get spent on text no caller
+reads.
+
 Examples:
 
 ```python

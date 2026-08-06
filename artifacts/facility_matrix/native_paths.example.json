@@ -1,0 +1,5 @@
+{
+  "chrysalis": {"grid_path": "/facility/path/to/grid.nc", "label": "Chrysalis native MPAS mesh"},
+  "improv": {"grid_path": "/facility/path/to/grid.nc", "label": "Improv native MPAS mesh"},
+  "ucar": {"grid_path": "/facility/path/to/grid.nc", "label": "Casper native UGRID mesh"}
+}

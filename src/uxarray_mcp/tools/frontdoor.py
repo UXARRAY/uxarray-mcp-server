@@ -10,10 +10,16 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any
 
+from uxarray_mcp.postconditions import (
+    evaluate_area_postconditions,
+    postcondition_block,
+    resolve_verdict_policy,
+)
 from uxarray_mcp.preconditions import (
     RESULT_TYPE_COMPLETE,
     PreconditionRefusal,
     enforce,
+    evaluate_remap_preconditions,
     evaluate_validation_preconditions,
     evaluate_vector_preconditions,
 )
@@ -43,10 +49,32 @@ def _reject_unsupported_remote(use_remote: bool, operation: str) -> None:
         )
 
 
+def _grid_loader(result: dict[str, Any]) -> Any:
+    """Reopen the grid a result was computed from, or None if unknowable.
+
+    Postconditions need the mesh itself (is it closed? what radius does it
+    declare?), and the front door only has the result. The path is read
+    back out of provenance rather than threaded through every dispatch
+    branch, which keeps #89's parameter list from growing again.
+    """
+    inputs = result.get("_provenance", {}).get("inputs", {}) or {}
+    path = inputs.get("file_path") or inputs.get("grid_path")
+    if not path:
+        return None
+
+    def load() -> Any:
+        import uxarray as ux
+
+        return ux.open_grid(path)
+
+    return load
+
+
 def _finalize_analysis_result(
     operation: str,
     result: dict[str, Any],
     acknowledge: str | None = None,
+    verdict_policy: str | None = None,
 ) -> dict[str, Any]:
     """Attach front-door semantics without changing low-level operation results."""
     status = "complete"
@@ -94,6 +122,11 @@ def _finalize_analysis_result(
         if codes:
             status = "warning"
             warning_codes.extend(codes)
+        # #85 shipped these as warnings, and #86 measured that a warning
+        # beside a number changes nothing. Zero coverage means every
+        # returned value is extrapolated, which is exactly the case that
+        # should refuse rather than advise.
+        preconditions = evaluate_remap_preconditions(result["source_coverage"])
 
     # Refuses by default when a declared precondition fails: raises
     # PreconditionRefusal unless the caller passed the override token.
@@ -137,11 +170,16 @@ def _finalize_analysis_result(
         "physically_interpretable": physically_interpretable,
         "warning_codes": warning_codes,
     }
-    result["postconditions"] = {
-        "status": "not_evaluated",
-        "checks": [],
-        "independent_verification": False,
-    }
+    # #84: an explicit "we did not check" is cheap and stops a caller
+    # implying more confidence than the computation supports. #90: when a
+    # check does run, whether the verdict comes with it is a policy.
+    policy = resolve_verdict_policy(verdict_policy)
+    post_checks: list[dict[str, Any]] = []
+    if operation == "calculate_area" and policy != "off":
+        post_checks = evaluate_area_postconditions(
+            result, _grid_loader(result), policy=policy
+        )
+    result["postconditions"] = postcondition_block(post_checks, policy)
     return result
 
 
@@ -156,10 +194,16 @@ def _with_analysis_contract(func: Any) -> Any:
     @wraps(func)
     def wrapped(operation: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
         acknowledge = kwargs.get("acknowledge")
+        verdict_policy = kwargs.get("verdict_policy")
+        # Validated before the computation runs: a rejected policy should
+        # cost nothing, and finding out afterwards would waste the work.
+        resolve_verdict_policy(verdict_policy)
         result = func(operation, *args, **kwargs)
         normalized = operation.strip().lower().replace("-", "_")
         try:
-            return _finalize_analysis_result(normalized, result, acknowledge)
+            return _finalize_analysis_result(
+                normalized, result, acknowledge, verdict_policy
+            )
         except PreconditionRefusal as refusal:
             # The computation already ran to produce the metadata evidence the
             # checks read, but the number is deliberately dropped: the point of
@@ -228,6 +272,7 @@ def run_analysis(
     use_remote: bool = False,
     endpoint: str | None = None,
     acknowledge: str | None = None,
+    verdict_policy: str | None = None,
 ) -> dict[str, Any]:
     """Run one analysis operation by intent instead of exposing many tools.
 
@@ -257,6 +302,11 @@ def run_analysis(
     failed checks and the repairs that would fix them. Pass ``acknowledge``
     with the token named in that response to run it anyway; the result is
     then marked ``unverified``.
+
+    ``verdict_policy`` controls the ``postconditions`` block: ``"full"``
+    (default) returns reference, residual, tolerance, and verdict;
+    ``"reference_only"`` returns reference and tolerance and requires the
+    caller to compute the comparison itself; ``"off"`` evaluates nothing.
     """
     from uxarray_mcp.tools.advanced import (
         calculate_anomaly,
