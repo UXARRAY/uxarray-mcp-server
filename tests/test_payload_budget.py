@@ -111,9 +111,7 @@ class TestResultPayloadBudget:
         )
 
     @pytest.mark.parametrize("operation", sorted(RESULT_BYTE_BUDGETS))
-    def test_discovery_keys_never_appear_in_results(
-        self, analysis_results, operation
-    ):
+    def test_discovery_keys_never_appear_in_results(self, analysis_results, operation):
         leaked = DISCOVERY_ONLY_KEYS & set(analysis_results[operation])
         assert not leaked, (
             f"{operation} result carries discovery-only keys {sorted(leaked)}; "
