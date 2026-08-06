@@ -289,3 +289,24 @@ def structured_mesh_files(tmp_path):
         {"temperature": (["n_face"], 250 + 30 * rng.random(grid.n_face))}
     ).to_netcdf(data_file)
     return str(grid_file), str(data_file)
+
+
+@pytest.fixture
+def regional_mesh_files(tmp_path):
+    """Small regional UGRID mesh (~40-47E, +/-2.5 lat) plus face-centered data.
+
+    Deliberately covers only a sliver of the globe so remap coverage checks
+    have something that a global target grid falls entirely outside of.
+    """
+    lon = np.arange(40, 48, 2.0)
+    lat = np.arange(-2, 3, 1.0)
+    grid = ux.Grid.from_structured(lon=lon, lat=lat)
+    grid_file = tmp_path / "regional_grid.nc"
+    data_file = tmp_path / "regional_data.nc"
+    grid.to_xarray().to_netcdf(grid_file)
+
+    rng = np.random.default_rng(7)
+    xr.Dataset(
+        {"temperature": (["n_face"], 0.1 + 0.06 * rng.random(grid.n_face))}
+    ).to_netcdf(data_file)
+    return str(grid_file), str(data_file)

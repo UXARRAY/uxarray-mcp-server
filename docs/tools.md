@@ -92,6 +92,16 @@ metadata supplies vector-like units or standard names.
 `UxDataArray.zonal_anomaly` and `UxDataArray.remap.to_rectilinear`, available in
 the pinned UXarray (`>=2026.6.0`).
 
+`remap_to_rectilinear` returns a **`source_coverage`** block reporting
+`points_in_source` out of `n_target_points`, the resulting
+`coverage_fraction`, the source mesh bounding box, whether the test was
+`point_in_cell` or a `bounding_box` screen, and whether the remap method
+conserves the field integral. Target points outside the source mesh still
+receive extrapolated values, so zero or partial coverage raises the stable
+codes `REMAP_COVERAGE_ZERO` or `REMAP_COVERAGE_PARTIAL`, and a
+non-conservative method raises `REMAP_METHOD_NOT_CONSERVATIVE`; all three
+appear in `scientific_status.warning_codes` and `_provenance.warnings`.
+
 Examples:
 
 ```python
