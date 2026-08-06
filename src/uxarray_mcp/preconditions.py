@@ -270,7 +270,9 @@ def enforce(
                     },
                     "hint": hint,
                 },
-                "input_requests": {"acknowledge_unverified": _elicitation(operation, failed)},
+                "input_requests": {
+                    "acknowledge_unverified": _elicitation(operation, failed)
+                },
                 "request_state": _request_state(operation, failed),
             }
         )
