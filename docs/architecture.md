@@ -146,7 +146,3 @@ contracts settle:
 
 Keep those refactors behavior-preserving and test-backed; they are polish and
 maintainability work, not blockers for the core conda package.
-
-## Interactive Diagram
-
-An interactive architecture diagram is available at `docs/architecture.html` in the repository.

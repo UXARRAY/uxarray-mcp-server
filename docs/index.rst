@@ -43,6 +43,3 @@ HTTP clients) from a single install.
    :caption: Project
 
    changelog
-   roadmap-and-open-questions
-   mcp-2026-07-28-assessment
-   issues-from-escience-study/README
