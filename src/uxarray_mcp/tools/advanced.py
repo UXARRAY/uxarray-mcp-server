@@ -14,6 +14,7 @@ from matplotlib.path import Path as MplPath
 
 from uxarray_mcp.domain.mesh import load_dataset, load_grid
 from uxarray_mcp.domain.remap_coverage import compute_target_coverage
+from uxarray_mcp.next_steps import call, needed
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.state import (
     OperationTracker,
@@ -226,13 +227,15 @@ def subset_bbox(
         "result_handle": result_handle,
     }
     next_steps = [
-        f'plot_mesh(grid_path="{resolved_grid}")',
-        f'export_to_netcdf("<output.nc>", result_handle="{result_handle}")',
+        call("plot_mesh", grid_path="grid_path"),
+        # result_handle is echoed as its own key in this same result, so the
+        # caller can read it there rather than have it repeated in prose.
+        call("export_to_netcdf", needed("output.nc"), result_handle="result_handle"),
     ]
     if resolved_data is not None:
         next_steps.insert(
             0,
-            f'plot_variable("{resolved_grid}", "{resolved_data}", "<variable_name>")',
+            call("plot_variable", "grid_path", "data_path", needed("variable_name")),
         )
     result["recommended_next_steps"] = next_steps
     tracker.succeed("Bounding-box subset complete.")
@@ -330,13 +333,15 @@ def subset_polygon(
         "result_handle": result_handle,
     }
     next_steps = [
-        f'plot_mesh(grid_path="{resolved_grid}")',
-        f'export_to_netcdf("<output.nc>", result_handle="{result_handle}")',
+        call("plot_mesh", grid_path="grid_path"),
+        # result_handle is echoed as its own key in this same result, so the
+        # caller can read it there rather than have it repeated in prose.
+        call("export_to_netcdf", needed("output.nc"), result_handle="result_handle"),
     ]
     if resolved_data is not None:
         next_steps.insert(
             0,
-            f'plot_variable("{resolved_grid}", "{resolved_data}", "<variable_name>")',
+            call("plot_variable", "grid_path", "data_path", needed("variable_name")),
         )
     result["recommended_next_steps"] = next_steps
     result = attach_provenance(
@@ -426,13 +431,20 @@ def extract_cross_section(
         "result_handle": result_handle,
     }
     next_steps = [
-        f'plot_mesh(grid_path="{resolved_grid}")',
-        f'export_to_netcdf("<output.nc>", result_handle="{result_handle}")',
+        call("plot_mesh", grid_path="grid_path"),
+        # result_handle is echoed as its own key in this same result, so the
+        # caller can read it there rather than have it repeated in prose.
+        call("export_to_netcdf", needed("output.nc"), result_handle="result_handle"),
     ]
     if resolved_data is not None:
         next_steps.insert(
             0,
-            f'calculate_zonal_mean("{resolved_grid}", "{resolved_data}", "<variable_name>")',
+            call(
+                "calculate_zonal_mean",
+                "grid_path",
+                "data_path",
+                needed("variable_name"),
+            ),
         )
     result["recommended_next_steps"] = next_steps
     result = attach_provenance(

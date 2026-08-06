@@ -15,6 +15,7 @@ from uxarray_mcp.domain import (
     load_dataset,
     load_grid,
 )
+from uxarray_mcp.next_steps import call, literal, needed
 from uxarray_mcp.provenance import attach_provenance
 
 
@@ -91,10 +92,10 @@ def _inspect_mesh_local(file_path: str) -> Dict[str, Any]:
             "n_max_face_nodes": int(grid.n_max_face_nodes),
             "file_size_mb": round(file_size_mb, 2),
             "recommended_next_steps": [
-                f'calculate_area("{file_path}")',
-                f'plot_mesh("{file_path}")',
-                f'inspect_variable("{file_path}", "<data_path>")',
-                f'validate_dataset("{file_path}", "<data_path>")',
+                call("calculate_area", "grid_path"),
+                call("plot_mesh", "grid_path"),
+                call("inspect_variable", "grid_path", needed("data_path")),
+                call("validate_dataset", "grid_path", needed("data_path")),
             ],
         },
         tool="inspect_mesh",
@@ -163,15 +164,23 @@ def _inspect_variable_local(
     next_steps = []
     if face_vars:
         v0 = face_vars[0]
+        # v0 is discovered by opening the file, so it is spelled out; the
+        # paths came from the caller and stay as parameter names.
         next_steps = [
-            f'plot_variable("{grid_path}", "{data_path}", "{v0}")',
-            f'calculate_zonal_mean("{grid_path}", "{data_path}", "{v0}")',
-            f'validate_dataset("{grid_path}", "{data_path}")',
-            f'subset_bbox([-60,60], [-30,30], grid_path="{grid_path}", '
-            f'data_path="{data_path}", variable_name="{v0}")',
+            call("plot_variable", "grid_path", "data_path", literal(v0)),
+            call("calculate_zonal_mean", "grid_path", "data_path", literal(v0)),
+            call("validate_dataset", "grid_path", "data_path"),
+            call(
+                "subset_bbox",
+                "[-60, 60]",
+                "[-30, 30]",
+                grid_path="grid_path",
+                data_path="data_path",
+                variable_name=literal(v0),
+            ),
         ]
     else:
-        next_steps = [f'validate_dataset("{grid_path}", "{data_path}")']
+        next_steps = [call("validate_dataset", "grid_path", "data_path")]
     info["recommended_next_steps"] = next_steps
     return attach_provenance(
         info,
@@ -234,9 +243,14 @@ def _calculate_area_local(file_path: str) -> Dict[str, Any]:
         raise RuntimeError(f"Failed to calculate face areas: {str(e)}")
 
     result["recommended_next_steps"] = [
-        f'plot_mesh("{file_path}")',
-        f'inspect_variable("{file_path}", "<data_path>")',
-        f'calculate_zonal_mean("{file_path}", "<data_path>", "<variable_name>")',
+        call("plot_mesh", "grid_path"),
+        call("inspect_variable", "grid_path", needed("data_path")),
+        call(
+            "calculate_zonal_mean",
+            "grid_path",
+            needed("data_path"),
+            needed("variable_name"),
+        ),
     ]
     return attach_provenance(
         result, tool="calculate_area", inputs={"file_path": file_path}
@@ -304,10 +318,15 @@ def _calculate_zonal_mean_local(
         raise RuntimeError(f"Failed to compute zonal mean: {str(e)}")
 
     result["recommended_next_steps"] = [
-        f'plot_zonal_mean("{grid_path}", "{data_path}", "{variable_name}")',
-        f'plot_variable("{grid_path}", "{data_path}", "{variable_name}")',
-        f'extract_cross_section(latitude=0.0, grid_path="{grid_path}", '
-        f'data_path="{data_path}", variable_name="{variable_name}")',
+        call("plot_zonal_mean", "grid_path", "data_path", "variable_name"),
+        call("plot_variable", "grid_path", "data_path", "variable_name"),
+        call(
+            "extract_cross_section",
+            "grid_path",
+            "data_path",
+            "variable_name",
+            latitude="0.0",
+        ),
     ]
     return attach_provenance(
         result,
@@ -636,9 +655,14 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
 
     if overall_passed:
         result["recommended_next_steps"] = [
-            f'inspect_variable("{grid_path}", "{data_path}")',
-            f'calculate_zonal_mean("{grid_path}", "{data_path}", "<variable_name>")',
-            f'plot_variable("{grid_path}", "{data_path}", "<variable_name>")',
+            call("inspect_variable", "grid_path", "data_path"),
+            call(
+                "calculate_zonal_mean",
+                "grid_path",
+                "data_path",
+                needed("variable_name"),
+            ),
+            call("plot_variable", "grid_path", "data_path", needed("variable_name")),
         ]
     else:
         result["recommended_next_steps"] = [
