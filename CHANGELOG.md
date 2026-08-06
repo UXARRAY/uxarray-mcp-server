@@ -19,6 +19,13 @@ uses Semantic Versioning for public releases.
   values.
 
 ### Added
+- `curl` and `divergence` declare their preconditions as data and refuse
+  instead of returning an unphysical number. The refusal is shaped after the
+  MCP `2026-07-28` multi-round-trip request flow: `result_type:
+  "input_required"`, an `elicitation/create` request, an opaque
+  `request_state`, and the specific repair for each failed check. Passing
+  `acknowledge` with the named token runs the operation anyway and labels the
+  result `unverified` with `physically_interpretable: false`.
 - Remote scientific results now distinguish submitter and worker Python
   versions through `remote_python_version`; the runtime envelope is extensible
   to hostname, Xarray, NumPy, and scheduler identifiers.

@@ -77,11 +77,30 @@ their result and provenance. `gradient` and `curl` accept `scale_by_radius`
 `uxgrid.sphere_radius` for physical units; the grid must define
 `sphere_radius`. Pass `False` explicitly to keep unit-sphere results.
 
-`curl` and `divergence` also emit **vector-component warnings**: if the two
-inputs are the same field, or neither carries a velocity/flux-like `units`
-attribute, a warning is added to `_provenance.warnings`. The computation still
-runs (the math is valid), but `scientific_status` marks the result as a warning,
-sets `physically_interpretable` to false, and includes stable warning codes.
+`curl` and `divergence` declare **refusable preconditions** (#86) rather than
+warning and computing anyway. Each operation states, as data, what must hold
+for its answer to be physical: the two components must be distinct fields,
+both must carry velocity-like `units`, their direction identity must be
+resolvable from `standard_name` or `long_name`, and `curl` additionally
+requires `scale_by_radius`. Every result carries a `preconditions` block with
+`status` (`satisfied`, `overridden`, `failed`, or `not_evaluated`), the
+individual `checks`, and `failed_checks`.
+
+When a check fails, the call **does not run** and no number is returned.
+The result instead carries `result_type: "input_required"`, shaped after the
+MCP `2026-07-28` multi-round-trip request (MRTR) flow: a `refusal` block with
+the failed checks and the specific repair for each, an `input_requests` entry
+holding an `elicitation/create` form, and an opaque `request_state` derived
+from the operation and the failed check ids. A caller who wants the number
+anyway passes `acknowledge` with the token named in the refusal; the result
+then comes back with `preconditions.status: "overridden"`,
+`scientific_status.status: "unverified"`, `physically_interpretable: false`,
+and a `PRECONDITION_FAILED_<ID>` code per failed check. A wrong or guessed
+token is a failed override, not a silent pass.
+
+`validate_dataset` is deliberately exempt from refusal: reporting that a
+dataset is invalid *is* its answer, so refusing to report it would be
+circular. It reports `scientific_status.status: "invalid"` instead.
 
 `get_capabilities` distinguishes **structural applicability** from **semantic
 suitability** for vector operations. Two face-centered arrays make curl and
