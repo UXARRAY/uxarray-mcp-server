@@ -1,0 +1,190 @@
+[
+  {
+    "resolution": "30km",
+    "grid_bytes": 403733477,
+    "data_bytes": 124750934,
+    "hostname": "casper04",
+    "python": "3.11.12",
+    "uxarray": "2026.7.0",
+    "ops": {
+      "open": 2.9407250322401524,
+      "load_face": 0.005672751925885677,
+      "mean_face": 0.00025865621864795685,
+      "bounds_cold": 7.460680991411209,
+      "zonal_1deg": 1.4338232101872563,
+      "zonal_1deg_warm": 1.398980274796486,
+      "zonal_5deg": 0.8103886498138309,
+      "zonal_5deg_warm": 0.8116860631853342,
+      "subset_bbox": 0.20600672252476215,
+      "zonal_on_subset": 0.03303864039480686,
+      "load_node": 0.015991318970918655
+    },
+    "n_face": 655362,
+    "n_node": 1310720,
+    "n_values_face": 655362,
+    "mean_t2m": 289.3864440917969,
+    "zonal_bins": 181,
+    "zonal_min": 218.15574645996094,
+    "zonal_max": 300.7034606933594,
+    "zonal5_bins": 37,
+    "subset_faces": 17667,
+    "n_values_node": 1310720,
+    "mean_vort": 1.8413867763911185e-08,
+    "_provenance": {
+      "tool": "remote_workflow",
+      "inputs": {
+        "args": [
+          "30km"
+        ]
+      },
+      "execution_venue": "hpc:ucar-uxarray-yac",
+      "timestamp_utc": "2026-08-07T11:02:57.637791+00:00",
+      "uxarray_version": "2026.7.0",
+      "python_version": "3.12.10",
+      "warnings": [],
+      "artifacts": []
+    },
+    "_wall_s": 22.495638847351074
+  },
+  {
+    "resolution": "15km",
+    "grid_bytes": 1614838757,
+    "data_bytes": 996507874,
+    "hostname": "casper04",
+    "python": "3.11.12",
+    "uxarray": "2026.7.0",
+    "ops": {
+      "open": 14.362089494243264,
+      "load_face": 0.23801299277693033,
+      "mean_face": 0.0009028185158967972,
+      "bounds_cold": 29.79861798323691,
+      "zonal_1deg": 4.87471757736057,
+      "zonal_1deg_warm": 4.763765844516456,
+      "zonal_5deg": 3.1069262735545635,
+      "zonal_5deg_warm": 3.1131048342213035,
+      "subset_bbox": 0.9503179062157869,
+      "zonal_on_subset": 0.09335884638130665,
+      "load_node": 0.5422558458521962
+    },
+    "n_face": 2621442,
+    "n_node": 5242880,
+    "n_values_face": 2621442,
+    "mean_t2m": 289.4427795410156,
+    "zonal_bins": 181,
+    "zonal_min": 218.10801696777344,
+    "zonal_max": 300.7080383300781,
+    "zonal5_bins": 37,
+    "subset_faces": 72052,
+    "n_values_node": 5242880,
+    "mean_vort": 7.081877306802653e-09,
+    "_provenance": {
+      "tool": "remote_workflow",
+      "inputs": {
+        "args": [
+          "15km"
+        ]
+      },
+      "execution_venue": "hpc:ucar-uxarray-yac",
+      "timestamp_utc": "2026-08-07T11:05:04.410536+00:00",
+      "uxarray_version": "2026.7.0",
+      "python_version": "3.12.10",
+      "warnings": [],
+      "artifacts": []
+    },
+    "_wall_s": 79.84460783004761
+  },
+  {
+    "resolution": "7.5km",
+    "grid_bytes": 4949311375,
+    "data_bytes": 1730121739,
+    "hostname": "casper04",
+    "python": "3.11.12",
+    "uxarray": "2026.7.0",
+    "ops": {
+      "open": 44.46716747339815,
+      "load_face": 0.19585166964679956,
+      "mean_face": 0.0035475092008709908,
+      "bounds_cold": 118.04297504108399,
+      "zonal_1deg": 15.274628319777548,
+      "zonal_1deg_warm": 12.797916687093675,
+      "zonal_5deg": 8.3560239225626,
+      "zonal_5deg_warm": 8.359011514112353,
+      "subset_bbox": 5.132943272590637,
+      "zonal_on_subset": 0.24271893221884966,
+      "load_node": 0.46354250609874725
+    },
+    "n_face": 10485762,
+    "n_node": 20971520,
+    "n_values_face": 10485762,
+    "mean_t2m": 289.4425964355469,
+    "zonal_bins": 181,
+    "zonal_min": 218.1250762939453,
+    "zonal_max": 300.7069091796875,
+    "zonal5_bins": 37,
+    "subset_faces": 289498,
+    "n_values_node": 20971520,
+    "mean_vort": 7.926760581256076e-09,
+    "_provenance": {
+      "tool": "remote_workflow",
+      "inputs": {
+        "args": [
+          "7.5km"
+        ]
+      },
+      "execution_venue": "hpc:ucar-uxarray-yac",
+      "timestamp_utc": "2026-08-07T11:09:25.192818+00:00",
+      "uxarray_version": "2026.7.0",
+      "python_version": "3.12.10",
+      "warnings": [],
+      "artifacts": []
+    },
+    "_wall_s": 260.78248381614685
+  },
+  {
+    "resolution": "3.75km",
+    "grid_bytes": 19797147535,
+    "data_bytes": 7721009652,
+    "hostname": "casper04",
+    "python": "3.11.12",
+    "uxarray": "2026.7.0",
+    "ops": {
+      "open": 174.8197883674875,
+      "load_face": 0.7597603499889374,
+      "mean_face": 0.014804086647927761,
+      "bounds_cold": 487.847321793437,
+      "zonal_1deg": 535.124601630494,
+      "zonal_1deg_warm": 528.600348033011,
+      "zonal_5deg": 486.91943696700037,
+      "zonal_5deg_warm": 489.1833068523556,
+      "subset_bbox": 25.208245809189975,
+      "zonal_on_subset": 1.0073513984680176,
+      "load_node": 1.270337413996458
+    },
+    "n_face": 41943042,
+    "n_node": 83886080,
+    "n_values_face": 41943042,
+    "mean_t2m": 289.44281005859375,
+    "zonal_bins": 181,
+    "zonal_min": 218.12278747558594,
+    "zonal_max": 300.70709228515625,
+    "zonal5_bins": 37,
+    "subset_faces": 1160500,
+    "n_values_node": 83886080,
+    "mean_vort": 8.223549841090971e-09,
+    "_provenance": {
+      "tool": "remote_workflow",
+      "inputs": {
+        "args": [
+          "3.75km"
+        ]
+      },
+      "execution_venue": "hpc:ucar-uxarray-yac",
+      "timestamp_utc": "2026-08-07T13:18:50.157103+00:00",
+      "uxarray_version": "2026.7.0",
+      "python_version": "3.12.10",
+      "warnings": [],
+      "artifacts": []
+    },
+    "_wall_s": 7756.7684071063995
+  }
+]
