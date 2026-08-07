@@ -254,3 +254,112 @@ def test_remap_partial_coverage_still_only_warns():
         "physically_interpretable": False,
         "warning_codes": ["REMAP_COVERAGE_PARTIAL"],
     }
+
+
+def test_front_door_preserves_domain_warning_codes():
+    """A code only the computation can raise must survive the front door.
+
+    ``SPHERE_RADIUS_UNAVAILABLE`` is emitted by UXarray inside ``curl``/
+    ``gradient`` and attached by the domain layer. The front door used to
+    assign a fresh ``scientific_status`` dict, which dropped the code and
+    reset the verdict to an unqualified ``complete`` -- presenting a result
+    the domain had already marked uninterpretable as a clean one.
+    """
+    result = _finalize_analysis_result(
+        "curl",
+        {
+            "component_warnings": [],
+            "component_evidence": {
+                "units_supported": True,
+                "component_identity_supported": True,
+            },
+            "scale_by_radius": True,
+            "scientific_status": {
+                "status": "warning",
+                "physically_interpretable": False,
+                "warning_codes": ["SPHERE_RADIUS_UNAVAILABLE"],
+                "warnings": ["grid has no 'sphere_radius' attribute"],
+                "physical_scaling_requested": True,
+                "physical_scaling_applied": False,
+            },
+        },
+    )
+
+    status = result["scientific_status"]
+    assert "SPHERE_RADIUS_UNAVAILABLE" in status["warning_codes"]
+    assert status["physically_interpretable"] is False
+    assert status["status"] == "warning"
+    # Domain-only detail keys survive the merge rather than being dropped.
+    assert status["physical_scaling_applied"] is False
+
+
+def test_front_door_status_merge_keeps_the_stricter_verdict():
+    """Neither layer may upgrade the other's negative judgment.
+
+    Both directions must hold. The front door may downgrade a domain verdict
+    it knows to be too generous (the override path), and it must not upgrade
+    a domain verdict that is stricter than its own -- the latter is the case
+    that regressed when the block was assigned rather than merged.
+    """
+    # Front door is stricter: domain saw nothing wrong, but the caller
+    # overrode a failed precondition, so the result cannot claim to be clean.
+    overridden = _finalize_analysis_result(
+        "curl",
+        {
+            "component_warnings": [],
+            "component_evidence": {},
+            "scale_by_radius": True,
+            "scientific_status": {
+                "status": "complete",
+                "physically_interpretable": True,
+                "warning_codes": [],
+            },
+        },
+        OVERRIDE_TOKEN,
+    )
+    assert overridden["scientific_status"]["status"] == "unverified"
+    assert overridden["scientific_status"]["physically_interpretable"] is False
+
+    # Domain is stricter: the front door's own checks all pass, so on its own
+    # it would report `complete`. It must not overwrite the domain's warning.
+    domain_stricter = _finalize_analysis_result(
+        "curl",
+        {
+            "component_warnings": [],
+            "component_evidence": {
+                "units_supported": True,
+                "component_identity_supported": True,
+            },
+            "scale_by_radius": True,
+            "scientific_status": {
+                "status": "warning",
+                "physically_interpretable": False,
+                "warning_codes": ["SPHERE_RADIUS_UNAVAILABLE"],
+            },
+        },
+    )
+    assert domain_stricter["scientific_status"]["status"] == "warning"
+    assert domain_stricter["scientific_status"]["physically_interpretable"] is False
+    assert domain_stricter["scientific_status"]["warning_codes"] == [
+        "SPHERE_RADIUS_UNAVAILABLE"
+    ]
+
+    # Codes from both layers accumulate instead of one replacing the other.
+    both = _finalize_analysis_result(
+        "curl",
+        {
+            "component_warnings": [],
+            "component_evidence": {},
+            "scale_by_radius": True,
+            "scientific_status": {
+                "status": "warning",
+                "physically_interpretable": False,
+                "warning_codes": ["SPHERE_RADIUS_UNAVAILABLE"],
+            },
+        },
+        OVERRIDE_TOKEN,
+    )
+    codes = both["scientific_status"]["warning_codes"]
+    assert "SPHERE_RADIUS_UNAVAILABLE" in codes
+    assert any(c.startswith("PRECONDITION_FAILED_") for c in codes)
+    assert both["scientific_status"]["status"] == "unverified"
