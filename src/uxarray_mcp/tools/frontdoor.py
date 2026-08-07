@@ -165,11 +165,34 @@ def _finalize_analysis_result(
 
     result["result_type"] = RESULT_TYPE_COMPLETE
     result["preconditions"] = precondition_block
-    result["scientific_status"] = {
-        "status": status,
-        "physically_interpretable": physically_interpretable,
-        "warning_codes": warning_codes,
-    }
+    # Merge rather than overwrite. The domain layer already attached a status
+    # via attach_scientific_status() carrying codes the front door cannot
+    # rederive -- SPHERE_RADIUS_UNAVAILABLE is raised inside UXarray and only
+    # the computation sees it. Assigning a fresh dict here dropped those codes
+    # and reset `physically_interpretable` to null, so a result the domain had
+    # correctly marked uninterpretable was presented as an unqualified
+    # `complete`. That is exactly the silent laundering the contract exists to
+    # prevent, so the stricter of the two judgments wins on every field.
+    existing = result.get("scientific_status") or {}
+    merged_codes = list(existing.get("warning_codes", []))
+    for code in warning_codes:
+        if code not in merged_codes:
+            merged_codes.append(code)
+    if existing.get("status") == "warning" and status == "complete":
+        status = "warning"
+    if physically_interpretable is None:
+        physically_interpretable = existing.get("physically_interpretable")
+    elif existing.get("physically_interpretable") is False:
+        physically_interpretable = False
+    merged_status = dict(existing)
+    merged_status.update(
+        {
+            "status": status,
+            "physically_interpretable": physically_interpretable,
+            "warning_codes": merged_codes,
+        }
+    )
+    result["scientific_status"] = merged_status
     # #84: an explicit "we did not check" is cheap and stops a caller
     # implying more confidence than the computation supports. #90: when a
     # check does run, whether the verdict comes with it is a policy.

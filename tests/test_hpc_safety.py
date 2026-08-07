@@ -529,12 +529,24 @@ class TestWorkerRuntimeProvenancePromotion:
 
     @requires_globus
     def test_worker_runtime_overwrites_submitter_python_version(self):
+        import platform
+
+        # Derive a worker version guaranteed to differ from the submitter's.
+        # Hardcoding a literal made this test depend on the CI image's patch
+        # release: when the runner shipped exactly that version the drift
+        # branch stopped firing and the submitter_* keys were never written,
+        # failing for a reason that had nothing to do with the code.
+        local_python = platform.python_version()
+        major, minor, _ = local_python.split(".")
+        worker_python = f"{major}.{minor}.{int(_) + 1}"
+        assert worker_python != local_python
+
         result = self._run(
             {
                 "n_face": 1,
                 "_worker_runtime": {
                     "hostname": "chr-0123",
-                    "python_version": "3.12.13",
+                    "python_version": worker_python,
                     "uxarray_version": "2026.6.0",
                     "slurm_job_id": "987654",
                 },
@@ -543,11 +555,11 @@ class TestWorkerRuntimeProvenancePromotion:
         prov = result["_provenance"]
 
         # Top-level runtime fields describe the machine that did the work.
-        assert prov["python_version"] == "3.12.13"
+        assert prov["python_version"] == worker_python
         assert prov["remote_hostname"] == "chr-0123"
         assert prov["remote_slurm_job_id"] == "987654"
         # The submitter's own interpreter is preserved, not silently dropped.
-        assert prov["submitter_python_version"] != "3.12.13"
+        assert prov["submitter_python_version"] == local_python
         assert "_worker_runtime" not in result
 
     @requires_globus
