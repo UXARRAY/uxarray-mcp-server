@@ -81,15 +81,25 @@ LIST_TOOLS_CACHE_SCOPE = "public"
 
 
 def make_mcp_server(*, profile: Profile = "core"):
-    """Build a configured MCP server ready for any transport."""
+    """Build a configured MCP server ready for any transport.
+
+    The ``tools/list`` cache hints are passed only when the installed adapter
+    understands them. They are a pure optimization, so an adapter that predates
+    them should serve the same tool surface rather than fail to start.
+    """
+    import inspect
+
     from toolregistry_server.adapters.mcp import route_table_to_mcp_server
     from toolregistry_server.route_table import RouteTable
 
     registry = make_registry(profile=profile)
     route_table = RouteTable(registry)
-    return route_table_to_mcp_server(
-        route_table,
-        name="UXarray MCP",
-        list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
-        list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
-    )
+
+    kwargs: dict[str, object] = {"name": "UXarray MCP"}
+    supported = inspect.signature(route_table_to_mcp_server).parameters
+    if "list_tools_ttl_ms" in supported:
+        kwargs["list_tools_ttl_ms"] = LIST_TOOLS_TTL_MS
+    if "list_tools_cache_scope" in supported:
+        kwargs["list_tools_cache_scope"] = LIST_TOOLS_CACHE_SCOPE
+
+    return route_table_to_mcp_server(route_table, **kwargs)

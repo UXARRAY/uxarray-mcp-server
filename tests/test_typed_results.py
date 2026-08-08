@@ -12,7 +12,10 @@ from uxarray_mcp.app import (
     make_mcp_server,
     make_registry,
 )
-from uxarray_mcp.response_contract import available_contracts, describe_response_contract
+from uxarray_mcp.response_contract import (
+    available_contracts,
+    describe_response_contract,
+)
 from uxarray_mcp.typed_results import (
     INLINE_PAYLOAD_LIMIT_BYTES,
     attach_resource_link,
@@ -21,6 +24,23 @@ from uxarray_mcp.typed_results import (
     output_schema_for,
     should_link_rather_than_inline,
     spill_png,
+)
+
+
+def _adapter_forwards_output_schema() -> bool:
+    """Whether the installed adapter carries our schema through to a route.
+
+    We publish the schema either way; only the hand-off to the MCP layer needs
+    adapter support, which is not in the released version yet.
+    """
+    from toolregistry_server.route_table import RouteEntry
+
+    return "output_schema" in getattr(RouteEntry, "__dataclass_fields__", {})
+
+
+needs_schema_adapter = pytest.mark.skipif(
+    not _adapter_forwards_output_schema(),
+    reason="installed toolregistry-server does not forward output_schema yet",
 )
 
 
@@ -110,7 +130,8 @@ class TestRegistryPublishesSchemas:
         published = {
             name
             for name in registry.list_tools()
-            if "output_schema" in (getattr(registry.get_tool(name).metadata, "extra", None) or {})
+            if "output_schema"
+            in (getattr(registry.get_tool(name).metadata, "extra", None) or {})
         }
         assert "analyze_dataset" in published
 
@@ -119,11 +140,13 @@ class TestRegistryPublishesSchemas:
         published = {
             name
             for name in registry.list_tools()
-            if "output_schema" in (getattr(registry.get_tool(name).metadata, "extra", None) or {})
+            if "output_schema"
+            in (getattr(registry.get_tool(name).metadata, "extra", None) or {})
         }
         assert "compute-calculate_area" in published
         assert "compute-calculate_zonal_mean" in published
 
+    @needs_schema_adapter
     def test_schema_survives_the_route_table(self):
         from toolregistry_server.route_table import RouteTable
 
@@ -132,6 +155,7 @@ class TestRegistryPublishesSchemas:
         assert route.output_schema is not None
         assert "result_type" in route.output_schema["properties"]
 
+    @needs_schema_adapter
     def test_tools_without_a_declared_shape_stay_silent(self):
         # Advertising a shape we have not committed to is worse than none.
         from toolregistry_server.route_table import RouteTable
@@ -182,7 +206,7 @@ class TestResourceLinks:
 
     def test_spill_degrades_to_inline_when_store_unwritable(self, monkeypatch):
         # Failing to spill must never fail the call: inlining is still correct.
-        import uxarray_mcp.state as state
+        from uxarray_mcp import state
 
         monkeypatch.setattr(
             state, "_artifacts_dir", lambda: (_ for _ in ()).throw(OSError("read-only"))

@@ -160,8 +160,7 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
                 "physically_interpretable": {
                     "type": ["boolean", "null"],
                     "description": (
-                        "null means the server did not judge. Do not read "
-                        "null as true."
+                        "null means the server did not judge. Do not read null as true."
                     ),
                 },
                 "warning_codes": {"type": "array", "items": {"type": "string"}},
@@ -252,7 +251,9 @@ def make_resource_link(
     return link
 
 
-def attach_resource_link(result: dict[str, Any], link: dict[str, Any]) -> dict[str, Any]:
+def attach_resource_link(
+    result: dict[str, Any], link: dict[str, Any]
+) -> dict[str, Any]:
     """Append one resource link to a result, creating the list if needed."""
     links = result.setdefault("_resource_links", [])
     links.append(link)
