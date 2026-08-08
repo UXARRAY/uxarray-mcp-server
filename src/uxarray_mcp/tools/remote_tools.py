@@ -167,12 +167,73 @@ def _run_with_optional_hpc(
 
 
 def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
-    """Convert a plot result dict into inline MCP image + metadata contents."""
+    """Convert a plot result dict into MCP image/link + metadata contents.
+
+    A figure small enough to inline comes back as an ``image`` block. A
+    large one was written to the artifact store instead, so there are no
+    bytes to inline and the caller gets a ``resource_link`` pointing at
+    it. Building an ``ImageContent`` in that second case would fail
+    validation on a null payload, which is exactly what happens on the
+    biggest meshes.
+    """
     metadata = {key: value for key, value in result.items() if key != "png_b64"}
+    text = TextContent(type="text", text=json.dumps(metadata, indent=2))
+
+    b64 = result.get("png_b64")
+    if b64 is not None:
+        return [
+            ImageContent(type="image", data=b64, mimeType="image/png"),
+            text,
+        ]
+
+    uri = result.get("image_uri")
+    if uri is None:
+        # No bytes and no URI: nothing to show but the metadata, which
+        # still carries the numbers the caller asked for.
+        return [text]
+
+    from mcp.types import ResourceLink
+
+    name = str(uri).rsplit("/", 1)[-1] or "plot.png"
     return [
-        ImageContent(type="image", data=result["png_b64"], mimeType="image/png"),
-        TextContent(type="text", text=json.dumps(metadata, indent=2)),
+        ResourceLink(
+            type="resource_link",
+            uri=uri,
+            name=name,
+            title="plot",
+            mimeType="image/png",
+            size=result.get("image_size_bytes"),
+        ),
+        text,
     ]
+
+
+def _image_payload(img: Any, meta: dict) -> Dict[str, Any]:
+    """Describe a plot's image whether it came back inline or as a link.
+
+    A large figure is handed back as a ``resource_link`` rather than
+    inlined, so ``png_b64`` is absent and the URI is what the caller
+    follows. Reading ``.data`` unconditionally raised on exactly those
+    plots, which meant the biggest meshes -- the ones most worth looking
+    at -- failed here.
+    """
+    import base64
+
+    b64 = getattr(img, "data", None)
+    if b64 is not None:
+        return {
+            "png_b64": b64,
+            "image_size_bytes": meta.get(
+                "image_size_bytes", len(base64.b64decode(b64))
+            ),
+        }
+    uri = getattr(img, "uri", None)
+    return {
+        "png_b64": None,
+        "image_uri": str(uri) if uri is not None else None,
+        "image_delivery": "resource_link",
+        "image_size_bytes": meta.get("image_size_bytes") or getattr(img, "size", None),
+    }
 
 
 def inspect_mesh(
@@ -485,7 +546,6 @@ def plot_mesh(
     resolved_grid, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
 
     def _local() -> Dict[str, Any]:
-        import base64
         import json
 
         items = _plot_mesh_local(resolved_grid, width=width, height=height)
@@ -493,10 +553,7 @@ def plot_mesh(
         img = items[0]
         meta = json.loads(items[1].text)
         return {
-            "png_b64": img.data,
-            "image_size_bytes": meta.get(
-                "image_size_bytes", len(base64.b64decode(img.data))
-            ),
+            **_image_payload(img, meta),
             "grid_info": meta.get("grid_info", {}),
             "execution_venue": "local",
             "_provenance": meta.get("_provenance", {}),
@@ -583,7 +640,6 @@ def plot_variable(
     )
 
     def _local() -> Dict[str, Any]:
-        import base64
         import json
 
         items = _plot_variable_local(
@@ -601,10 +657,7 @@ def plot_variable(
         img = items[0]
         meta = json.loads(items[1].text)
         return {
-            "png_b64": img.data,
-            "image_size_bytes": meta.get(
-                "image_size_bytes", len(base64.b64decode(img.data))
-            ),
+            **_image_payload(img, meta),
             "variable_name": meta.get("variable_name", variable_name),
             "grid_info": meta.get("grid_info", {}),
             "execution_venue": "local",
@@ -701,7 +754,6 @@ def plot_zonal_mean(
     )
 
     def _local() -> Dict[str, Any]:
-        import base64
         import json
 
         items = _plot_zonal_mean_local(
@@ -719,10 +771,7 @@ def plot_zonal_mean(
         img = items[0]
         meta = json.loads(items[1].text)
         return {
-            "png_b64": img.data,
-            "image_size_bytes": meta.get(
-                "image_size_bytes", len(base64.b64decode(img.data))
-            ),
+            **_image_payload(img, meta),
             "variable_name": meta.get("variable_name", variable_name),
             "latitudes": meta.get("latitudes", []),
             "zonal_mean_values": meta.get("zonal_mean_values", []),

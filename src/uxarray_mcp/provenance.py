@@ -76,7 +76,35 @@ def attach_provenance(
     if validation_summary is not None:
         provenance["validation_summary"] = validation_summary
     result["_provenance"] = provenance
+
+    # Name the operation in the body, not only inside provenance.
+    #
+    # ``response_contract`` declares ``operation`` as a required field for
+    # every family that has a contract, and the published ``outputSchema``
+    # is compiled from that same declaration. Emitting it only under
+    # ``_provenance`` left every one of those results failing its own
+    # contract check, and an SDK that validates ``structuredContent``
+    # against the schema rejects the reply outright. Set it here, at the
+    # single point every contracted result already passes through, so the
+    # promise and the payload cannot drift apart again.
+    if _has_contract(tool):
+        result.setdefault("operation", tool)
     return result
+
+
+def _has_contract(tool: str) -> bool:
+    """Whether this operation declares a response contract.
+
+    Only contracted families gain an ``operation`` field: the contract is
+    what makes the field a promise, and adding it to results that never
+    promised it would be noise.
+    """
+    try:
+        from .response_contract import _CONTRACTS, _normalize
+
+        return _normalize(tool) in _CONTRACTS
+    except Exception:  # pragma: no cover - defensive
+        return False
 
 
 def attach_scientific_status(
