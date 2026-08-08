@@ -546,6 +546,28 @@ def _apply_tags(
         predefined, custom = _default_tags_for(raw_name, func)
     tool.metadata.tags |= predefined
     tool.metadata.custom_tags |= custom
+    _apply_output_schema(tool, raw_name)
+
+
+def _apply_output_schema(tool: object, raw_name: str) -> None:
+    """Publish a declared response shape as MCP ``outputSchema``.
+
+    The adapter reads ``metadata.extra['output_schema']`` and forwards it
+    to clients in ``tools/list``. Only operations that already declare a
+    response contract get one; the rest stay silent rather than
+    advertising a shape we have not committed to.
+    """
+    from .typed_results import output_schema_for
+
+    schema = output_schema_for(raw_name)
+    if schema is None:
+        return
+    metadata = getattr(tool, "metadata", None)
+    if metadata is None:
+        return
+    if not isinstance(getattr(metadata, "extra", None), dict):
+        metadata.extra = {}
+    metadata.extra["output_schema"] = schema
 
 
 # ---------------------------------------------------------------------------

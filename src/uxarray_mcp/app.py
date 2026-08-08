@@ -67,6 +67,19 @@ def make_registry(*, profile: Profile = "core") -> ToolRegistry:
     return UXarrayApp().prepare_registry(profile=profile)
 
 
+#: How long a client may cache our ``tools/list`` response, in milliseconds.
+#: The tool surface is fixed at startup by the profile and does not change
+#: while the server runs, so re-listing on every turn is pure overhead --
+#: the catalog was measured at 74% of the payload on short conversations.
+#: Five minutes bounds how long a client can hold a stale surface if a
+#: future version does start mutating the registry at runtime.
+LIST_TOOLS_TTL_MS = 300_000
+
+#: The surface depends only on the profile, not on the user or session, so
+#: a shared cache entry is correct.
+LIST_TOOLS_CACHE_SCOPE = "public"
+
+
 def make_mcp_server(*, profile: Profile = "core"):
     """Build a configured MCP server ready for any transport."""
     from toolregistry_server.adapters.mcp import route_table_to_mcp_server
@@ -74,4 +87,9 @@ def make_mcp_server(*, profile: Profile = "core"):
 
     registry = make_registry(profile=profile)
     route_table = RouteTable(registry)
-    return route_table_to_mcp_server(route_table, name="UXarray MCP")
+    return route_table_to_mcp_server(
+        route_table,
+        name="UXarray MCP",
+        list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
+        list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
+    )
