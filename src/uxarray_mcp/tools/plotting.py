@@ -16,6 +16,41 @@ from uxarray_mcp.domain.plotting import (
 )
 from uxarray_mcp.domain.zonal import compute_zonal_mean_stats
 from uxarray_mcp.provenance import attach_provenance
+from uxarray_mcp.typed_results import spill_png
+
+
+def _png_content(png_bytes: bytes, *, plot_type: str) -> tuple[Any, dict[str, Any]]:
+    """Return the content block for a rendered PNG, plus a note about it.
+
+    Small images are inlined as an ``image`` block, which keeps the common
+    interactive case a single round trip. A large one is written to the
+    artifact store and handed back as a ``resource_link`` instead: base64
+    inflates bytes by a third, and a multi-hundred-kilobyte figure costs
+    far more of the caller's context than the picture is worth. The caller
+    fetches it by URI if it actually wants to look.
+    """
+    link = spill_png(png_bytes, plot_type=plot_type)
+    if link is None:
+        b64 = base64.b64encode(png_bytes).decode("utf-8")
+        return (
+            ImageContent(type="image", data=b64, mimeType="image/png"),
+            {"image_delivery": "inline"},
+        )
+    from mcp.types import ResourceLink
+
+    block = ResourceLink(
+        type="resource_link",
+        uri=link["uri"],
+        name=link["name"],
+        title=link.get("title"),
+        description=link.get("description"),
+        mimeType=link["mime_type"],
+        size=link.get("size"),
+    )
+    return block, {
+        "image_delivery": "resource_link",
+        "image_uri": link["uri"],
+    }
 
 
 def _resolve_plot_paths(
@@ -86,10 +121,11 @@ def _plot_mesh_local(
     grid = load_grid(grid_path)
 
     png_bytes = render_mesh(grid, width=width, height=height)
-    b64 = base64.b64encode(png_bytes).decode("utf-8")
+    image_block, delivery = _png_content(png_bytes, plot_type="mesh_wireframe")
 
     result = {
         "image_size_bytes": len(png_bytes),
+        **delivery,
         "grid_info": {
             "n_face": int(grid.n_face),
             "n_node": int(grid.n_node),
@@ -118,7 +154,7 @@ def _plot_mesh_local(
     )
 
     return [
-        ImageContent(type="image", data=b64, mimeType="image/png"),
+        image_block,
         TextContent(type="text", text=json.dumps(provenance, indent=2)),
     ]
 
@@ -292,7 +328,7 @@ def plot_mesh_geo(
             city_scale=city_scale,
         )
 
-    b64 = base64.b64encode(png_bytes).decode("utf-8")
+    image_block, delivery = _png_content(png_bytes, plot_type="mesh_geographic")
 
     # ── Build human-readable plot note ───────────────────────────────────────
     note = _build_plot_note(
@@ -301,6 +337,7 @@ def plot_mesh_geo(
 
     result = {
         "image_size_bytes": len(png_bytes),
+        **delivery,
         "grid_info": {
             "n_face": int(grid.n_face),
             "n_node": int(grid.n_node),
@@ -330,7 +367,7 @@ def plot_mesh_geo(
         ],
     )
     return [
-        ImageContent(type="image", data=b64, mimeType="image/png"),
+        image_block,
         TextContent(type="text", text=note + "\n\n" + json.dumps(provenance, indent=2)),
     ]
 
@@ -651,10 +688,11 @@ def _plot_variable_local(
         title=title,
         time_index=time_index,
     )
-    b64 = base64.b64encode(png_bytes).decode("utf-8")
+    image_block, delivery = _png_content(png_bytes, plot_type="variable_polygons")
 
     result = {
         "image_size_bytes": len(png_bytes),
+        **delivery,
         "variable_name": variable_name,
         "grid_info": {
             "n_face": int(uxds.uxgrid.n_face),
@@ -692,7 +730,7 @@ def _plot_variable_local(
     )
 
     return [
-        ImageContent(type="image", data=b64, mimeType="image/png"),
+        image_block,
         TextContent(type="text", text=json.dumps(provenance, indent=2)),
     ]
 
@@ -816,10 +854,11 @@ def _plot_zonal_mean_local(
         line_color=line_color,
         title=title,
     )
-    b64 = base64.b64encode(png_bytes).decode("utf-8")
+    image_block, delivery = _png_content(png_bytes, plot_type="zonal_mean_profile")
 
     result = {
         "image_size_bytes": len(png_bytes),
+        **delivery,
         "variable_name": variable_name,
         "latitudes": latitudes,
         "zonal_mean_values": values,
@@ -856,6 +895,6 @@ def _plot_zonal_mean_local(
     )
 
     return [
-        ImageContent(type="image", data=b64, mimeType="image/png"),
+        image_block,
         TextContent(type="text", text=json.dumps(provenance, indent=2)),
     ]

@@ -88,16 +88,22 @@ class TestOutputSchema:
 
 
 class TestAnalysisEnvelope:
-    """The front-door envelope is the paper's result contract as a schema."""
+    """The front-door envelope is the paper's result contract as a schema.
+
+    The envelope belongs to ``run_analysis``: that is the tool that
+    returns a ``result_type`` and can refuse with ``input_required``.
+    ``analyze_dataset`` runs a multi-stage summary and has no such field,
+    so it must not advertise this shape.
+    """
 
     def test_refusal_is_advertised_as_a_reachable_shape(self):
-        schema = output_schema_for("analyze_dataset")
+        schema = output_schema_for("run_analysis")
         result_type = schema["properties"]["result_type"]
         assert set(result_type["enum"]) == {"complete", "input_required"}
         assert schema["required"] == ["result_type"]
 
     def test_contract_blocks_are_all_declared(self):
-        props = output_schema_for("analyze_dataset")["properties"]
+        props = output_schema_for("run_analysis")["properties"]
         for block in (
             "scientific_status",
             "preconditions",
@@ -108,7 +114,7 @@ class TestAnalysisEnvelope:
 
     def test_not_evaluated_is_distinct_from_failed(self):
         # #84: "we did not check" must not read as "the check passed".
-        pre = output_schema_for("analyze_dataset")["properties"]["preconditions"]
+        pre = output_schema_for("run_analysis")["properties"]["preconditions"]
         assert set(pre["properties"]["status"]["enum"]) == {
             "satisfied",
             "failed",
@@ -116,7 +122,7 @@ class TestAnalysisEnvelope:
         }
 
     def test_interpretability_is_nullable(self):
-        status = output_schema_for("analyze_dataset")["properties"]["scientific_status"]
+        status = output_schema_for("run_analysis")["properties"]["scientific_status"]
         assert status["properties"]["physically_interpretable"]["type"] == [
             "boolean",
             "null",
@@ -133,7 +139,16 @@ class TestRegistryPublishesSchemas:
             if "output_schema"
             in (getattr(registry.get_tool(name).metadata, "extra", None) or {})
         }
-        assert "analyze_dataset" in published
+        assert "run_analysis" in published
+
+    @pytest.mark.parametrize("profile", ["core", "deferred-full"])
+    def test_multi_stage_summary_does_not_claim_the_envelope(self, profile):
+        # analyze_dataset returns a stage summary, not a result_type
+        # envelope. Declaring one made the server reject its own output as
+        # invalid structured content the moment a client called it.
+        registry = make_registry(profile=profile)
+        extra = getattr(registry.get_tool("analyze_dataset").metadata, "extra", None)
+        assert "output_schema" not in (extra or {})
 
     def test_deferred_profile_publishes_the_compute_tools(self):
         registry = make_registry(profile="deferred-full")
@@ -151,7 +166,7 @@ class TestRegistryPublishesSchemas:
         from toolregistry_server.route_table import RouteTable
 
         table = RouteTable(make_registry(profile="core"))
-        route = table.get_route("analyze_dataset")
+        route = table.get_route("run_analysis")
         assert route.output_schema is not None
         assert "result_type" in route.output_schema["properties"]
 
@@ -223,3 +238,69 @@ class TestListToolsCacheHints:
         # is correct; the TTL bounds staleness if that ever changes.
         assert 0 < LIST_TOOLS_TTL_MS <= 600_000
         assert LIST_TOOLS_CACHE_SCOPE in {"public", "private"}
+
+
+class TestDeclaredShapeMatchesRealOutput:
+    """A declared schema is a promise; these check we actually keep it."""
+
+    def test_contracted_results_carry_the_operation_they_declare(self):
+        # Every contract-derived schema requires `operation`, but nothing
+        # emitted it, so a validating client saw a malformed envelope on
+        # results that were in fact fine.
+        from uxarray_mcp.provenance import attach_provenance
+
+        result = attach_provenance({}, tool="inspect_mesh", inputs={})
+        assert result["operation"] == "inspect_mesh"
+
+    def test_uncontracted_results_do_not_invent_one(self):
+        from uxarray_mcp.provenance import attach_provenance
+
+        result = attach_provenance({}, tool="get_capabilities", inputs={})
+        assert "operation" not in result
+
+    def test_run_analysis_output_validates_against_its_own_schema(self):
+        jsonschema = pytest.importorskip("jsonschema")
+
+        jsonschema.validate(
+            {
+                "result_type": "complete",
+                "scientific_status": {"physically_interpretable": None},
+                "_provenance": {},
+            },
+            output_schema_for("run_analysis"),
+        )
+
+
+class TestPlotContentBlocks:
+    """Plot results must stay real content blocks, inline or linked."""
+
+    def _contents(self, png_b64, **extra):
+        from uxarray_mcp.tools.remote_tools import _plot_result_to_mcp_contents
+
+        return _plot_result_to_mcp_contents({"png_b64": png_b64, **extra})
+
+    def test_small_figure_is_an_inline_image(self):
+        blocks = self._contents("aGk=")
+        assert [b.type for b in blocks] == ["image", "text"]
+        assert blocks[0].data == "aGk="
+
+    def test_spilled_figure_becomes_a_resource_link(self):
+        # A spilled plot has no bytes to inline. Building an image block
+        # from the missing payload failed validation outright, so the
+        # largest meshes -- the ones worth spilling -- returned an error.
+        blocks = self._contents(
+            None, image_uri="file:///tmp/plot_abc.png", image_size_bytes=999
+        )
+        assert [b.type for b in blocks] == ["resource_link", "text"]
+        assert str(blocks[0].uri) == "file:///tmp/plot_abc.png"
+        assert blocks[0].name == "plot_abc.png"
+
+    def test_metadata_survives_either_delivery(self):
+        for b64, extra in (("aGk=", {}), (None, {"image_uri": "file:///t/p.png"})):
+            text = self._contents(b64, grid_info={"n_face": 8}, **extra)[-1]
+            assert json.loads(text.text)["grid_info"] == {"n_face": 8}
+            assert "png_b64" not in json.loads(text.text)
+
+    def test_no_bytes_and_no_uri_still_returns_metadata(self):
+        blocks = self._contents(None)
+        assert [b.type for b in blocks] == ["text"]

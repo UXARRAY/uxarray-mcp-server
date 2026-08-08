@@ -42,13 +42,24 @@ def _png_meta(items: list[Any]) -> dict[str, Any]:
             image_size_bytes = len(base64.b64decode(png_b64))
         except Exception:
             image_size_bytes = None
-    return {
+    out = {
         "png_b64": png_b64,
         "image_size_bytes": image_size_bytes,
         "grid_info": meta.get("grid_info"),
         "variable_name": meta.get("variable_name"),
         "_provenance": meta.get("_provenance", {}),
     }
+    # A large figure is a resource_link rather than inline bytes, so pass
+    # the URI along; otherwise the summary reports no image at all for
+    # exactly the meshes big enough to be interesting.
+    if png_b64 is None:
+        uri = meta.get("image_uri") or getattr(img, "uri", None)
+        if uri is not None:
+            out["image_uri"] = str(uri)
+            out["image_delivery"] = "resource_link"
+            if out["image_size_bytes"] is None:
+                out["image_size_bytes"] = getattr(img, "size", None)
+    return out
 
 
 def analyze_dataset(

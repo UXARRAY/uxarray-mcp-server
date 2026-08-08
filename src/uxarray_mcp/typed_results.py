@@ -208,8 +208,15 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
 #: Front-door tools and the envelope they return.  Keyed by the registered
 #: tool name because front doors are registered at top level without a
 #: namespace.
+#:
+#: Only ``run_analysis`` is listed.  It is the front door that runs a single
+#: operation through the precondition gate, so it is the one that actually
+#: returns ``result_type`` and the refusal fields this envelope promises.
+#: ``analyze_dataset`` is a multi-stage summary with a different shape --
+#: declaring the envelope for it advertised a contract it does not honour,
+#: and an SDK that validates ``structuredContent`` rejects the reply.
 _FRONTDOOR_SCHEMAS: dict[str, dict[str, Any]] = {
-    "analyze_dataset": _ANALYSIS_ENVELOPE,
+    "run_analysis": _ANALYSIS_ENVELOPE,
 }
 
 
