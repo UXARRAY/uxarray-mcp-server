@@ -1,0 +1,199 @@
+name: Docker
+
+# The image is only useful if it is known-good, and "it built" is a weak
+# signal: the two bugs this pipeline caught during bring-up (a venv whose
+# console-script shebang pointed at a builder-only path, and an editable
+# install whose .pth dangled after the stage copy) both produced an image that
+# built cleanly and died on first exec. So CI builds *and* drives it over real
+# MCP stdio before publishing anything.
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed only to push; the PR path never reaches the push step.
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+        with:
+          # The action caches its own buildx binary in the Actions cache by
+          # default. On a workflow that also publishes release images that is a
+          # supply-chain path -- a poisoned cache entry could substitute the
+          # builder itself. Downloading it fresh costs seconds.
+          cache-binary: false
+
+      - name: Build image (load into the local daemon)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Single-arch here so the image lands in the daemon and can actually
+          # be run. Multi-arch cannot be --load'ed; that build is a separate
+          # job below, gated on this one passing.
+          load: true
+          tags: uxarray-mcp:ci
+          # Read the shared cache but never write it. A job that both consumes
+          # a mutable cache and produces artifacts others trust is the
+          # cache-poisoning shape zizmor flags: a compromised PR run could seed
+          # a layer that a later release build silently reuses. Writes happen
+          # only from the warm-cache job below, which runs on main and
+          # publishes nothing.
+          cache-from: type=gha
+
+      - name: Report image size
+        run: |
+          docker images uxarray-mcp:ci --format 'image size: {{.Size}}'
+
+      - name: Verify fixtures match the manifest
+        run: |
+          docker run --rm -i --entrypoint python uxarray-mcp:ci - --verify \
+            < scripts/generate_container_fixtures.py
+
+      - name: Assert the HPC stack is absent
+        # The image is local-only by design. If a dependency edit ever pulls
+        # globus-compute-sdk back in, a sealed container silently regains the
+        # ability to submit remote work -- fail loudly instead.
+        run: |
+          docker run --rm --entrypoint python uxarray-mcp:ci -c "
+          import importlib.util as u, sys
+          leaked = [m for m in ('globus_compute_sdk', 'academy') if u.find_spec(m)]
+          if leaked:
+              sys.exit(f'HPC dependencies leaked into the image: {leaked}')
+          print('confirmed local-only: no globus_compute_sdk, no academy')
+          "
+
+      - name: Assert the server does not run as root
+        run: |
+          uid=$(docker run --rm --entrypoint id uxarray-mcp:ci -u)
+          test "$uid" != "0" || { echo "image runs as root"; exit 1; }
+          echo "runs as uid $uid"
+
+      - name: Smoke test over MCP stdio
+        # The real check: handshake, tool surface, and one numerical result
+        # compared against an analytic ground truth (total area == 4*pi).
+        run: python3 scripts/container_smoke_test.py --image uxarray-mcp:ci
+
+      - name: Verify the HTTP transport serves MCP
+        run: |
+          docker run -d --rm --name uxarray-http -p 8001:8001 uxarray-mcp:ci \
+            serve --transport http --host 0.0.0.0
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null \
+              -X POST http://localhost:8001/mcp \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json, text/event-stream' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}'
+            then
+              echo "HTTP transport responded after ${i}s"
+              docker stop uxarray-http
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "HTTP transport never became ready"
+          docker logs uxarray-http
+          docker stop uxarray-http
+          exit 1
+
+  publish:
+    # Only after every check above passes, and never from a pull request --
+    # a fork PR must not be able to publish to the org's registry.
+    needs: build-and-verify
+    if: github.event_name == 'push' && github.repository == 'UXARRAY/uxarray-mcp-server'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+        with:
+          cache-binary: false
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and push (multi-arch)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # arm64 matters: healpix has no wheel there and builds from source,
+          # which is the platform most likely to break first.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # No cache on the publishing build, by design. Released images are
+          # built from source every time so a poisoned or merely stale cache
+          # entry can never end up inside something users pull. The build is
+          # a few minutes; a tampered release is forever.
+          no-cache: true
+          provenance: true
+          sbom: true
+
+  warm-cache:
+    # Writes the layer cache that build-and-verify reads. Split out so that the
+    # only job with cache-write access runs on main, publishes nothing, and is
+    # never triggered by a pull request from a fork.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+        with:
+          cache-binary: false
+      - name: Populate the build cache
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

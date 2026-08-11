@@ -45,6 +45,78 @@ You are most likely one of:
    project, or lab. → [Local install](#local-install), then the full
    [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md) including
    service-account migration and the MEP allowlist.
+5. **Just trying it out, or running an agent harness** — you don't want to
+   install a scientific Python stack at all. → [Docker](#docker).
+
+---
+
+## Docker
+
+The container is the fastest way to run the server without resolving
+`uxarray`, `netcdf4`, `matplotlib`, and friends on your own machine. It ships
+five small mesh fixtures so there is something to analyze immediately.
+
+```bash
+docker build -t uxarray-mcp:local .
+docker run --rm -i uxarray-mcp:local          # stdio, what MCP clients spawn
+```
+
+Point Claude Code at it:
+
+```bash
+claude mcp add uxarray-docker --transport stdio -- \
+  docker run --rm -i uxarray-mcp:local
+```
+
+To analyze your own meshes, mount them — `/work` is the working directory:
+
+```bash
+docker run --rm -i -v /path/to/my/data:/work uxarray-mcp:local
+```
+
+For an agent harness that wants HTTP instead of stdio:
+
+```bash
+docker run --rm -p 8001:8001 uxarray-mcp:local \
+  serve --transport http --host 0.0.0.0
+```
+
+Verify an image end-to-end — handshake, tool surface, and one real
+computation checked against an analytic result:
+
+```bash
+python3 scripts/container_smoke_test.py --image uxarray-mcp:local
+```
+
+**The image is local-only, on purpose.** The HPC extras
+(`globus-compute-sdk`, `academy-py`) are not installed, and the baked config
+pins `execution_mode: local`. A sealed container should not hold Globus
+credentials or reach a Slurm endpoint — and an image that *could* submit
+remote work is not one you should point an untrusted agent at. If you want
+HPC, run the server on the host where your identity lives; see
+[docs/remote-hpc.md](docs/remote-hpc.md).
+
+**Baked fixtures** live at `/data/uxarray` and are generated at build time by
+[`scripts/generate_container_fixtures.py`](scripts/generate_container_fixtures.py)
+rather than committed as binaries, so what's in them is readable as code. Each
+one targets a specific blind spot:
+
+| Fixture | Why it exists |
+|---|---|
+| `global` | Coarse global mesh, unit sphere — the everyday case. |
+| `earth_radius` | Declares R = 6371 km, so a missing radius scaling shows up in the numbers instead of hiding behind R = 1. |
+| `multi_level` | Four levels 100 apart; a wrong level selection is unmistakable. |
+| `time_level` | Three times × four levels, value `1000*t + 100*(k+1)` — the magnitude says which slice was taken. |
+| `regional` | A sliver mesh, so remap-coverage failures have something to fail against. |
+
+`MANIFEST.json` records a content hash per fixture — hashing decoded arrays
+rather than file bytes, so it stays stable across NetCDF library versions. The
+build verifies it, and you can re-check any image:
+
+```bash
+docker run --rm -i --entrypoint python uxarray-mcp:local - --verify \
+  < scripts/generate_container_fixtures.py
+```
 
 ---
 
