@@ -160,7 +160,7 @@ class ToolExecutor:
             else:
                 raise ValueError(f"Unknown tool {name!r}.")
         except Exception as exc:  # noqa: BLE001 - the model must see failures
-            record["error"] = f"{type(exc).__name__}: {exc}"
+            record["error"] = _apply_error_mode(f"{type(exc).__name__}: {exc}")
             self.calls.append(record)
             return {"error": record["error"]}
 
@@ -169,6 +169,26 @@ class ToolExecutor:
         record["ok"] = True
         self.calls.append(record)
         return payload
+
+
+def _apply_error_mode(message: str) -> str:
+    """Ablate the repair clause from an error without changing anything else.
+
+    ``EVAL_ERROR_MODE=bare`` strips the "Did you mean ...  Supported
+    operations: ..." clause that the front door attaches, leaving only the
+    statement that the call failed. The tool catalog, the prompts, the
+    fixtures, and the model are all held fixed, so the difference between
+    the two conditions isolates the value of naming the repair in the result.
+    """
+    import os
+
+    if os.environ.get("EVAL_ERROR_MODE", "repair") != "bare":
+        return message
+    for marker in (" Did you mean ", " Supported operations: "):
+        index = message.find(marker)
+        if index != -1:
+            return message[:index].rstrip()
+    return message
 
 
 def _summarize(payload: dict[str, Any]) -> str:

@@ -24,6 +24,90 @@ from uxarray_mcp.preconditions import (
     evaluate_vector_preconditions,
 )
 
+SUPPORTED_OPERATIONS: tuple[str, ...] = (
+    "inspect_mesh",
+    "inspect_variable",
+    "validate_dataset",
+    "calculate_area",
+    "calculate_zonal_mean",
+    "zonal_anomaly",
+    "gradient",
+    "curl",
+    "divergence",
+    "azimuthal_mean",
+    "subset_bbox",
+    "subset_polygon",
+    "cross_section",
+    "compare_fields",
+    "bias",
+    "rmse",
+    "pattern_correlation",
+    "remap_variable",
+    "regrid_dataset",
+    "remap_to_rectilinear",
+    "temporal_mean",
+    "anomaly",
+    "ensemble_mean",
+    "ensemble_spread",
+    "export",
+)
+
+#: Vocabulary an agent is likely to reach for, mapped to the operation that
+#: actually serves that intent. These are not aliases -- the call still fails --
+#: but naming the right operation turns a dead end into a one-step repair.
+_OPERATION_HINTS: dict[str, str] = {
+    "face_area": "calculate_area",
+    "face_areas": "calculate_area",
+    "face_area_stats": "calculate_area",
+    "face_area_statistics": "calculate_area",
+    "area_stats": "calculate_area",
+    "area_statistics": "calculate_area",
+    "cell_area": "calculate_area",
+    "cell_area_statistics": "calculate_area",
+    "list_variables": "inspect_variable",
+    "list_vars": "inspect_variable",
+    "variables": "inspect_variable",
+    "describe_dataset": "inspect_mesh",
+    "inspect_dataset": "inspect_mesh",
+    "dataset_info": "inspect_mesh",
+    "grid_info": "inspect_mesh",
+    "summarize_grid": "inspect_mesh",
+    "vorticity": "curl",
+    "relative_vorticity": "curl",
+    "zonal_mean": "calculate_zonal_mean",
+    "zonal_average": "calculate_zonal_mean",
+    "subset": "subset_bbox",
+    "regrid": "regrid_dataset",
+    "remap": "remap_variable",
+    "correlation": "pattern_correlation",
+    "list_operations": "get_capabilities",
+    "help": "get_capabilities",
+}
+
+
+def _suggest_operations(requested: str) -> list[str]:
+    """Name the operations a caller most plausibly meant.
+
+    An error that says only "unsupported" gives an agent nothing to act on,
+    so it guesses another synonym and fails again. Naming candidates makes
+    the repair a single step.
+    """
+    import difflib
+
+    hinted = _OPERATION_HINTS.get(requested)
+    ranked: list[str] = [hinted] if hinted else []
+    for name in difflib.get_close_matches(
+        requested, SUPPORTED_OPERATIONS, n=3, cutoff=0.6
+    ):
+        if name not in ranked:
+            ranked.append(name)
+    if not ranked:
+        tokens = {t for t in requested.split("_") if t}
+        for name in SUPPORTED_OPERATIONS:
+            if tokens & set(name.split("_")) and name not in ranked:
+                ranked.append(name)
+    return ranked[:3]
+
 
 def _require(value: Any, name: str, operation: str) -> Any:
     if value is None:
@@ -254,6 +338,42 @@ def _resolve_optional_session(
     return session_id
 
 
+def _paths_from_handle(
+    session_id: str | None,
+    dataset_handle: str | None,
+    grid_path: str | None,
+    data_path: str | None,
+) -> tuple[str | None, str | None]:
+    """Fill missing paths from a registered dataset handle.
+
+    A handle is the identifier the server itself minted for a grid/data pair,
+    and callers are told to pass handles back rather than re-derive paths. An
+    operation that then demands the very paths the handle stands for makes the
+    handle useless, so the front door dereferences it once, centrally, for
+    every operation. Explicitly supplied paths win, so a caller may register a
+    pair and still point one stage at a different file.
+    """
+    if dataset_handle is None:
+        return grid_path, data_path
+    if session_id is None:
+        raise ValueError(
+            "session_id is required when dataset_handle is provided. "
+            "Pass the session_id returned by create_session."
+        )
+    from uxarray_mcp.state import get_session
+
+    session = get_session(session_id)
+    dataset = session["datasets"].get(dataset_handle)
+    if dataset is None:
+        known = ", ".join(sorted(session["datasets"])) or "none"
+        raise FileNotFoundError(
+            f"Dataset handle {dataset_handle!r} not found in session "
+            f"{session_id!r}. Registered handles: {known}. "
+            "Call register_dataset to create one."
+        )
+    return grid_path or dataset["grid_path"], data_path or dataset.get("data_path")
+
+
 @_with_analysis_contract
 def run_analysis(
     operation: str,
@@ -363,8 +483,13 @@ def run_analysis(
         calculate_gradient,
     )
 
-    op = operation.strip().lower().replace("-", "_")
+    # Accept hyphen- and space-separated spellings of an operation name;
+    # an agent that writes "zonal mean" means calculate_zonal_mean.
+    op = "_".join(operation.strip().lower().replace("-", "_").split())
     session_id = _resolve_optional_session(session_id, dataset_handle)
+    grid_path, data_path = _paths_from_handle(
+        session_id, dataset_handle, grid_path, data_path
+    )
 
     if op == "inspect_mesh":
         return inspect_mesh(
@@ -626,7 +751,17 @@ def run_analysis(
             variable_name=variable_name,
         )
 
-    raise ValueError(f"Unsupported analysis operation {operation!r}.")
+    suggestions = _suggest_operations(op)
+    message = f"Unsupported analysis operation {operation!r}."
+    if suggestions:
+        named = ", ".join(repr(name) for name in suggestions)
+        message += f" Did you mean {named}?"
+    message += (
+        " Supported operations: "
+        + ", ".join(SUPPORTED_OPERATIONS)
+        + ". Call get_capabilities for the full catalog."
+    )
+    raise ValueError(message)
 
 
 def plot_dataset(

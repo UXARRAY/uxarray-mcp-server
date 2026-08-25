@@ -183,6 +183,75 @@ def test_dataset_handle_keeps_strict_session_resolution():
     )
 
 
+class TestDatasetHandleDereference:
+    """A minted handle must stand in for the paths it was minted from.
+
+    Callers are instructed to pass server-minted handles back verbatim rather
+    than re-derive file paths. An operation that then demands the paths makes
+    the handle a dead token, so every front-door operation resolves it.
+    """
+
+    def test_handle_supplies_paths_to_operations(
+        self, synthetic_mesh_with_data, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("UXARRAY_MCP_STATE_DIR", str(tmp_path / "state"))
+        from uxarray_mcp.tools import create_session, register_dataset
+
+        grid_file, data_file = synthetic_mesh_with_data
+        session = create_session("handle-deref")
+        registered = register_dataset(
+            session_id=session["session_id"],
+            grid_path=grid_file,
+            data_path=data_file,
+        )
+
+        for operation in ("inspect_mesh", "calculate_area", "validate_dataset"):
+            result = run_analysis(
+                operation=operation,
+                session_id=session["session_id"],
+                dataset_handle=registered["dataset_handle"],
+            )
+            assert result["scientific_status"]["status"] != "invalid"
+
+    def test_explicit_path_overrides_the_handle(
+        self, synthetic_mesh_with_data, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("UXARRAY_MCP_STATE_DIR", str(tmp_path / "state"))
+        from uxarray_mcp.tools import create_session, register_dataset
+        from uxarray_mcp.tools.frontdoor import _paths_from_handle
+
+        grid_file, data_file = synthetic_mesh_with_data
+        session = create_session("handle-override")
+        registered = register_dataset(
+            session_id=session["session_id"],
+            grid_path=grid_file,
+            data_path=data_file,
+        )
+
+        resolved = _paths_from_handle(
+            session["session_id"],
+            registered["dataset_handle"],
+            "/explicit/grid.nc",
+            None,
+        )
+        assert resolved == ("/explicit/grid.nc", data_file)
+
+    def test_unknown_handle_names_the_registered_ones(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("UXARRAY_MCP_STATE_DIR", str(tmp_path / "state"))
+        from uxarray_mcp.tools import create_session
+        from uxarray_mcp.tools.frontdoor import _paths_from_handle
+
+        session = create_session("handle-unknown")
+        with pytest.raises(FileNotFoundError, match="Registered handles"):
+            _paths_from_handle(session["session_id"], "dataset_missing", None, None)
+
+    def test_handle_without_session_names_the_repair(self):
+        from uxarray_mcp.tools.frontdoor import _paths_from_handle
+
+        with pytest.raises(ValueError, match="session_id returned by create_session"):
+            _paths_from_handle(None, "dataset_123", None, None)
+
+
 ZERO_COVERAGE_RESULT = {
     "stats": {"mean": 1.0},
     "source_coverage": {
