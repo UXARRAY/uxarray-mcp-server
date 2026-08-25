@@ -13,6 +13,7 @@ import base64
 import json
 from typing import Any, Optional
 
+from uxarray_mcp.content_blocks import block_image_data, block_text, block_uri
 from uxarray_mcp.next_steps import call, literal, needed
 from uxarray_mcp.provenance import attach_provenance
 
@@ -27,15 +28,15 @@ def _safe_call(stage: str, fn, warnings: list[str]) -> Optional[Any]:
 
 
 def _png_meta(items: list[Any]) -> dict[str, Any]:
-    """Convert a plot tool's ``[ImageContent, TextContent]`` list to a dict."""
+    """Convert a plot tool's ``[image|resource_link, text]`` list to a dict."""
     if not items or len(items) < 2:
         return {}
     img = items[0]
     try:
-        meta = json.loads(items[1].text)
+        meta = json.loads(block_text(items[1]) or "")
     except Exception:
         meta = {}
-    png_b64 = getattr(img, "data", None)
+    png_b64 = block_image_data(img)
     image_size_bytes = meta.get("image_size_bytes")
     if image_size_bytes is None and png_b64:
         try:
@@ -53,12 +54,10 @@ def _png_meta(items: list[Any]) -> dict[str, Any]:
     # the URI along; otherwise the summary reports no image at all for
     # exactly the meshes big enough to be interesting.
     if png_b64 is None:
-        uri = meta.get("image_uri") or getattr(img, "uri", None)
+        uri = meta.get("image_uri") or block_uri(img)
         if uri is not None:
             out["image_uri"] = str(uri)
             out["image_delivery"] = "resource_link"
-            if out["image_size_bytes"] is None:
-                out["image_size_bytes"] = getattr(img, "size", None)
     return out
 
 

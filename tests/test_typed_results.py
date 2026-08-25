@@ -18,7 +18,6 @@ from uxarray_mcp.response_contract import (
 )
 from uxarray_mcp.typed_results import (
     INLINE_PAYLOAD_LIMIT_BYTES,
-    attach_resource_link,
     declared_output_schemas,
     make_resource_link,
     output_schema_for,
@@ -191,12 +190,6 @@ class TestResourceLinks:
         assert link["mime_type"] == "image/png"
         assert link["size"] == 10
 
-    def test_attach_accumulates(self):
-        result: dict = {}
-        attach_resource_link(result, make_resource_link("file:///a", "a"))
-        attach_resource_link(result, make_resource_link("file:///b", "b"))
-        assert [x["name"] for x in result["_resource_links"]] == ["a", "b"]
-
     def test_threshold_is_a_boundary_not_a_range(self):
         assert not should_link_rather_than_inline(INLINE_PAYLOAD_LIMIT_BYTES - 1)
         assert should_link_rather_than_inline(INLINE_PAYLOAD_LIMIT_BYTES)
@@ -232,6 +225,24 @@ class TestResourceLinks:
 class TestListToolsCacheHints:
     def test_server_builds_with_cache_hints(self):
         assert make_mcp_server(profile="core") is not None
+
+    def test_the_handler_actually_emits_the_hints(self):
+        # Asserting the constants only proves we chose a number. This calls
+        # the registered tools/list handler and checks the hints are on the
+        # result -- and that they are in `model_fields_set`, because the SDK
+        # overwrites any field the handler did not explicitly set.
+        import asyncio
+
+        server = make_mcp_server(profile="core")
+        handlers = getattr(server, "_request_handlers", None)
+        entry = (handlers or {}).get("tools/list")
+        if entry is None:  # pragma: no cover - SDK internals moved
+            pytest.skip("SDK exposes no tools/list handler to call")
+
+        result = asyncio.run(entry.handler(None, None))
+        assert result.ttl_ms == LIST_TOOLS_TTL_MS
+        assert result.cache_scope == LIST_TOOLS_CACHE_SCOPE
+        assert {"ttl_ms", "cache_scope"} <= result.model_fields_set
 
     def test_ttl_is_bounded_and_scope_is_shared(self):
         # The surface is fixed by the profile at startup, so a shared entry
@@ -281,8 +292,9 @@ class TestPlotContentBlocks:
 
     def test_small_figure_is_an_inline_image(self):
         blocks = self._contents("aGk=")
-        assert [b.type for b in blocks] == ["image", "text"]
-        assert blocks[0].data == "aGk="
+        assert [b["type"] for b in blocks] == ["image", "text"]
+        assert blocks[0]["source"]["data"] == "aGk="
+        assert blocks[0]["source"]["media_type"] == "image/png"
 
     def test_spilled_figure_becomes_a_resource_link(self):
         # A spilled plot has no bytes to inline. Building an image block
@@ -291,16 +303,37 @@ class TestPlotContentBlocks:
         blocks = self._contents(
             None, image_uri="file:///tmp/plot_abc.png", image_size_bytes=999
         )
-        assert [b.type for b in blocks] == ["resource_link", "text"]
-        assert str(blocks[0].uri) == "file:///tmp/plot_abc.png"
-        assert blocks[0].name == "plot_abc.png"
+        assert [b["type"] for b in blocks] == ["resource_link", "text"]
+        assert blocks[0]["uri"] == "file:///tmp/plot_abc.png"
+        assert blocks[0]["name"] == "plot_abc.png"
 
     def test_metadata_survives_either_delivery(self):
         for b64, extra in (("aGk=", {}), (None, {"image_uri": "file:///t/p.png"})):
             text = self._contents(b64, grid_info={"n_face": 8}, **extra)[-1]
-            assert json.loads(text.text)["grid_info"] == {"n_face": 8}
-            assert "png_b64" not in json.loads(text.text)
+            assert json.loads(text["text"])["grid_info"] == {"n_face": 8}
+            assert "png_b64" not in json.loads(text["text"])
 
     def test_no_bytes_and_no_uri_still_returns_metadata(self):
         blocks = self._contents(None)
-        assert [b.type for b in blocks] == ["text"]
+        assert [b["type"] for b in blocks] == ["text"]
+
+    def test_blocks_survive_the_adapter_gate(self):
+        # The regression this guards: pydantic ``mcp.types`` models fail the
+        # adapter's dict-only check, so a figure reached the client as a JSON
+        # array of Python repr() strings instead of an image. Assert against
+        # the adapter itself rather than our own idea of the wire shape.
+        from toolregistry.llm.content_blocks import is_content_block_list
+
+        assert is_content_block_list(self._contents("aGk="))
+        assert is_content_block_list(
+            self._contents(None, image_uri="file:///tmp/plot_abc.png")
+        )
+
+    def test_adapter_keeps_the_image_as_its_own_block(self):
+        adapter = pytest.importorskip("toolregistry_server.adapters.mcp.adapter")
+        to_content = getattr(adapter, "_result_to_mcp_content", None)
+        if to_content is None:  # pragma: no cover - adapter internals moved
+            pytest.skip("adapter has no _result_to_mcp_content")
+
+        contents = to_content(self._contents("aGk="))
+        assert [type(c).__name__ for c in contents] == ["ImageContent", "TextContent"]

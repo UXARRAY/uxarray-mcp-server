@@ -30,10 +30,14 @@ class Ctx:
 
 
 def _unwrap_plot(items: Any) -> dict:
-    """Normalize a plot tool's ``[ImageContent, TextContent]`` into a dict."""
+    """Normalize a plot tool's ``[image|resource_link, text]`` into a dict."""
     if isinstance(items, list) and len(items) == 2:
-        meta = json.loads(items[1].text)
-        meta["png_b64_len"] = len(items[0].data)
+        from uxarray_mcp.content_blocks import block_image_data, block_text
+
+        meta = json.loads(block_text(items[1]) or "")
+        data = block_image_data(items[0])
+        # A spilled figure has no inline bytes; the URI is in the metadata.
+        meta["png_b64_len"] = len(data) if data else 0
         return meta
     return items
 

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from uxarray_mcp.content_blocks import block_image_data, block_text
 from uxarray_mcp.domain.plotting import render_zonal_mean
 from uxarray_mcp.tools import plot_mesh, plot_variable, plot_zonal_mean
 
@@ -96,16 +97,19 @@ class TestPlotMeshMocked:
         result = plot_mesh("healpix:2")
 
         assert len(result) == 2
-        assert result[0].type == "image"
+        assert result[0]["type"] == "image"
         assert (
-            result[0].data.startswith("iVBORw0K")
-            or result[0].data.startswith("data:image/")
-            or "PNG" in base64.b64decode(result[0].data)[:8].decode("utf-8", "ignore")
+            block_image_data(result[0]).startswith("iVBORw0K")
+            or block_image_data(result[0]).startswith("data:image/")
+            or "PNG"
+            in base64.b64decode(block_image_data(result[0]))[:8].decode(
+                "utf-8", "ignore"
+            )
         )
 
         import json
 
-        prov = json.loads(result[1].text)
+        prov = json.loads(block_text(result[1]))
         assert prov["image_size_bytes"] == len(b"\x89PNG_fake_data")
         assert prov["grid_info"]["n_face"] == 100
         assert "_provenance" in prov
@@ -125,7 +129,7 @@ class TestPlotMeshMocked:
         mock_render.assert_called_once_with(mock_grid, width=400, height=300)
         import json
 
-        prov = json.loads(result[1].text)
+        prov = json.loads(block_text(result[1]))
         assert prov["_provenance"]["inputs"]["width"] == 400
 
 
@@ -178,11 +182,11 @@ class TestPlotVariableMocked:
             result = plot_variable("grid.nc", "data.nc")
 
             assert len(result) == 2
-            assert result[0].type == "image"
+            assert result[0]["type"] == "image"
 
             import json
 
-            prov = json.loads(result[1].text)
+            prov = json.loads(block_text(result[1]))
             assert prov["variable_name"] == "temperature"
             assert prov["_provenance"]["tool"] == "plot_variable"
 
@@ -281,11 +285,11 @@ class TestPlotZonalMeanMocked:
             result = plot_zonal_mean("grid.nc", "data.nc", "temperature")
 
             assert len(result) == 2
-            assert result[0].type == "image"
+            assert result[0]["type"] == "image"
 
             import json
 
-            prov = json.loads(result[1].text)
+            prov = json.loads(block_text(result[1]))
             assert prov["variable_name"] == "temperature"
             assert prov["latitudes"] == [-90.0, 0.0, 90.0]
             assert prov["_provenance"]["tool"] == "plot_zonal_mean"
@@ -344,23 +348,23 @@ class TestPlotMeshIntegration:
         result = plot_mesh("healpix:2")
 
         assert len(result) == 2
-        assert result[0].type == "image"
+        assert result[0]["type"] == "image"
 
         import json
 
-        prov = json.loads(result[1].text)
+        prov = json.loads(block_text(result[1]))
         assert prov["image_size_bytes"] > 1000
         assert prov["grid_info"]["n_face"] == 192
         assert "_provenance" in prov
 
-        png_bytes = base64.b64decode(result[0].data)
+        png_bytes = base64.b64decode(block_image_data(result[0]))
         assert png_bytes[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_plot_mesh_healpix_custom_size(self):
         result = plot_mesh("healpix:1", width=400, height=200)
         import json
 
-        prov = json.loads(result[1].text)
+        prov = json.loads(block_text(result[1]))
         assert prov["image_size_bytes"] > 0
         assert prov["grid_info"]["n_face"] == 48
 
@@ -380,8 +384,8 @@ class TestHpcPlotWrappers:
         result = plot_mesh("healpix:2")
 
         assert len(result) == 2
-        assert result[0].type == "image"
-        metadata = json.loads(result[1].text)
+        assert result[0]["type"] == "image"
+        metadata = json.loads(block_text(result[1]))
         assert metadata["image_size_bytes"] == 9
         assert "png_b64" not in metadata
 
@@ -398,8 +402,8 @@ class TestHpcPlotWrappers:
         result = plot_variable("grid.nc", "data.nc", "temperature")
 
         assert len(result) == 2
-        assert result[0].type == "image"
-        metadata = json.loads(result[1].text)
+        assert result[0]["type"] == "image"
+        metadata = json.loads(block_text(result[1]))
         assert metadata["variable_name"] == "temperature"
         assert "png_b64" not in metadata
 
@@ -417,8 +421,8 @@ class TestHpcPlotWrappers:
         result = plot_zonal_mean("grid.nc", "data.nc", "temperature")
 
         assert len(result) == 2
-        assert result[0].type == "image"
-        metadata = json.loads(result[1].text)
+        assert result[0]["type"] == "image"
+        metadata = json.loads(block_text(result[1]))
         assert metadata["latitudes"] == [-90.0, 0.0, 90.0]
         assert "png_b64" not in metadata
 

@@ -8,8 +8,14 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from mcp.types import ImageContent, TextContent
-
+from uxarray_mcp.content_blocks import (
+    block_image_data,
+    block_text,
+    block_uri,
+    image_block,
+    resource_link_block,
+    text_block,
+)
 from uxarray_mcp.domain.mesh import is_healpix_spec
 from uxarray_mcp.state import OperationTracker
 
@@ -177,14 +183,11 @@ def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
     biggest meshes.
     """
     metadata = {key: value for key, value in result.items() if key != "png_b64"}
-    text = TextContent(type="text", text=json.dumps(metadata, indent=2))
+    text = text_block(json.dumps(metadata, indent=2))
 
     b64 = result.get("png_b64")
     if b64 is not None:
-        return [
-            ImageContent(type="image", data=b64, mimeType="image/png"),
-            text,
-        ]
+        return [image_block(b64), text]
 
     uri = result.get("image_uri")
     if uri is None:
@@ -192,20 +195,10 @@ def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
         # still carries the numbers the caller asked for.
         return [text]
 
-    from mcp.types import ResourceLink
-
+    # The byte count the adapter would drop off the link is already in
+    # ``metadata`` as image_size_bytes, so nothing is lost by omitting it here.
     name = str(uri).rsplit("/", 1)[-1] or "plot.png"
-    return [
-        ResourceLink(
-            type="resource_link",
-            uri=uri,
-            name=name,
-            title="plot",
-            mimeType="image/png",
-            size=result.get("image_size_bytes"),
-        ),
-        text,
-    ]
+    return [resource_link_block(str(uri), name, mime_type="image/png"), text]
 
 
 def _image_payload(img: Any, meta: dict) -> Dict[str, Any]:
@@ -213,13 +206,13 @@ def _image_payload(img: Any, meta: dict) -> Dict[str, Any]:
 
     A large figure is handed back as a ``resource_link`` rather than
     inlined, so ``png_b64`` is absent and the URI is what the caller
-    follows. Reading ``.data`` unconditionally raised on exactly those
-    plots, which meant the biggest meshes -- the ones most worth looking
-    at -- failed here.
+    follows. Reading the image data unconditionally raised on exactly
+    those plots, which meant the biggest meshes -- the ones most worth
+    looking at -- failed here.
     """
     import base64
 
-    b64 = getattr(img, "data", None)
+    b64 = block_image_data(img)
     if b64 is not None:
         return {
             "png_b64": b64,
@@ -227,12 +220,14 @@ def _image_payload(img: Any, meta: dict) -> Dict[str, Any]:
                 "image_size_bytes", len(base64.b64decode(b64))
             ),
         }
-    uri = getattr(img, "uri", None)
+    uri = block_uri(img)
     return {
         "png_b64": None,
-        "image_uri": str(uri) if uri is not None else None,
+        "image_uri": uri,
         "image_delivery": "resource_link",
-        "image_size_bytes": meta.get("image_size_bytes") or getattr(img, "size", None),
+        # The block itself never carries a size -- the adapter drops that
+        # field -- so the byte count is only ever in the metadata.
+        "image_size_bytes": meta.get("image_size_bytes"),
     }
 
 
@@ -551,7 +546,7 @@ def plot_mesh(
         items = _plot_mesh_local(resolved_grid, width=width, height=height)
         # _plot_mesh_local returns [ImageContent, TextContent]; extract png_b64 + metadata
         img = items[0]
-        meta = json.loads(items[1].text)
+        meta = json.loads(block_text(items[1]) or "{}")
         return {
             **_image_payload(img, meta),
             "grid_info": meta.get("grid_info", {}),
@@ -655,7 +650,7 @@ def plot_variable(
             time_index=time_index,
         )
         img = items[0]
-        meta = json.loads(items[1].text)
+        meta = json.loads(block_text(items[1]) or "{}")
         return {
             **_image_payload(img, meta),
             "variable_name": meta.get("variable_name", variable_name),
@@ -769,7 +764,7 @@ def plot_zonal_mean(
             time_index=time_index,
         )
         img = items[0]
-        meta = json.loads(items[1].text)
+        meta = json.loads(block_text(items[1]) or "{}")
         return {
             **_image_payload(img, meta),
             "variable_name": meta.get("variable_name", variable_name),

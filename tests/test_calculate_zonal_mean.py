@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from uxarray_mcp.content_blocks import block_text
 from uxarray_mcp.domain.zonal import compute_zonal_anomaly_stats
 from uxarray_mcp.tools import calculate_zonal_mean
 from uxarray_mcp.tools.frontdoor import run_analysis
@@ -565,7 +566,7 @@ class TestFrontDoorForwardsEveryParameter:
             variable_name="temperature",
             time_index=2,
         )
-        meta = json.loads(items[1].text)
+        meta = json.loads(block_text(items[1]))
         assert _first_finite(meta["zonal_mean_values"]) == pytest.approx(2100.0)
         assert meta["reduced_dims"]["time"]["index"] == 2
 

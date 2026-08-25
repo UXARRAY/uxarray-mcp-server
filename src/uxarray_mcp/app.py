@@ -34,11 +34,33 @@ UXARRAY_IDENTITY = ServerIdentity(
 )
 
 
+#: How long a client may cache our ``tools/list`` response, in milliseconds.
+#: The tool surface is fixed at startup by the profile and does not change
+#: while the server runs, so re-listing on every turn is pure overhead --
+#: the catalog was measured at 74% of the payload on short conversations.
+#: Five minutes bounds how long a client can hold a stale surface if a
+#: future version does start mutating the registry at runtime.
+#:
+#: These reach the ``ListToolsResult`` today but not yet the wire: ``ttlMs``
+#: and ``cacheScope`` are MCP spec 2026-07-28, and the SDK strips fields a
+#: negotiated older era does not define. ``mcp`` 2.1.1 caps its own client
+#: handshake at 2025-11-25, so no client built on it can currently observe
+#: them. Setting them is still right -- the hints activate on their own the
+#: day a 2026-era client connects, and a server that never set them would
+#: keep paying for a full re-list forever.
+LIST_TOOLS_TTL_MS = 300_000
+
+#: The surface depends only on the profile, not on the user or session, so
+#: a shared cache entry is correct.
+LIST_TOOLS_CACHE_SCOPE = "public"
+
+
 class UXarrayApp(App):
     """UXarray-specific server application.
 
     Overrides :meth:`prepare_registry` to build the UXarray tool
-    registry with profile-based tool surface selection.
+    registry with profile-based tool surface selection, and
+    :meth:`serve_mcp` so the ``tools/list`` cache hints survive to the wire.
     """
 
     def __init__(self, identity: ServerIdentity | None = None) -> None:
@@ -56,6 +78,35 @@ class UXarrayApp(App):
         profile = kwargs.get("profile", "core")
         return build_registry(profile=profile)
 
+    def serve_mcp(self, **kwargs) -> None:
+        """Start an MCP server that actually advertises our cache hints.
+
+        The inherited path (``App.serve`` -> ``MCPAdapter.create_and_run``)
+        constructs the adapter itself and does not forward
+        ``list_tools_ttl_ms`` / ``list_tools_cache_scope``; they fall into
+        ``run(**kwargs)`` and are dropped without an error. A server started
+        that way advertises the SDK default of ``ttlMs=0``, i.e. immediately
+        stale, so every turn re-lists the whole catalog. Constructing the
+        adapter here is the only way the hints reach the wire on the CLI
+        path, which is the one users actually run.
+        """
+        from toolregistry_server.adapters.mcp import MCPAdapter
+
+        kwargs.setdefault("identity", self.identity)
+        registry = self.prepare_registry(**kwargs)
+        route_table = self._make_route_table(registry)
+
+        identity = kwargs.pop("identity")
+        name = kwargs.pop("name", identity.name)
+        kwargs.pop("profile", None)
+
+        MCPAdapter(
+            route_table,
+            name=name,
+            list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
+            list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
+        ).run(**kwargs)
+
 
 # ---------------------------------------------------------------------------
 # Convenience helpers for tests and scripts
@@ -67,39 +118,19 @@ def make_registry(*, profile: Profile = "core") -> ToolRegistry:
     return UXarrayApp().prepare_registry(profile=profile)
 
 
-#: How long a client may cache our ``tools/list`` response, in milliseconds.
-#: The tool surface is fixed at startup by the profile and does not change
-#: while the server runs, so re-listing on every turn is pure overhead --
-#: the catalog was measured at 74% of the payload on short conversations.
-#: Five minutes bounds how long a client can hold a stale surface if a
-#: future version does start mutating the registry at runtime.
-LIST_TOOLS_TTL_MS = 300_000
-
-#: The surface depends only on the profile, not on the user or session, so
-#: a shared cache entry is correct.
-LIST_TOOLS_CACHE_SCOPE = "public"
-
-
 def make_mcp_server(*, profile: Profile = "core"):
     """Build a configured MCP server ready for any transport.
 
-    The ``tools/list`` cache hints are passed only when the installed adapter
-    understands them. They are a pure optimization, so an adapter that predates
-    them should serve the same tool surface rather than fail to start.
+    Carries the same ``tools/list`` cache hints as :meth:`UXarrayApp.serve_mcp`
+    so tests and scripts exercise the surface the CLI actually serves.
     """
-    import inspect
-
     from toolregistry_server.adapters.mcp import route_table_to_mcp_server
     from toolregistry_server.route_table import RouteTable
 
     registry = make_registry(profile=profile)
-    route_table = RouteTable(registry)
-
-    kwargs: dict[str, object] = {"name": "UXarray MCP"}
-    supported = inspect.signature(route_table_to_mcp_server).parameters
-    if "list_tools_ttl_ms" in supported:
-        kwargs["list_tools_ttl_ms"] = LIST_TOOLS_TTL_MS
-    if "list_tools_cache_scope" in supported:
-        kwargs["list_tools_cache_scope"] = LIST_TOOLS_CACHE_SCOPE
-
-    return route_table_to_mcp_server(route_table, **kwargs)
+    return route_table_to_mcp_server(
+        RouteTable(registry),
+        "UXarray MCP",
+        list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
+        list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
+    )
