@@ -2414,7 +2414,7 @@ wheels = [
 
 [[package]]
 name = "uxarray"
-version = "2026.7.0"
+version = "2026.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "antimeridian" },
@@ -2442,9 +2442,9 @@ dependencies = [
     { name = "spatialpandas" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1e/c5/8554ed8e15ccbeeadb1e3a5f5077138cc0e4faa05c352c53e0784c5429dc/uxarray-2026.7.0.tar.gz", hash = "sha256:746ec7f2907cce11cf97221c6971e586bbb45eb9c8dd02b5081020c4c5f2804c", size = 209588, upload-time = "2026-07-20T22:14:49.561Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/4f/b863585effaa4776998cdcabe2a33bc928cefb468c7eb5161f1122ba46cd/uxarray-2026.8.0.tar.gz", hash = "sha256:90f1ad0abc5c3d1b3bf49c78d1f0fb1f29996ab140b83ea53b037e9d1585183a", size = 221714, upload-time = "2026-08-18T00:56:01.976Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f7/81/40a45a4829cc3c8b7a9d63a174a1181df1c59b3ec48001659c7a1e09ebe9/uxarray-2026.7.0-py3-none-any.whl", hash = "sha256:41f27062eeb0cf8ffd7c9ffbc65533ec5e1f5c75661938000fe496131b39cab7", size = 235402, upload-time = "2026-07-20T22:14:47.838Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/b3/ce31626b0e5c531a6e5fa4cd6cd9d60ce6922b8f19fd2fb6025dec7eb88f/uxarray-2026.8.0-py3-none-any.whl", hash = "sha256:2958c1cfec82ec83ff52cf94ebcd6513aa2d93e349fd7b400ba8a57786d0f0b4", size = 244440, upload-time = "2026-08-18T00:56:00.002Z" },
 ]
 
 [[package]]
@@ -2496,7 +2496,7 @@ requires-dist = [
     { name = "sphinx-book-theme", marker = "extra == 'docs'", specifier = ">=1.1.0" },
     { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.4.3" },
     { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.4.3" },
-    { name = "uxarray", specifier = ">=2026.7.0" },
+    { name = "uxarray", specifier = ">=2026.8.0" },
 ]
 provides-extras = ["openapi", "hpc", "docs"]
 

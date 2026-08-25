@@ -104,6 +104,9 @@ def compute_zonal_anomaly_stats(
 
     Raises
     ------
+    ValueError
+        If the variable is missing, is not face-centered, or ``lat_spec`` is
+        not a shape ``zonal_anomaly`` accepts.
     NotImplementedError
         If the installed UXarray does not provide ``UxDataArray.zonal_anomaly``.
     """
@@ -129,10 +132,21 @@ def compute_zonal_anomaly_stats(
             "UxDataArray.zonal_anomaly. Upgrade uxarray to use this operation."
         )
 
-    if lat_spec is not None:
-        result = var.zonal_anomaly(lat=lat_spec, conservative=conservative)
-    else:
-        result = var.zonal_anomaly(conservative=conservative)
+    # UXarray >=2026.8.0 raises TypeError for a malformed ``lat`` (it raised
+    # ValueError before). Either way the caller supplied a bad argument, not a
+    # bad type of call, so normalize it to the ValueError this module uses for
+    # every other input problem and name the accepted forms.
+    try:
+        if lat_spec is not None:
+            result = var.zonal_anomaly(lat=lat_spec, conservative=conservative)
+        else:
+            result = var.zonal_anomaly(conservative=conservative)
+    except TypeError as exc:
+        raise ValueError(
+            f"Invalid lat_spec {lat_spec!r} for zonal_anomaly. Pass a tuple "
+            "(start, end, step), array-like band edges, or omit it to use the "
+            f"default bands. UXarray reported: {exc}"
+        ) from None
 
     vals = result.values
     finite = vals[np.isfinite(vals)]

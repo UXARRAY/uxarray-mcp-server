@@ -6,6 +6,14 @@ uses Semantic Versioning for public releases.
 ## Unreleased
 
 ### Changed
+- Require `uxarray>=2026.8.0` (was `>=2026.7.0`), in `pyproject.toml` and the
+  conda recipe. 2026.7.0 and earlier compute face areas with an incorrect
+  Jacobian (UXarray #1646), so the floor now excludes versions that can return
+  wrong areas rather than leaving it to chance. Measured on this project's
+  HEALPix z2 and 162-face structured fixtures, face areas are bit-identical
+  across the two releases — the Jacobian defect does not reach these grid
+  types — but the floor is set on what a release can compute, not on what our
+  fixtures happen to exercise.
 - `recommended_next_steps` no longer interpolates the caller's own file paths
   into every suggestion. A four-step list used to repeat the same absolute
   path four times; on an MPAS QU480 mesh those echoed paths alone were 28% of
@@ -18,6 +26,11 @@ uses Semantic Versioning for public releases.
   39-61% (#83).
 
 ### Fixed
+- `zonal_anomaly` reports a malformed `lat_spec` as a `ValueError` naming the
+  shapes it accepts. UXarray 2026.8.0 raises `TypeError` for this where earlier
+  releases raised `ValueError` (UXarray #1652), which let the raw upstream
+  error escape the analysis front door as an untyped traceback instead of a
+  repairable message.
 - Preserve the original remote worker exception when synchronous MCP tools run
   inside an event loop instead of masking it with a nested `asyncio.run` error.
 - Route facility-only paths to the endpoint with the longest configured path

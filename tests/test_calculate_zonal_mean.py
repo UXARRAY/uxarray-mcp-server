@@ -390,6 +390,18 @@ class TestZonalAnomaly:
         with pytest.raises(ValueError):
             compute_zonal_anomaly_stats(healpix_field_dataset, "nope")
 
+    def test_malformed_lat_spec_is_a_value_error(self, healpix_field_dataset):
+        """A bad lat_spec is a bad argument, so it reads as ValueError here.
+
+        UXarray >=2026.8.0 raises TypeError for this (it raised ValueError
+        before), which would otherwise escape as an untyped traceback instead
+        of an error naming the shapes lat_spec accepts.
+        """
+        with pytest.raises(ValueError, match="Invalid lat_spec"):
+            compute_zonal_anomaly_stats(
+                healpix_field_dataset, "temperature", lat_spec="not-a-tuple"
+            )
+
     def test_run_analysis_dispatch(self, structured_mesh_files):
         grid_file, data_file = structured_mesh_files
         result = run_analysis(
