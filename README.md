@@ -244,9 +244,10 @@ Full schema: [docs/tools.md](docs/tools.md).
 
 **Protocol version.** We do not implement MCP directly; servers are built
 through `toolregistry-server`, which depends on the `mcp` Python SDK. As of
-`toolregistry-server` 0.4.3 and `toolregistry` 0.15.0 the SDK cap is lifted, so
-we resolve `mcp` 2.0.0 and negotiate spec **`2026-07-28`** (stateless core,
-cacheable list results, MRTR).
+`toolregistry-server` 0.5.0 and `toolregistry` 0.16.0 the SDK cap is lifted, so
+we resolve `mcp` 2.1.1 and negotiate spec **`2026-07-28`** (stateless core,
+cacheable list results, MRTR). 0.16.0 also widens the recognized content-block
+set to audio, `resource_link`, and embedded resources.
 
 **Once you've configured an HPC endpoint** (optional — see
 [Going beyond your laptop](#going-beyond-your-laptop) below): most tools above
