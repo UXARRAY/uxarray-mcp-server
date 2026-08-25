@@ -383,6 +383,15 @@ def validate_hpc_setup(
     failure. Passing an explicit ``endpoint`` name that cannot be resolved
     still raises ``ValueError``.
     """
+    # Surface submitter/worker serializer skew here rather than at import.
+    # The package installs on any Python >= 3.11, but Globus Compute only
+    # interoperates reliably from a 3.12 submitter; a readiness check is
+    # exactly where an unsupported interpreter should be reported, and a
+    # local-only session never reaches this line. See uxarray_mcp.remote.
+    from ..remote import warn_if_unsupported_submitter
+
+    warn_if_unsupported_submitter()
+
     tracker = OperationTracker("validate_hpc_setup", session_id=session_id)
     tracker.stage("config", "Loading HPC configuration.")
     base_config, config_path = _load_config_for_tools()
@@ -884,6 +893,15 @@ def set_execution_mode(mode: str) -> Dict[str, Any]:
         raise ValueError(
             f"Invalid mode {mode!r}. Must be one of: {', '.join(_VALID_MODES)}"
         ) from exc
+
+    # Opting into remote execution is the moment an unsupported submitter
+    # Python starts to matter, so warn on the way in rather than letting the
+    # first real submission fail with WorkerLost. Switching *to* local is
+    # always fine. See uxarray_mcp.remote for why this is not an import guard.
+    if normalized_mode != "local":
+        from uxarray_mcp.remote import warn_if_unsupported_submitter
+
+        warn_if_unsupported_submitter()
 
     from uxarray_mcp.remote import agent as _agent_module
     from uxarray_mcp.remote.config import USER_CONFIG_PATH

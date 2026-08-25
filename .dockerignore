@@ -1,0 +1,47 @@
+# Build context hygiene. The image needs the package source, the fixture
+# generator, and the project metadata -- nothing else. Everything below either
+# bloats the context, busts the layer cache on every edit, or would bake
+# machine-local state (endpoint UUIDs, caches, venvs) into a published image.
+
+# Version control and CI
+.git
+.github
+.gitignore
+.pre-commit-config.yaml
+.readthedocs.yaml
+
+# Local environments and caches
+.venv
+venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+.python-version
+
+# Machine-local config -- MUST NOT be baked in. config.yaml can hold real
+# Globus endpoint UUIDs; the image is local-only and generates its own.
+config.yaml
+.env
+*.pem
+*.key
+
+# Heavy or irrelevant trees
+docs
+notebooks
+prototypes
+outputs
+artifacts
+tmp
+dist
+conda
+benchmarks
+evals
+tests
+.claude
+.DS_Store
+
+# Editor noise
+*.swp
+*~

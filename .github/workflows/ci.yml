@@ -28,7 +28,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.12"]
+        # requires-python is ">=3.11" with no upper bound, so the matrix has to
+        # cover the floor and the newest release -- otherwise the metadata is a
+        # claim nothing verifies. 3.12 remains the version the HPC submitter
+        # path is supported on; 3.11 and 3.13 are local-only territory, which
+        # is what the great majority of installs actually use.
+        python-version: ["3.11", "3.12", "3.13"]
         include:
           - os: macos-latest
             python-version: "3.12"

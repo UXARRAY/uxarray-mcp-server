@@ -10,7 +10,9 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: Apache Software License",
 ]
 authors = [
@@ -18,12 +20,24 @@ authors = [
     { name = "Dayan Abdulla", email = "dayanabdulla000@gmail.com" },
 ]
 license = { file = "LICENSE" }
-# Pinned to 3.12 until globus/globus-compute#2139 lands a published submitter ↔
-# worker compatibility story. HPC sites broadly ship Python 3.12 conda stacks
-# today; matching that minor version on the submitter side avoids WorkerLost
-# from pickle protocol skew. Revisit when upstream confirms multi-version
-# support and broaden requires-python back to >=3.11.
-requires-python = ">=3.12,<3.13"
+# The floor is 3.11; there is deliberately no upper bound.
+#
+# This used to read ">=3.12,<3.13" because of globus/globus-compute#2139: a
+# 3.13 submitter against a 3.12 worker raises WorkerLost on non-trivial
+# payloads. That is a real constraint, but it belongs to the *HPC* path only,
+# and pinning the whole package for it made every local-only user -- the large
+# majority -- pay for a feature they never enable. It also blocked the conda
+# recipe and any container base that is not exactly 3.12.
+#
+# The constraint is now enforced where it actually applies: `uxarray_mcp.remote`
+# checks the submitter's Python at import time and refuses to configure an
+# endpoint from an unsupported interpreter, and `remote.health` already warns on
+# submitter/worker minor-version skew at probe time. A local install on 3.11 or
+# 3.13 works and never touches that code.
+#
+# All runtime dependencies (uxarray, mcp, toolregistry-server, holoviews)
+# declare >=3.10, so 3.11 is a conservative floor.
+requires-python = ">=3.11"
 dependencies = [
     "toolregistry-server[mcp]>=0.4.3",
     "mcp>=1.24,<3",
@@ -65,7 +79,9 @@ dev = [
 ]
 
 [tool.mypy]
-python_version = "3.12"
+# Type-check against the floor, not the container's interpreter: 3.11 is the
+# lowest version we claim to support, so that is where checking has to happen.
+python_version = "3.11"
 check_untyped_defs = true
 ignore_missing_imports = true
 warn_unused_ignores = true
