@@ -848,6 +848,7 @@ def remote_plot_zonal_mean(
         "variable_name": variable_name,
         "latitudes": latitudes,
         "zonal_mean_values": values,
+        "reduced_dims": _reduced,
         "_worker_runtime": {
             "hostname": __import__("socket").gethostname(),
             "python_version": __import__("platform").python_version(),
@@ -1380,20 +1381,27 @@ def remote_calculate_gradient(
     _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
     _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
     _extra = [d for d in var.dims if d not in _face_dims]
+    # Size-1 axes collapse without being reported: nothing was chosen over an
+    # alternative, so there is nothing for the caller to second-guess.
+    _reduced = {}
     if _extra:
         _sel = {}
         for _d in _extra:
-            if var.sizes[_d] == 1:
+            _n = int(var.sizes[_d])
+            if _n == 1:
                 _sel[_d] = 0
-            elif "time" in str(_d).lower():
-                _sel[_d] = time_index
-            elif str(_d).lower() in _LEVEL_EXACT or any(
-                _s in str(_d).lower() for _s in _LEVEL_SUBSTR
-            ):
-                _sel[_d] = level_index
+                continue
+            _dname = str(_d).lower()
+            if "time" in _dname:
+                _k, _i = "time", time_index
+            elif _dname in _LEVEL_EXACT or any(_s in _dname for _s in _LEVEL_SUBSTR):
+                _k, _i = "level", level_index
             else:
-                _sel[_d] = 0
-        var = var.isel(**_sel)
+                _k, _i = "other", 0
+            _sel[_d] = _i
+            _reduced[str(_d)] = {"kind": _k, "index": _i, "size": _n}
+        if _sel:
+            var = var.isel(**_sel)
 
     # Honor scale_by_radius when the worker's UXarray supports it; otherwise
     # fall back to the unit-sphere call so older workers keep working.
@@ -1438,6 +1446,7 @@ def remote_calculate_gradient(
         "scale_by_radius": applied_scale,
         "interpretation": "zonal (d/dx) and meridional (d/dy) components of the gradient",
         "component_warnings": uxarray_warnings,
+        "reduced_dims": _reduced,
         "scientific_status": {
             "status": "warning" if uxarray_warnings else "complete",
             "physically_interpretable": not uxarray_warnings,
@@ -1511,23 +1520,32 @@ def remote_calculate_curl(
     # change both together.
     _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
     _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
-    for _name, _var in (("u", u), ("v", v)):
+    # Both components are sliced the same way whenever they share dims, which
+    # is the normal case; v's entry overwrites u's only where they differ,
+    # matching the local {**u_reduced, **v_reduced} merge.
+    _reduced = {}
+    for _which, _var in (("u", u), ("v", v)):
         _extra = [d for d in _var.dims if d not in _face_dims]
         if not _extra:
             continue
         _sel = {}
         for _d in _extra:
-            if _var.sizes[_d] == 1:
+            _n = int(_var.sizes[_d])
+            if _n == 1:
                 _sel[_d] = 0
-            elif "time" in str(_d).lower():
-                _sel[_d] = time_index
-            elif str(_d).lower() in _LEVEL_EXACT or any(
-                _s in str(_d).lower() for _s in _LEVEL_SUBSTR
-            ):
-                _sel[_d] = level_index
+                continue
+            _dname = str(_d).lower()
+            if "time" in _dname:
+                _k, _i = "time", time_index
+            elif _dname in _LEVEL_EXACT or any(_s in _dname for _s in _LEVEL_SUBSTR):
+                _k, _i = "level", level_index
             else:
-                _sel[_d] = 0
-        if _name == "u":
+                _k, _i = "other", 0
+            _sel[_d] = _i
+            _reduced[str(_d)] = {"kind": _k, "index": _i, "size": _n}
+        if not _sel:
+            continue
+        if _which == "u":
             u = u.isel(**_sel)
         else:
             v = v.isel(**_sel)
@@ -1601,6 +1619,7 @@ def remote_calculate_curl(
         "scale_by_radius": applied_scale,
         "stats": stats,
         "component_warnings": component_warnings,
+        "reduced_dims": _reduced,
         "scientific_status": {
             "status": "warning" if component_warnings else "complete",
             "physically_interpretable": not component_warnings,
@@ -1672,23 +1691,32 @@ def remote_calculate_divergence(
     # change both together.
     _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
     _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
-    for _name, _var in (("u", u), ("v", v)):
+    # Both components are sliced the same way whenever they share dims, which
+    # is the normal case; v's entry overwrites u's only where they differ,
+    # matching the local {**u_reduced, **v_reduced} merge.
+    _reduced = {}
+    for _which, _var in (("u", u), ("v", v)):
         _extra = [d for d in _var.dims if d not in _face_dims]
         if not _extra:
             continue
         _sel = {}
         for _d in _extra:
-            if _var.sizes[_d] == 1:
+            _n = int(_var.sizes[_d])
+            if _n == 1:
                 _sel[_d] = 0
-            elif "time" in str(_d).lower():
-                _sel[_d] = time_index
-            elif str(_d).lower() in _LEVEL_EXACT or any(
-                _s in str(_d).lower() for _s in _LEVEL_SUBSTR
-            ):
-                _sel[_d] = level_index
+                continue
+            _dname = str(_d).lower()
+            if "time" in _dname:
+                _k, _i = "time", time_index
+            elif _dname in _LEVEL_EXACT or any(_s in _dname for _s in _LEVEL_SUBSTR):
+                _k, _i = "level", level_index
             else:
-                _sel[_d] = 0
-        if _name == "u":
+                _k, _i = "other", 0
+            _sel[_d] = _i
+            _reduced[str(_d)] = {"kind": _k, "index": _i, "size": _n}
+        if not _sel:
+            continue
+        if _which == "u":
             u = u.isel(**_sel)
         else:
             v = v.isel(**_sel)
@@ -1744,6 +1772,7 @@ def remote_calculate_divergence(
         "n_face": int(uxds.uxgrid.n_face),
         "stats": stats,
         "component_warnings": component_warnings,
+        "reduced_dims": _reduced,
         "scientific_status": {
             "status": "warning" if component_warnings else "complete",
             "physically_interpretable": not component_warnings,

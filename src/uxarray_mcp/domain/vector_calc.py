@@ -55,7 +55,7 @@ def _reduce_to_face(
     *,
     time_index: int = 0,
     level_index: int = 0,
-) -> Any:
+) -> tuple[Any, dict]:
     """Select a single time/level slice so ``var`` is 1-D face-centered.
 
     UXarray's vector-calculus operators (``.curl()``, ``.divergence()``,
@@ -67,15 +67,20 @@ def _reduce_to_face(
     the file themselves.
 
     Any extra dimension not recognized as time-like or level-like, and not
-    size-1, is squeezed via index 0 with a caveat left to the caller to
-    surface as a warning if desired.
+    size-1, is squeezed via index 0.
+
+    Returns ``(reduced_var, reduced_dims)``. The second element names every
+    axis that was collapsed, the index used, and how many were available --
+    a derivative computed from one level of a 40-level field is not the
+    field's derivative, and the caller cannot tell the difference from the
+    numbers alone.
     """
-    selection, _reduced = face_slice_selection(
+    selection, reduced = face_slice_selection(
         var.sizes, time_index=time_index, level_index=level_index
     )
     if not selection:
-        return var
-    return var.isel(**selection)
+        return var, reduced
+    return var.isel(**selection), reduced
 
 
 def _vector_component_warnings(
@@ -205,7 +210,8 @@ def compute_gradient(
     -------
     dict
         Keys: variable_name, zonal_component_name, meridional_component_name,
-        n_face, stats (min/max/mean for each component).
+        n_face, stats (min/max/mean for each component), reduced_dims (which
+        time/level axes were collapsed to reach a single face-centered slice).
     """
     if variable_name not in uxds.data_vars:
         raise ValueError(
@@ -217,7 +223,9 @@ def compute_gradient(
             f"Variable '{variable_name}' is not face-centered. "
             "Gradient requires face-centered data."
         )
-    var = _reduce_to_face(var, time_index=time_index, level_index=level_index)
+    var, reduced_dims = _reduce_to_face(
+        var, time_index=time_index, level_index=level_index
+    )
 
     import numpy as np
 
@@ -255,6 +263,7 @@ def compute_gradient(
         "scale_by_radius": bool(scale_by_radius),
         "interpretation": "zonal (∂/∂x) and meridional (∂/∂y) components of the gradient",
         "component_warnings": uxarray_warnings,
+        "reduced_dims": reduced_dims,
     }
     from uxarray_mcp.provenance import attach_scientific_status
 
@@ -318,8 +327,12 @@ def compute_curl(
                 f"Variable '{name}' is not face-centered. "
                 "Curl requires face-centered vector components."
             )
-    u = _reduce_to_face(u, time_index=time_index, level_index=level_index)
-    v = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    u, u_reduced = _reduce_to_face(u, time_index=time_index, level_index=level_index)
+    v, v_reduced = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    # Both components are sliced the same way whenever they share dims, which
+    # is the normal case; merging covers the mismatched one rather than
+    # reporting only whatever u happened to have.
+    reduced_dims = {**u_reduced, **v_reduced}
 
     import numpy as np
 
@@ -367,6 +380,7 @@ def compute_curl(
         "stats": stats,
         "component_warnings": component_warnings,
         "component_evidence": component_evidence,
+        "reduced_dims": reduced_dims,
     }
     from uxarray_mcp.provenance import attach_scientific_status
 
@@ -417,7 +431,9 @@ def compute_divergence(
     Returns
     -------
     dict
-        Keys: u_variable, v_variable, n_face, stats (min/max/mean/std).
+        Keys: u_variable, v_variable, n_face, stats (min/max/mean/std),
+        reduced_dims (which time/level axes were collapsed to reach a single
+        face-centered slice).
     """
     for name in (u_variable, v_variable):
         if name not in uxds.data_vars:
@@ -432,8 +448,9 @@ def compute_divergence(
                 f"Variable '{name}' is not face-centered. "
                 "Divergence requires face-centered vector components."
             )
-    u = _reduce_to_face(u, time_index=time_index, level_index=level_index)
-    v = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    u, u_reduced = _reduce_to_face(u, time_index=time_index, level_index=level_index)
+    v, v_reduced = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    reduced_dims = {**u_reduced, **v_reduced}
 
     import numpy as np
 
@@ -470,6 +487,7 @@ def compute_divergence(
         "stats": stats,
         "component_warnings": component_warnings,
         "component_evidence": component_evidence,
+        "reduced_dims": reduced_dims,
     }
     from uxarray_mcp.provenance import attach_scientific_status
 

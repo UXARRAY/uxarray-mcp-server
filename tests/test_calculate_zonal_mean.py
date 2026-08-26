@@ -616,6 +616,43 @@ class TestFrontDoorForwardsEveryParameter:
             equal_nan=True,
         )
 
+    def test_remote_plot_zonal_mean_discloses_its_slice(self, time_level_mesh_files):
+        """The worker built the record and then dropped it from the payload.
+
+        ``remote_tools.plot_zonal_mean`` reads ``reduced_dims`` out of the
+        worker result, so an omitted key made the remote path report ``{}``
+        while the identical local call named the time and level it drew.
+        """
+        import json
+
+        from uxarray_mcp.remote.compute_functions import remote_plot_zonal_mean
+        from uxarray_mcp.tools.frontdoor import plot_dataset
+
+        grid_file, data_file = time_level_mesh_files
+        items = plot_dataset(
+            plot_type="zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            time_index=2,
+            level_index=1,
+        )
+        local = json.loads(block_text(items[1]))
+        remote = remote_plot_zonal_mean(
+            grid_file,
+            data_file,
+            "temperature",
+            800,
+            400,
+            None,
+            False,
+            "#1f77b4",
+            None,
+            2,
+            1,
+        )
+        assert remote["reduced_dims"] == local["reduced_dims"]
+
     def test_plot_dataset_forwards_level_index(self, time_level_mesh_files):
         import json
 

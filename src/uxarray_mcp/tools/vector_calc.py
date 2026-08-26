@@ -133,7 +133,11 @@ def calculate_gradient(
     dict
         Dictionary with keys ``components`` (list of output variable names),
         ``component_stats`` (min/max/mean per component), ``n_face``,
-        ``interpretation``, and ``_provenance``.
+        ``interpretation``, ``reduced_dims``, and ``_provenance``.
+        ``reduced_dims`` names every non-face axis collapsed to reach a single
+        face-centered slice, with the index used and how many were available:
+        a gradient of one level of a 40-level field is not the field's
+        gradient, and the numbers alone do not say which level was taken.
 
     Examples
     --------
@@ -251,7 +255,9 @@ def calculate_curl(
     dict
         Dictionary with keys ``u_variable``, ``v_variable``,
         ``interpretation``, ``n_face``, ``stats`` (min/max/mean/std),
-        and ``_provenance``.
+        ``reduced_dims``, and ``_provenance``. ``reduced_dims`` names every
+        non-face axis collapsed to reach a single face-centered slice, with
+        the index used and how many were available.
 
     Examples
     --------
@@ -367,7 +373,9 @@ def calculate_divergence(
     dict
         Dictionary with keys ``u_variable``, ``v_variable``,
         ``interpretation``, ``n_face``, ``stats`` (min/max/mean/std),
-        and ``_provenance``.
+        ``reduced_dims``, and ``_provenance``. ``reduced_dims`` names every
+        non-face axis collapsed to reach a single face-centered slice, with
+        the index used and how many were available.
 
     Examples
     --------

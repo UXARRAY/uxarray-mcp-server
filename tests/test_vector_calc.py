@@ -637,3 +637,88 @@ def test_prompts_registered_as_tools():
     sep = registry._name_sep
     for name in ("first_look", "vorticity_analysis", "hpc_diagnose"):
         assert f"prompt{sep}{name}" in tools, f"prompt tool {name} missing"
+
+
+# ---------------------------------------------------------------------------
+# reduced_dims disclosure for gradient / curl / divergence
+# ---------------------------------------------------------------------------
+
+
+class TestVectorCalcReducedDims:
+    """A derivative of one slice is not the field's derivative.
+
+    gradient/curl/divergence must collapse every non-face axis before UXarray
+    will differentiate at all, so the answer always describes one time and one
+    level out of however many the file holds. Without ``reduced_dims`` the
+    caller sees only the numbers, which look the same whether they came from
+    the level asked for or from level 0 of forty.
+    """
+
+    def test_gradient_reports_the_slice_it_differentiated(self, time_level_mesh_files):
+        grid_file, data_file = time_level_mesh_files
+        result = calculate_gradient(
+            grid_file, data_file, "temperature", time_index=2, level_index=1
+        )
+        reduced = result["reduced_dims"]
+        assert reduced["time"] == {"kind": "time", "index": 2, "size": 3}
+        assert reduced["n_level"] == {"kind": "level", "index": 1, "size": 4}
+
+    @pytest.mark.parametrize("tool", [calculate_curl, calculate_divergence])
+    def test_curl_and_divergence_report_both_components(
+        self, tool, time_level_mesh_files
+    ):
+        """Both components are sliced; the merged record covers either one."""
+        grid_file, data_file = time_level_mesh_files
+        result = tool(
+            grid_file,
+            data_file,
+            "temperature",
+            "temperature",
+            time_index=1,
+            level_index=3,
+        )
+        reduced = result["reduced_dims"]
+        assert reduced["time"] == {"kind": "time", "index": 1, "size": 3}
+        assert reduced["n_level"] == {"kind": "level", "index": 3, "size": 4}
+
+    def test_size_one_axes_are_not_reported(self, multi_level_mesh_files):
+        """Collapsing a length-1 axis discards nothing, so it is not noise."""
+        grid_file, data_file = multi_level_mesh_files
+        result = calculate_gradient(grid_file, data_file, "temperature", level_index=2)
+        assert result["reduced_dims"] == {
+            "n_level": {"kind": "level", "index": 2, "size": 4}
+        }
+
+    @pytest.mark.parametrize(
+        "worker_name,tool,args",
+        [
+            ("remote_calculate_gradient", calculate_gradient, ("temperature",)),
+            (
+                "remote_calculate_curl",
+                calculate_curl,
+                ("temperature", "temperature"),
+            ),
+            (
+                "remote_calculate_divergence",
+                calculate_divergence,
+                ("temperature", "temperature"),
+            ),
+        ],
+    )
+    def test_worker_selects_the_same_slice_as_local(
+        self, worker_name, tool, args, time_level_mesh_files
+    ):
+        """The worker copies are hand-inlined and can drift from the local one.
+
+        Globus Compute serializes each function body standalone, so the worker
+        cannot import ``domain.dims``. Divergence here means the same request
+        answers differently depending on where it ran.
+        """
+        import uxarray_mcp.remote.compute_functions as cf
+
+        grid_file, data_file = time_level_mesh_files
+        local = tool(grid_file, data_file, *args, time_index=2, level_index=1)
+        remote = getattr(cf, worker_name)(
+            grid_file, data_file, *args, time_index=2, level_index=1
+        )
+        assert remote["reduced_dims"] == local["reduced_dims"]

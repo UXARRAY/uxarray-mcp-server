@@ -64,7 +64,14 @@ uses Semantic Versioning for public releases.
   dimension, the index used, and how many were available; `plot_variable`
   computed it and then dropped it on the way out, so a PNG of level 0 of a
   four-level field looked like the whole field. Length-1 axes are collapsed
-  without being reported, since nothing is lost.
+  without being reported, since nothing is lost. `gradient`, `curl`,
+  `divergence` and the remote `plot_zonal_mean` now report it too: all four
+  must collapse every non-face axis before UXarray will compute at all, so
+  their answers always describe one time and one level, and a derivative of
+  one level of a forty-level field is not the field's derivative. The remote
+  `plot_zonal_mean` worker had built the record and then omitted it from its
+  payload, so the same call disclosed its slice locally and returned `{}`
+  from HPC.
 - A one-sided `vmin`/`vmax` takes its open end from the slice being drawn.
   The colour limit was computed from the full array before reduction, so a
   vmin-only plot of one time step of a six-step field was scaled by the
