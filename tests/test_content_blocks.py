@@ -40,9 +40,10 @@ class TestBuilders:
         }
 
     def test_image_mime_is_overridable(self):
-        assert image_block("aGk=", mime_type="image/jpeg")["source"][
-            "media_type"
-        ] == "image/jpeg"
+        assert (
+            image_block("aGk=", mime_type="image/jpeg")["source"]["media_type"]
+            == "image/jpeg"
+        )
 
     def test_resource_link_omits_mime_when_unknown(self):
         assert resource_link_block("file:///a.png", "a.png") == {

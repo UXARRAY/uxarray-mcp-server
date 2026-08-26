@@ -377,6 +377,29 @@ class TestComputeAzimuthalMean:
         assert result["center"]["lon"] == -90.0
         assert result["center"]["lat"] == 25.0
 
+    def test_level_index_selects_that_level(self, multi_level_mesh_files):
+        """``level_index`` reached nothing on this path until now.
+
+        The fixture's level k is uniformly ``100*(k+1)``, so the profile value
+        alone names the level that was averaged.
+        """
+        grid_file, data_file = multi_level_mesh_files
+        uxds = ux.open_dataset(grid_file, data_file)
+        result = compute_azimuthal_mean(
+            uxds,
+            "temperature",
+            center_lon=0.0,
+            center_lat=0.0,
+            outer_radius=30.0,
+            radius_step=10.0,
+            level_index=2,
+        )
+        values = np.asarray(result["azimuthal_mean_values"], dtype=float)
+        finite = values[np.isfinite(values)]
+        assert finite.size > 0
+        assert finite == pytest.approx(300.0)
+        assert result["reduced_dims"]["n_level"]["index"] == 2
+
     def test_missing_variable_raises(self, healpix_wind_dataset):
         with pytest.raises(ValueError, match="not found"):
             compute_azimuthal_mean(

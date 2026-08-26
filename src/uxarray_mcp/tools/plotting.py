@@ -8,6 +8,7 @@ from typing import Any, Optional
 from uxarray_mcp.content_blocks import image_block, resource_link_block, text_block
 from uxarray_mcp.domain.mesh import is_healpix_spec, load_dataset, load_grid
 from uxarray_mcp.domain.plotting import (
+    describe_reduction,
     render_mesh,
     render_mesh_geo,
     render_variable,
@@ -573,6 +574,7 @@ def _plot_variable_local(
     vmax: Optional[float] = None,
     title: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
     session_id: Optional[str] = None,
     dataset_handle: Optional[str] = None,
 ) -> list[Any]:
@@ -595,12 +597,19 @@ def _plot_variable_local(
               Useful for comparing plots across datasets on a consistent scale.
         vmax: Maximum value for the colormap scale. Defaults to data maximum.
         title: Custom plot title. Defaults to the variable name.
+        time_index: Index along a time-like dimension (default 0).
+        level_index: Index along a vertical dimension (default 0). Separate
+                     from ``time_index`` on purpose: a level is not a time
+                     step, and indexing one with the other plots a slice the
+                     caller never asked for.
 
     Returns:
         Dictionary containing:
         - image: Base64-encoded PNG data URI
         - image_size_bytes: Size of the PNG in bytes
         - variable_name: Name of the plotted variable
+        - reduced_dims: Each non-face dimension that was collapsed, with the
+          index chosen and its full size
         - grid_info: Grid summary (n_face, n_node, n_edge)
         - _provenance: Provenance metadata
 
@@ -673,6 +682,10 @@ def _plot_variable_local(
             "Polygon plots require face-centered data."
         )
 
+    reduced_dims = describe_reduction(
+        uxda, time_index=time_index, level_index=level_index
+    )
+
     png_bytes = render_variable(
         uxda,
         width=width,
@@ -682,6 +695,7 @@ def _plot_variable_local(
         vmax=vmax,
         title=title,
         time_index=time_index,
+        level_index=level_index,
     )
     img_block, delivery = _png_content(png_bytes, plot_type="variable_polygons")
 
@@ -689,6 +703,9 @@ def _plot_variable_local(
         "image_size_bytes": len(png_bytes),
         **delivery,
         "variable_name": variable_name,
+        # A PNG of one slice is indistinguishable from a PNG of the whole
+        # field, so say which slice it is.
+        "reduced_dims": reduced_dims,
         "grid_info": {
             "n_face": int(uxds.uxgrid.n_face),
             "n_node": int(uxds.uxgrid.n_node),
@@ -709,6 +726,8 @@ def _plot_variable_local(
             "vmin": vmin,
             "vmax": vmax,
             "title": title,
+            "time_index": time_index,
+            "level_index": level_index,
             "session_id": session_id,
             "dataset_handle": dataset_handle,
         },
@@ -743,6 +762,7 @@ def _plot_zonal_mean_local(
     session_id: Optional[str] = None,
     dataset_handle: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> list[Any]:
     """Plot a zonal mean profile (latitude vs value).
 
@@ -763,6 +783,11 @@ def _plot_zonal_mean_local(
                     strings ("#e74c3c"), or any valid matplotlib color.
                     Defaults to "#1f77b4" (matplotlib blue).
         title: Custom plot title. Defaults to "Zonal Mean — <variable_name>".
+        time_index: Index used to reduce a time-like dimension so the profile
+                    is one-dimensional.
+        level_index: Index used to reduce a vertical dimension. Separate from
+                     ``time_index`` so a level is never selected by a time
+                     index, or the reverse.
 
     Returns:
         Dictionary containing:
@@ -835,6 +860,7 @@ def _plot_zonal_mean_local(
         lat_spec=lat_spec,
         conservative=conservative,
         time_index=time_index,
+        level_index=level_index,
     )
 
     latitudes = zonal_result["latitudes"]
@@ -876,6 +902,8 @@ def _plot_zonal_mean_local(
             "title": title,
             "session_id": session_id,
             "dataset_handle": dataset_handle,
+            "time_index": time_index,
+            "level_index": level_index,
         },
         selected_variable=variable_name,
         artifacts=[

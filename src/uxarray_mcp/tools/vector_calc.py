@@ -437,6 +437,7 @@ def calculate_azimuthal_mean(
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Compute the azimuthal (radial) mean of a variable around a centre point.
 
@@ -470,15 +471,19 @@ def calculate_azimuthal_mean(
     session_id : str, optional
         Session to track this operation under.
     time_index : int
-        Index used to reduce any non-radial dimension (e.g. time) so the
-        returned profile is one-dimensional.
+        Index used to reduce a time-like dimension so the returned profile is
+        one-dimensional.
+    level_index : int
+        Index used to reduce a vertical dimension. Separate from
+        ``time_index`` so neither selector reaches the other's axis.
 
     Returns
     -------
     dict
         Dictionary with keys ``variable_name``, ``center``,
         ``outer_radius_deg``, ``radius_step_deg``, ``radii_deg``,
-        ``azimuthal_mean_values``, ``n_face``, and ``_provenance``.
+        ``azimuthal_mean_values``, ``reduced_dims``, ``n_face``, and
+        ``_provenance``.
 
     Examples
     --------
@@ -506,6 +511,7 @@ def calculate_azimuthal_mean(
         "outer_radius": outer_radius,
         "radius_step": radius_step,
         "time_index": time_index,
+        "level_index": level_index,
     }
 
     def _local():
@@ -519,6 +525,7 @@ def calculate_azimuthal_mean(
                 outer_radius,
                 radius_step,
                 time_index,
+                level_index,
             ),
             tool="calculate_azimuthal_mean",
             inputs=inputs,
@@ -541,6 +548,7 @@ def calculate_azimuthal_mean(
                 outer_radius,
                 radius_step,
                 time_index,
+                level_index,
             )
         ),
     )

@@ -13,7 +13,12 @@ import base64
 import json
 from typing import Any, Optional
 
-from uxarray_mcp.content_blocks import block_image_data, block_text, block_uri
+from uxarray_mcp.content_blocks import (
+    block_image_data,
+    block_text,
+    block_uri,
+    is_wire_blocks,
+)
 from uxarray_mcp.next_steps import call, literal, needed
 from uxarray_mcp.provenance import attach_provenance
 
@@ -28,8 +33,15 @@ def _safe_call(stage: str, fn, warnings: list[str]) -> Optional[Any]:
 
 
 def _png_meta(items: list[Any]) -> dict[str, Any]:
-    """Convert a plot tool's ``[image|resource_link, text]`` list to a dict."""
-    if not items or len(items) < 2:
+    """Convert a plot tool's ``[image|resource_link, text]`` list to a dict.
+
+    Checked against the adapter's own notion of a content-block list rather
+    than against a length: a plot that could not spill and had no bytes
+    returns a single text block, and a tool that returned a bare dict is not
+    a block list at all. Both should yield no image metadata rather than an
+    index error or a silently mis-parsed one.
+    """
+    if not is_wire_blocks(items) or len(items) < 2:
         return {}
     img = items[0]
     try:

@@ -553,6 +553,87 @@ class TestFrontDoorForwardsEveryParameter:
         assert first["reduced_dims"]["time"]["index"] == 0
         assert last["reduced_dims"]["time"]["index"] == 2
 
+    def test_level_index_reaches_the_computation(self, multi_level_mesh_files):
+        """``level_index`` was accepted nowhere on this path until now.
+
+        The fixture's level k is uniformly ``100*(k+1)``, so the value alone
+        names the level that was selected.
+        """
+        grid_file, data_file = multi_level_mesh_files
+        third = run_analysis(
+            operation="calculate_zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            level_index=2,
+        )
+        assert _first_finite(third["zonal_mean_values"]) == pytest.approx(300.0)
+        assert third["reduced_dims"]["n_level"]["index"] == 2
+
+    def test_time_and_level_are_independent_selectors(self, time_level_mesh_files):
+        """The regression, end to end through the front door.
+
+        Value is ``1000*t + 100*(level+1)``. Asking for time 2 / level 1 must
+        give 2200: a shared selector would return 2300 (time index reused as
+        the level) or 1200 (the reverse), and both look plausible.
+        """
+        grid_file, data_file = time_level_mesh_files
+        result = run_analysis(
+            operation="calculate_zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            time_index=2,
+            level_index=1,
+        )
+        assert _first_finite(result["zonal_mean_values"]) == pytest.approx(2200.0)
+        reduced = result["reduced_dims"]
+        assert reduced["time"] == {"kind": "time", "index": 2, "size": 3}
+        assert reduced["n_level"] == {"kind": "level", "index": 1, "size": 4}
+
+    def test_remote_zonal_mean_honors_level_index_like_local(
+        self, time_level_mesh_files
+    ):
+        """The worker's reduction is a hand-kept copy, so pin it to the local one."""
+        from uxarray_mcp.remote.compute_functions import remote_calculate_zonal_mean
+
+        grid_file, data_file = time_level_mesh_files
+        local = run_analysis(
+            operation="calculate_zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            time_index=2,
+            level_index=1,
+        )
+        remote = remote_calculate_zonal_mean(
+            grid_file, data_file, "temperature", None, False, 2, 1
+        )
+        assert remote["reduced_dims"] == local["reduced_dims"]
+        assert np.allclose(
+            np.asarray(remote["zonal_mean_values"], dtype=float),
+            np.asarray(local["zonal_mean_values"], dtype=float),
+            equal_nan=True,
+        )
+
+    def test_plot_dataset_forwards_level_index(self, time_level_mesh_files):
+        import json
+
+        from uxarray_mcp.tools.frontdoor import plot_dataset
+
+        grid_file, data_file = time_level_mesh_files
+        items = plot_dataset(
+            plot_type="zonal_mean",
+            grid_path=grid_file,
+            data_path=data_file,
+            variable_name="temperature",
+            time_index=2,
+            level_index=3,
+        )
+        meta = json.loads(block_text(items[1]))
+        assert _first_finite(meta["zonal_mean_values"]) == pytest.approx(2400.0)
+        assert meta["reduced_dims"]["n_level"]["index"] == 3
+
     def test_plot_dataset_forwards_time_index(self, time_level_mesh_files):
         import json
 

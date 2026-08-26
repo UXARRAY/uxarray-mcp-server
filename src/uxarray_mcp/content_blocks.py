@@ -28,9 +28,7 @@ from typing import Any
 #: Block types the adapter converts natively. Kept local rather than imported
 #: from toolregistry so that a version skew shows up as a failing test here
 #: rather than as silently stringified output in production.
-WIRE_BLOCK_TYPES = frozenset(
-    {"text", "image", "audio", "resource_link", "resource"}
-)
+WIRE_BLOCK_TYPES = frozenset({"text", "image", "audio", "resource_link", "resource"})
 
 DEFAULT_IMAGE_MIME = "image/png"
 

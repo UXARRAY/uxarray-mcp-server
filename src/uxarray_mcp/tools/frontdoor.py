@@ -430,11 +430,15 @@ def run_analysis(
 
     ``gradient`` and ``curl`` accept ``scale_by_radius`` (default True matches
     UXarray and returns physical units when sphere-radius metadata exists).
-    ``gradient``, ``curl``, and ``divergence``
+    ``gradient``, ``curl``, ``divergence``, ``calculate_zonal_mean``, and
+    ``azimuthal_mean``
     also accept ``time_index``/``level_index`` to select a single time/level
     slice when the input variable(s) carry those extra dimensions (e.g. real
     model output shaped ``(time, lev, n_face)``); both default to 0 and are
-    ignored for variables that are already face-centered only.
+    ignored for variables that are already face-centered only. The two are
+    never interchangeable: ``time_index`` reaches only time-like axes and
+    ``level_index`` only vertical ones, so neither can silently return the
+    other's slice.
     ``zonal_anomaly`` accepts ``lat_spec`` and
     ``conservative``. ``remap_to_rectilinear`` accepts ``target_lon`` and
     ``target_lat`` (1-D coordinate arrays).
@@ -530,6 +534,7 @@ def run_analysis(
             lat_spec=lat_spec,
             conservative=conservative,
             time_index=time_index,
+            level_index=level_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -592,6 +597,7 @@ def run_analysis(
             _require(outer_radius, "outer_radius", op),
             _require(radius_step, "radius_step", op),
             time_index=time_index,
+            level_index=level_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -776,6 +782,7 @@ def plot_dataset(
     vmax: float | None = None,
     title: str | None = None,
     time_index: int = 0,
+    level_index: int = 0,
     lat_spec: tuple | float | list[Any] | None = None,
     conservative: bool = False,
     line_color: str = "#1f77b4",
@@ -786,7 +793,13 @@ def plot_dataset(
     session_id: str | None = None,
     dataset_handle: str | None = None,
 ) -> list[Any]:
-    """Render mesh, geographic mesh, variable, or zonal-mean plots."""
+    """Render mesh, geographic mesh, variable, or zonal-mean plots.
+
+    ``time_index`` and ``level_index`` are separate selectors, applied only
+    to time-like and level-like dimensions respectively. Results carry a
+    ``reduced_dims`` entry naming every dimension that was collapsed to make
+    the picture, because the PNG cannot say so itself.
+    """
     from uxarray_mcp.tools.plotting import plot_mesh_geo
     from uxarray_mcp.tools.remote_tools import plot_mesh, plot_variable, plot_zonal_mean
 
@@ -824,6 +837,7 @@ def plot_dataset(
             vmax=vmax,
             title=title,
             time_index=time_index,
+            level_index=level_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -841,6 +855,7 @@ def plot_dataset(
             line_color=line_color,
             title=title,
             time_index=time_index,
+            level_index=level_index,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,

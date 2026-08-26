@@ -6,6 +6,19 @@ uses Semantic Versioning for public releases.
 ## Unreleased
 
 ### Changed
+- `UXarrayApp.serve_mcp` constructs the MCP adapter itself so the
+  `tools/list` cache hints reach the server. The inherited path
+  (`App.serve` → `MCPAdapter.create_and_run`) builds the adapter internally
+  and silently drops `list_tools_ttl_ms`/`list_tools_cache_scope`, so the CLI
+  — the path users actually run — advertised the SDK default of `ttlMs=0`,
+  i.e. immediately stale, re-listing the whole catalog every turn. The hints
+  are set on the result today but not yet visible on the wire: they are MCP
+  spec 2026-07-28 fields, and `mcp` 2.1.1 caps its own client handshake at
+  2025-11-25, so the SDK strips them for every session it can currently
+  negotiate. They activate on their own once a 2026-era client connects.
+- Removed `attach_resource_link` and the `_resource_links` key it wrote. It
+  had no production caller, and its docstring claimed the adapter reads that
+  key, which was never true.
 - Require `uxarray>=2026.8.0` (was `>=2026.7.0`), in `pyproject.toml` and the
   conda recipe. 2026.7.0 and earlier compute face areas with an incorrect
   Jacobian (UXarray #1646), so the floor now excludes versions that can return
@@ -26,6 +39,51 @@ uses Semantic Versioning for public releases.
   39-61% (#83).
 
 ### Fixed
+- `time_index` no longer selects the vertical level. Every dimension that was
+  not a face dimension was reduced with `time_index`, so on a field shaped
+  `(time, lev, n_face)` a request for time step 3 silently returned level 3 as
+  well — a plausible-looking number from the wrong slice, with nothing in the
+  output saying so. The two selectors are now distinct: `time_index` reaches
+  only time-like axes, `level_index` only vertical ones, and anything else
+  (an ensemble member) takes index 0 because neither selector says anything
+  about it. Classification lives in one place, `uxarray_mcp.domain.dims`, so
+  the plotting, vector-calculus and zonal paths cannot drift on what counts
+  as a time axis; the Globus Compute worker keeps hand-inlined copies because
+  module-level helpers do not survive its serialization, and tests pin those
+  copies to the local behavior.
+- `level_index` is reachable from the tools that need it. It existed in the
+  renderer but no tool accepted it, so every plot and profile of a
+  multi-level field was pinned to level 0 with no way to ask for another. It
+  is now accepted by `plot_dataset` (variable and zonal-mean),
+  `run_analysis(calculate_zonal_mean | azimuthal_mean)`, and their remote
+  equivalents. A vertical axis is also recognized by substring rather than an
+  exact-name list, which had been missing the common real spellings —
+  `n_level`, `nlev`, `num_levels` — including this project's own multi-level
+  fixture.
+- Results say which slice they show. `reduced_dims` names each collapsed
+  dimension, the index used, and how many were available; `plot_variable`
+  computed it and then dropped it on the way out, so a PNG of level 0 of a
+  four-level field looked like the whole field. Length-1 axes are collapsed
+  without being reported, since nothing is lost.
+- A one-sided `vmin`/`vmax` takes its open end from the slice being drawn.
+  The colour limit was computed from the full array before reduction, so a
+  vmin-only plot of one time step of a six-step field was scaled by the
+  maximum of all six.
+- Plot tools now return MCP content blocks the adapter recognizes, so an
+  image reaches the client as an image. `toolregistry-server` converts a tool
+  result into MCP content only when it is a list of plain dicts carrying a
+  known `type`; every plot returned `mcp.types` models, which fail that
+  check, so the whole list was JSON-serialized into one `TextContent` holding
+  Python `repr()` strings. There was no error and no warning — the figure
+  simply stopped being a figure. Verified end to end through the shipped CLI
+  over stdio: a `plot_dataset` call now yields `[ImageContent, TextContent]`
+  with `image/png` and a 101 KB payload. The wire shape now lives in one
+  module, `uxarray_mcp.content_blocks`, because two adapter asymmetries are
+  easy to get wrong at a call site: an image carries its MIME type inside
+  `source` while every other block carries it on the block, and a
+  `resource_link` keeps only `uri`/`name`/`mimeType` — a title, description
+  or byte count set on the block is dropped, so those now ride in the
+  accompanying metadata instead.
 - `zonal_anomaly` reports a malformed `lat_spec` as a `ValueError` naming the
   shapes it accepts. UXarray 2026.8.0 raises `TypeError` for this where earlier
   releases raised `ValueError` (UXarray #1652), which let the raw upstream

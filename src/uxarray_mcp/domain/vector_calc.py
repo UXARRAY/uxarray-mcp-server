@@ -5,6 +5,7 @@ from __future__ import annotations
 import warnings as _warnings_module
 from typing import Any, Callable, TypeVar
 
+from uxarray_mcp.domain.dims import face_slice_selection
 from uxarray_mcp.domain.zonal import extract_profile
 
 _T = TypeVar("_T")
@@ -49,15 +50,6 @@ _VELOCITY_LIKE_UNIT_HINTS = (
 )
 
 
-_FACE_DIMS = {"n_face", "nCells"}
-
-# Common non-spatial dimension names, in the order we prefer to select from
-# when a caller gives a single generic index but the data has both a time and
-# a vertical dimension (rare, but keeps behavior predictable).
-_TIME_DIM_NAMES = ("time", "Time", "time_counter")
-_LEVEL_DIM_NAMES = ("lev", "level", "levels", "plev", "z", "nVertLevels")
-
-
 def _reduce_to_face(
     var: Any,
     *,
@@ -78,23 +70,11 @@ def _reduce_to_face(
     size-1, is squeezed via index 0 with a caveat left to the caller to
     surface as a warning if desired.
     """
-    extra = [d for d in var.dims if d not in _FACE_DIMS]
-    if not extra:
+    selection, _reduced = face_slice_selection(
+        var.sizes, time_index=time_index, level_index=level_index
+    )
+    if not selection:
         return var
-
-    selection: dict[str, int] = {}
-    for dim in extra:
-        if var.sizes[dim] == 1:
-            selection[dim] = 0
-        elif dim in _TIME_DIM_NAMES:
-            selection[dim] = time_index
-        elif dim in _LEVEL_DIM_NAMES:
-            selection[dim] = level_index
-        else:
-            # Unrecognized extra dimension: fall back to the first slice
-            # rather than erroring, matching plotting.py's existing behavior.
-            selection[dim] = 0
-
     return var.isel(**selection)
 
 
@@ -506,6 +486,7 @@ def compute_azimuthal_mean(
     outer_radius: float,
     radius_step: float,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> dict:
     """Compute the azimuthal (radial) mean around a centre point.
 
@@ -529,8 +510,11 @@ def compute_azimuthal_mean(
     radius_step : float
         Radial bin width in great-circle degrees.
     time_index : int
-        Index used to reduce any non-radial dimension (e.g. time) so the
+        Index used to reduce a time-like non-radial dimension so the
         returned profile is 1-D.
+    level_index : int
+        Index used to reduce a vertical non-radial dimension. Separate from
+        ``time_index``: a level is not a time step.
 
     Returns
     -------
@@ -557,7 +541,7 @@ def compute_azimuthal_mean(
     # ``radius`` replaces the face axis, which is not necessarily axis 0, so
     # the coordinate is looked up by name rather than by position.
     radii, values, reduced_dims = extract_profile(
-        result, "radius", time_index=time_index
+        result, "radius", time_index=time_index, level_index=level_index
     )
 
     return {
