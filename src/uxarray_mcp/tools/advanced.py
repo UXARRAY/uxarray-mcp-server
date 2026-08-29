@@ -12,6 +12,7 @@ import uxarray as ux
 import xarray as xr
 from matplotlib.path import Path as MplPath
 
+from uxarray_mcp.domain.dims import FACE_DIMS
 from uxarray_mcp.domain.mesh import load_dataset, load_grid
 from uxarray_mcp.domain.remap_coverage import compute_target_coverage
 from uxarray_mcp.next_steps import call, needed
@@ -470,10 +471,20 @@ def _load_comparison_arrays(
     data_path_a: str,
     data_path_b: str,
     variable_name: str,
-) -> tuple[xr.DataArray, xr.DataArray]:
+) -> tuple[xr.DataArray, xr.DataArray, Any | None]:
+    """Load the two fields plus the grid the weights come from.
+
+    The grid is returned rather than discarded because a mean over faces is
+    not a mean over the sphere unless the faces are equal-area -- see
+    ``_area_weights``.
+    """
+    uxgrid = None
     if grid_path:
-        first = load_dataset(grid_path, data_path_a)[variable_name].to_xarray()
-        second = load_dataset(grid_path, data_path_b)[variable_name].to_xarray()
+        first_ux = load_dataset(grid_path, data_path_a)[variable_name]
+        second_ux = load_dataset(grid_path, data_path_b)[variable_name]
+        uxgrid = getattr(first_ux, "uxgrid", None)
+        first = first_ux.to_xarray()
+        second = second_ux.to_xarray()
     else:
         first = xr.open_dataset(data_path_a)[variable_name]
         second = xr.open_dataset(data_path_b)[variable_name]
@@ -482,21 +493,97 @@ def _load_comparison_arrays(
             "Comparison requires same-grid, same-shape variables in v1. "
             f"Got dims {first.dims}/{second.dims} and shapes {first.shape}/{second.shape}."
         )
-    return first, second
+    return first, second, uxgrid
 
 
-def _pattern_correlation(first: xr.DataArray, second: xr.DataArray) -> float:
+#: Ratio of largest to smallest face area below which weighting changes
+#: nothing worth reporting. HEALPix is equal-area, so it lands at 1.0.
+_EQUAL_AREA_TOLERANCE = 1.000001
+
+
+def _area_weights(
+    field: xr.DataArray, uxgrid: Any | None
+) -> tuple[xr.DataArray | None, dict[str, Any]]:
+    """Return per-face area weights for ``field``, plus a disclosure record.
+
+    A plain ``.mean()`` over the face dimension weights every cell equally,
+    which answers "the average over cells" -- not "the average over the
+    sphere". On a variable-resolution mesh those differ in magnitude and can
+    differ in sign, so the weights are the correct estimator and their
+    absence is something the caller has to be told about, not a silent
+    default.
+    """
+    face_dim = next((str(d) for d in field.dims if str(d) in FACE_DIMS), None)
+    if face_dim is None:
+        return None, {
+            "weighted": False,
+            "reason": "field is not face-centered; no area weighting applies",
+        }
+    if uxgrid is None:
+        return None, {
+            "weighted": False,
+            "reason": (
+                "no grid was supplied, so face areas are unknown and the "
+                "metrics weight every cell equally"
+            ),
+        }
+    try:
+        areas = np.asarray(uxgrid.face_areas, dtype=float)
+    except Exception as exc:  # noqa: BLE001 - a missing area is a disclosure, not a crash
+        return None, {
+            "weighted": False,
+            "reason": f"face areas unavailable from the grid ({exc})",
+        }
+    if areas.shape != (field.sizes[face_dim],):
+        return None, {
+            "weighted": False,
+            "reason": (
+                f"face_areas has shape {areas.shape}, which does not match the "
+                f"{face_dim} length {field.sizes[face_dim]}"
+            ),
+        }
+    ratio = float(areas.max() / areas.min()) if areas.min() > 0 else float("inf")
+    return xr.DataArray(areas, dims=[face_dim]), {
+        "weighted": True,
+        "face_dim": face_dim,
+        "area_ratio_max_over_min": ratio,
+        "equal_area": ratio <= _EQUAL_AREA_TOLERANCE,
+    }
+
+
+def _weighted_mean(field: xr.DataArray, weights: xr.DataArray | None) -> float:
+    if weights is None:
+        return float(field.mean(skipna=True).item())
+    return float(field.weighted(weights).mean(skipna=True).item())
+
+
+def _pattern_correlation(
+    first: xr.DataArray, second: xr.DataArray, weights: xr.DataArray | None = None
+) -> float:
+    """Pearson correlation, area-weighted when weights are available.
+
+    Unweighted, this answers "how well do the two agree cell for cell", which
+    over-counts refined regions. Weighted, it answers the spatial question.
+    """
     a = np.asarray(first.values).ravel()
     b = np.asarray(second.values).ravel()
-    mask = np.isfinite(a) & np.isfinite(b)
+    if weights is None:
+        w = np.ones_like(a, dtype=float)
+    else:
+        w = np.asarray(weights.broadcast_like(first).values, dtype=float).ravel()
+    mask = np.isfinite(a) & np.isfinite(b) & np.isfinite(w)
     if not mask.any():
         raise ValueError("No finite overlapping values available for correlation.")
-    a = a[mask] - np.mean(a[mask])
-    b = b[mask] - np.mean(b[mask])
-    denom = np.linalg.norm(a) * np.linalg.norm(b)
+    a, b, w = a[mask], b[mask], w[mask]
+    wsum = w.sum()
+    if wsum <= 0:
+        raise ValueError("Area weights sum to zero; correlation is undefined.")
+    a = a - (w * a).sum() / wsum
+    b = b - (w * b).sum() / wsum
+    denom = np.sqrt((w * a * a).sum() * (w * b * b).sum())
     if denom == 0:
         return 0.0
-    return float(np.dot(a, b) / denom)
+    return float((w * a * b).sum() / denom)
 
 
 def compare_fields(
@@ -510,7 +597,7 @@ def compare_fields(
     """Compare two same-grid fields and compute core difference metrics."""
     tracker = OperationTracker("compare_fields", session_id=session_id)
     tracker.stage("loading", "Loading comparison fields.")
-    first, second = _load_comparison_arrays(
+    first, second, uxgrid = _load_comparison_arrays(
         grid_path=grid_path,
         data_path_a=data_path_a,
         data_path_b=data_path_b,
@@ -518,9 +605,10 @@ def compare_fields(
     )
     tracker.stage("comparing", "Computing field-to-field metrics.")
     diff = first - second
-    bias = float(diff.mean(skipna=True).item())
-    rmse = float(np.sqrt((diff**2).mean(skipna=True)).item())
-    pattern = _pattern_correlation(first, second)
+    weights, weighting = _area_weights(diff, uxgrid)
+    bias = _weighted_mean(diff, weights)
+    rmse = float(np.sqrt(_weighted_mean(diff**2, weights)))
+    pattern = _pattern_correlation(first, second, weights)
     result_handle = _persist_dataarray_result(
         data=diff,
         session_id=session_id,
@@ -548,8 +636,20 @@ def compare_fields(
             "pattern_correlation": pattern,
             "max_abs_difference": float(np.nanmax(np.abs(diff.values))),
         },
+        "area_weighting": weighting,
         "difference_field_handle": result_handle,
     }
+    if not weighting["weighted"]:
+        result["scientific_status"] = {
+            "status": "warning",
+            "physically_interpretable": False,
+            "warning_codes": ["AREA_WEIGHTING_UNAVAILABLE"],
+            "warnings": [
+                "bias, rmse and pattern_correlation weight every cell equally "
+                f"because {weighting['reason']}. On a variable-resolution mesh "
+                "that is a mean over cells, not over the sphere."
+            ],
+        }
     result = attach_provenance(
         result,
         tool="compare_fields",
@@ -563,6 +663,21 @@ def compare_fields(
     )
     result["_provenance"]["operation_id"] = tracker.operation_id
     return result
+
+
+def _carry_weighting(
+    payload: dict[str, Any], comparison: dict[str, Any]
+) -> dict[str, Any]:
+    """Copy the area-weighting disclosure onto a single-metric result.
+
+    Without this a caller of :func:`calculate_bias` sees a bare number and no
+    way to tell whether it is a mean over the sphere or a mean over cells --
+    the very ambiguity the disclosure exists to remove.
+    """
+    payload["area_weighting"] = comparison["area_weighting"]
+    if "scientific_status" in comparison:
+        payload["scientific_status"] = comparison["scientific_status"]
+    return payload
 
 
 def calculate_bias(
@@ -579,7 +694,10 @@ def calculate_bias(
         grid_path=grid_path,
     )
     return attach_provenance(
-        {"variable_name": variable_name, "bias": comparison["metrics"]["bias"]},
+        _carry_weighting(
+            {"variable_name": variable_name, "bias": comparison["metrics"]["bias"]},
+            comparison,
+        ),
         tool="calculate_bias",
         inputs={
             "variable_name": variable_name,
@@ -604,7 +722,10 @@ def calculate_rmse(
         grid_path=grid_path,
     )
     return attach_provenance(
-        {"variable_name": variable_name, "rmse": comparison["metrics"]["rmse"]},
+        _carry_weighting(
+            {"variable_name": variable_name, "rmse": comparison["metrics"]["rmse"]},
+            comparison,
+        ),
         tool="calculate_rmse",
         inputs={
             "variable_name": variable_name,
@@ -629,10 +750,13 @@ def calculate_pattern_correlation(
         grid_path=grid_path,
     )
     return attach_provenance(
-        {
-            "variable_name": variable_name,
-            "pattern_correlation": comparison["metrics"]["pattern_correlation"],
-        },
+        _carry_weighting(
+            {
+                "variable_name": variable_name,
+                "pattern_correlation": comparison["metrics"]["pattern_correlation"],
+            },
+            comparison,
+        ),
         tool="calculate_pattern_correlation",
         inputs={
             "variable_name": variable_name,

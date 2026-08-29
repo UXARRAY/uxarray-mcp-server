@@ -71,6 +71,19 @@ the current release.
   39-61% (#83).
 
 ### Fixed
+- `compare_fields`, `calculate_bias`, `calculate_rmse` and
+  `calculate_pattern_correlation` area-weight their metrics. They previously
+  called `.mean()` over the face dimension, which answers "average over
+  cells", not "average over the sphere" — the two differ whenever cell areas
+  do. On a 10° lat-lon mesh (648 faces, largest cell 11.5× the smallest) with
+  a +2 K tropical / −2 K polar difference, the old code reported a bias of
+  −0.667 K where the area-weighted answer is +0.004 K: wrong magnitude and
+  wrong sign. Results now carry an `area_weighting` block naming the face
+  dimension and the max/min area ratio. When weighting is impossible — no
+  grid supplied, a non-face-centered field, or unavailable face areas — the
+  result says so through `scientific_status` with the
+  `AREA_WEIGHTING_UNAVAILABLE` code rather than presenting a cell-count mean
+  as a spatial one.
 - `divergence` accepts and forwards `scale_by_radius`. UXarray's
   `UxDataArray.divergence` takes the flag exactly as `gradient` and `curl` do,
   but every layer here called it bare — `domain/vector_calc.py`,
