@@ -326,6 +326,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         data_path: str,
         u_variable: str,
         v_variable: str,
+        scale_by_radius: bool = True,
         time_index: int = 0,
         level_index: int = 0,
     ) -> Dict[str, Any]:
@@ -336,6 +337,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             data_path,
             u_variable,
             v_variable,
+            scale_by_radius,
             time_index,
             level_index,
         )

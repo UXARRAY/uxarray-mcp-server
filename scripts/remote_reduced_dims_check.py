@@ -151,11 +151,10 @@ def main() -> int:
             remote_calculate_curl,
             (grid_path, data_path, "u", "v", True, ti, li),
         ),
-        # divergence takes no scale_by_radius, unlike gradient and curl.
         (
             "calculate_divergence",
             remote_calculate_divergence,
-            (grid_path, data_path, "u", "v", ti, li),
+            (grid_path, data_path, "u", "v", True, ti, li),
         ),
     )
 

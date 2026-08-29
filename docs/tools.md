@@ -72,7 +72,7 @@ validates the parameters it requires and returns a clear error if one is
 missing.
 
 `gradient`, `curl`, and `divergence` echo the `scale_by_radius` convention in
-their result and provenance. `gradient` and `curl` accept `scale_by_radius`
+their result and provenance, and all three accept `scale_by_radius`
 (default `True`, matching UXarray). When `True`, results are divided by
 `uxgrid.sphere_radius` for physical units; the grid must define
 `sphere_radius`. Pass `False` explicitly to keep unit-sphere results.

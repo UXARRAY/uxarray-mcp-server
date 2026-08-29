@@ -12,10 +12,11 @@ uses Semantic Versioning for public releases.
   and silently drops `list_tools_ttl_ms`/`list_tools_cache_scope`, so the CLI
   — the path users actually run — advertised the SDK default of `ttlMs=0`,
   i.e. immediately stale, re-listing the whole catalog every turn. The hints
-  are set on the result today but not yet visible on the wire: they are MCP
-  spec 2026-07-28 fields, and `mcp` 2.1.1 caps its own client handshake at
-  2025-11-25, so the SDK strips them for every session it can currently
-  negotiate. They activate on their own once a 2026-era client connects.
+  do reach the wire: `mcp` 2.1.1 has
+  `MODERN_PROTOCOL_VERSIONS == ("2026-07-28",)` and `ListToolsResult`
+  inherits `CacheableResult`, so any client on the modern transport sees
+  them. Only the legacy `initialize` handshake caps earlier, at 2025-11-25,
+  and there the SDK strips them harmlessly.
 - Removed `attach_resource_link` and the `_resource_links` key it wrote. It
   had no production caller, and its docstring claimed the adapter reads that
   key, which was never true.
@@ -39,6 +40,17 @@ uses Semantic Versioning for public releases.
   39-61% (#83).
 
 ### Fixed
+- `divergence` accepts and forwards `scale_by_radius`. UXarray's
+  `UxDataArray.divergence` takes the flag exactly as `gradient` and `curl` do,
+  but every layer here called it bare — `domain/vector_calc.py`,
+  `remote/compute_functions.py`, the agent, and the `run_analysis` front door,
+  which accepted the parameter and dropped it. A caller asking for
+  unit-sphere divergence silently got radius-scaled output, and the result
+  never disclosed which it was: no `scale_by_radius` key, no
+  `physical_scaling_requested`/`applied` in `scientific_status`. Divergence
+  now reports both, and — like `curl` — declares the `radius_scaling`
+  precondition, so unscaled output is refused rather than returned as if
+  physical. Same class of defect as #87.
 - `time_index` no longer selects the vertical level. Every dimension that was
   not a face dimension was reduced with `time_index`, so on a field shaped
   `(time, lev, n_face)` a request for time step 3 silently returned level 3 as

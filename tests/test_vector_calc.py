@@ -325,6 +325,14 @@ class TestSphereRadiusWarningCapture:
             "component_warnings"
         ]
 
+    def test_divergence_scale_by_radius_warning_captured(self):
+        ds = _make_wind_dataset(with_units=True)
+        assert "sphere_radius" not in ds.uxgrid.attrs
+        result = compute_divergence(ds, "u", "v", scale_by_radius=True)
+        assert any("sphere_radius" in w for w in result["component_warnings"]), result[
+            "component_warnings"
+        ]
+
     def test_curl_scale_by_radius_false_has_no_sphere_warning(self):
         ds = _make_wind_dataset(with_units=True)
         result = compute_curl(ds, "u", "v", scale_by_radius=False)
@@ -565,6 +573,56 @@ class TestScaleByRadius:
     def test_curl_default_requests_radius_scaling(self, healpix_wind_dataset):
         result = compute_curl(healpix_wind_dataset, "u", "v")
         assert result["scale_by_radius"] is True
+
+    def test_divergence_default_requests_radius_scaling(self, healpix_wind_dataset):
+        """UXarray's ``divergence`` takes the same flag as ``curl``; we passed
+        it for curl and gradient but silently dropped it here, so a caller who
+        asked for unit-sphere output got physical output and was never told."""
+        result = compute_divergence(healpix_wind_dataset, "u", "v")
+        assert result["scale_by_radius"] is True
+
+    def test_divergence_honours_scale_by_radius_false(self, healpix_wind_dataset):
+        result = compute_divergence(
+            healpix_wind_dataset, "u", "v", scale_by_radius=False
+        )
+        assert result["scale_by_radius"] is False
+        assert result["scientific_status"]["physical_scaling_requested"] is False
+        assert result["scientific_status"]["physical_scaling_applied"] is False
+
+    def test_remote_divergence_threads_scale_by_radius(self):
+        """The remote dispatch must forward scale_by_radius to the agent."""
+        from uxarray_mcp.tools import vector_calc
+
+        agent = MagicMock()
+        agent.config.endpoint_id = "fake-endpoint"
+        agent.config.endpoint_name = "fake"
+        agent.config.timeout_seconds = 60
+        agent.calculate_divergence_remote.return_value = {
+            "stats": {},
+            "n_face": 1,
+            "scale_by_radius": False,
+            "_provenance": {"warnings": []},
+        }
+
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent", return_value=agent),
+            patch.object(
+                vector_calc, "_endpoint_manager_is_up", return_value=(True, "ok")
+            ),
+            patch.object(vector_calc, "_run_sync", side_effect=lambda f: f()),
+        ):
+            vector_calc.calculate_divergence(
+                "/hpc/grid.nc",
+                "/hpc/data.nc",
+                "u",
+                "v",
+                scale_by_radius=False,
+                use_remote=True,
+                endpoint="improv",
+            )
+
+        args, kwargs = agent.calculate_divergence_remote.call_args
+        assert (False in args) or (kwargs.get("scale_by_radius") is False)
 
     def test_gradient_records_scale_by_radius_flag(self, healpix_wind_dataset):
         with warnings.catch_warnings():

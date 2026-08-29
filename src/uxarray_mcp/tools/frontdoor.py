@@ -179,7 +179,7 @@ def _finalize_analysis_result(
             evidence.get("units_supported")
             and evidence.get("component_identity_supported")
         )
-        scaling_supported = operation != "curl" or bool(result.get("scale_by_radius"))
+        scaling_supported = bool(result.get("scale_by_radius"))
         physically_interpretable = bool(
             metadata_supported
             and scaling_supported
@@ -581,6 +581,7 @@ def run_analysis(
             _require(data_path, "data_path", op),
             _require(u_variable, "u_variable", op),
             _require(v_variable, "v_variable", op),
+            scale_by_radius=scale_by_radius,
             time_index=time_index,
             level_index=level_index,
             use_remote=use_remote,

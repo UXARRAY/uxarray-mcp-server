@@ -41,13 +41,14 @@ UXARRAY_IDENTITY = ServerIdentity(
 #: Five minutes bounds how long a client can hold a stale surface if a
 #: future version does start mutating the registry at runtime.
 #:
-#: These reach the ``ListToolsResult`` today but not yet the wire: ``ttlMs``
-#: and ``cacheScope`` are MCP spec 2026-07-28, and the SDK strips fields a
-#: negotiated older era does not define. ``mcp`` 2.1.1 caps its own client
-#: handshake at 2025-11-25, so no client built on it can currently observe
-#: them. Setting them is still right -- the hints activate on their own the
-#: day a 2026-era client connects, and a server that never set them would
-#: keep paying for a full re-list forever.
+#: ``ttlMs`` and ``cacheScope`` are MCP spec 2026-07-28 fields and they do
+#: reach the wire on the modern transport: ``mcp`` 2.1.1 has
+#: ``MODERN_PROTOCOL_VERSIONS == ("2026-07-28",)`` and ``ListToolsResult``
+#: inherits ``CacheableResult``, so a client sending the modern
+#: ``MCP-Protocol-Version`` header sees them serialized. Only the legacy
+#: ``initialize`` handshake caps out earlier (``LATEST_HANDSHAKE_VERSION`` is
+#: 2025-11-25); on that path the SDK strips fields the negotiated era does
+#: not define, and the hints simply cost nothing.
 LIST_TOOLS_TTL_MS = 300_000
 
 #: The surface depends only on the profile, not on the user or session, so

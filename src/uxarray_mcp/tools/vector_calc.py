@@ -328,6 +328,7 @@ def calculate_divergence(
     data_path: str,
     u_variable: str,
     v_variable: str,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
     use_remote: bool = False,
@@ -353,6 +354,11 @@ def calculate_divergence(
         Zonal (east-west) component.
     v_variable : str
         Meridional (north-south) component.
+    scale_by_radius : bool
+        Divide by the sphere radius so the result carries physical units.
+        The grid must declare ``sphere_radius``; UXarray warns and leaves the
+        result on the unit sphere if it does not, and the result reports the
+        ``scale_by_radius`` actually applied. Default True.
     time_index : int
         Time index to select if the components have a leading time dimension
         (e.g. real model output with shape (time, lev, n_face)). Ignored if
@@ -372,7 +378,8 @@ def calculate_divergence(
     -------
     dict
         Dictionary with keys ``u_variable``, ``v_variable``,
-        ``interpretation``, ``n_face``, ``stats`` (min/max/mean/std),
+        ``interpretation``, ``n_face``, ``scale_by_radius``,
+        ``stats`` (min/max/mean/std),
         ``reduced_dims``, and ``_provenance``. ``reduced_dims`` names every
         non-face axis collapsed to reach a single face-centered slice, with
         the index used and how many were available.
@@ -393,6 +400,7 @@ def calculate_divergence(
         "data_path": data_path,
         "u_variable": u_variable,
         "v_variable": v_variable,
+        "scale_by_radius": scale_by_radius,
         "time_index": time_index,
         "level_index": level_index,
     }
@@ -403,6 +411,7 @@ def calculate_divergence(
             uxds,
             u_variable,
             v_variable,
+            scale_by_radius=scale_by_radius,
             time_index=time_index,
             level_index=level_index,
         )
@@ -426,6 +435,7 @@ def calculate_divergence(
                 data_path,
                 u_variable,
                 v_variable,
+                scale_by_radius,
                 time_index,
                 level_index,
             )

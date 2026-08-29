@@ -132,7 +132,7 @@ def evaluate_vector_preconditions(
             "'northward_sea_water_velocity') so the pairing is unambiguous.",
         ),
     ]
-    if operation == "curl":
+    if operation in {"curl", "divergence"}:
         checks.append(
             _check(
                 "radius_scaling",

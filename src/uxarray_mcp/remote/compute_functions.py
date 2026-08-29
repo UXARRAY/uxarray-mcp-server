@@ -1644,6 +1644,7 @@ def remote_calculate_divergence(
     data_path: str,
     u_variable: str,
     v_variable: str,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
 ) -> Dict[str, Any]:
@@ -1651,6 +1652,7 @@ def remote_calculate_divergence(
 
     divergence = du/dx + dv/dy
     """
+    import inspect as _inspect
     import os
 
     import numpy as np
@@ -1745,14 +1747,26 @@ def remote_calculate_divergence(
 
     import warnings as _warnings_module
 
+    applied_scale = False
     with _warnings_module.catch_warnings(record=True) as _caught:
         _warnings_module.simplefilter("always")
-        result = u.divergence(v)
+        if "scale_by_radius" in _inspect.signature(u.divergence).parameters:
+            result = u.divergence(v, scale_by_radius=scale_by_radius)
+            applied_scale = bool(scale_by_radius)
+        else:
+            result = u.divergence(v)
+            if scale_by_radius:
+                component_warnings.append(
+                    "Worker UXarray does not support scale_by_radius; returned "
+                    "the unit-sphere divergence."
+                )
+                warning_codes.append("SCALE_BY_RADIUS_UNSUPPORTED")
         for _warning in _caught:
             _message = str(_warning.message)
             if _message not in component_warnings:
                 component_warnings.append(_message)
                 warning_codes.append("SPHERE_RADIUS_UNAVAILABLE")
+                applied_scale = False
     vals = result.values
     finite = vals[np.isfinite(vals)]
     stats: Dict[str, Any] = (
@@ -1770,12 +1784,15 @@ def remote_calculate_divergence(
         "v_variable": v_variable,
         "interpretation": "horizontal divergence du/dx + dv/dy",
         "n_face": int(uxds.uxgrid.n_face),
+        "scale_by_radius": applied_scale,
         "stats": stats,
         "component_warnings": component_warnings,
         "reduced_dims": _reduced,
         "scientific_status": {
             "status": "warning" if component_warnings else "complete",
             "physically_interpretable": not component_warnings,
+            "physical_scaling_requested": bool(scale_by_radius),
+            "physical_scaling_applied": bool(applied_scale),
             "warning_codes": warning_codes,
             "warnings": component_warnings,
         },
