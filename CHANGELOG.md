@@ -3,7 +3,11 @@
 All notable changes are recorded here. Dates are ISO 8601 (UTC). The project
 uses Semantic Versioning for public releases.
 
-## Unreleased
+## 0.3.0 — 2026-08-29
+
+Everything below landed after 0.1.2; the 0.2.x releases were cut without
+stamping a section here, so this heading closes that gap as well as naming
+the current release.
 
 ### Changed
 - `UXarrayApp.serve_mcp` constructs the MCP adapter itself so the
