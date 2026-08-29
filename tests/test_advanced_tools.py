@@ -403,7 +403,7 @@ def test_unweighted_comparison_discloses_that_it_is_unweighted(tmp_path):
 
     assert result["area_weighting"]["weighted"] is False
     status = result["scientific_status"]
-    assert status["warning_codes"] == ["AREA_WEIGHTING_UNAVAILABLE"]
+    assert "AREA_WEIGHTING_UNAVAILABLE" in status["warning_codes"]
     assert status["physically_interpretable"] is False
 
 
@@ -449,6 +449,43 @@ def test_single_metric_tools_carry_the_weighting_disclosure(tmp_path):
     for tool in (calculate_bias, calculate_rmse, calculate_pattern_correlation):
         result = tool(variable_name="t", data_path_a=str(a), data_path_b=str(b))
         assert result["area_weighting"]["weighted"] is False, tool.__name__
-        assert result["scientific_status"]["warning_codes"] == [
-            "AREA_WEIGHTING_UNAVAILABLE"
-        ], tool.__name__
+        assert (
+            "AREA_WEIGHTING_UNAVAILABLE" in result["scientific_status"]["warning_codes"]
+        ), tool.__name__
+        assert result["units"] == {"a": None, "b": None, "comparable": None}
+
+
+def test_compare_fields_reports_mismatched_units(tmp_path):
+    """The tool itself is not the refusal point -- the front door is -- but it
+    has to report the evidence the refusal is made from."""
+    import xarray as xr
+
+    a = tmp_path / "units_a.nc"
+    b = tmp_path / "units_b.nc"
+    xr.Dataset(
+        {"t": (["n_face"], np.array([300.0, 301.0, 302.0]), {"units": "K"})}
+    ).to_netcdf(a)
+    xr.Dataset(
+        {"t": (["n_face"], np.array([27.0, 28.0, 29.0]), {"units": "degC"})}
+    ).to_netcdf(b)
+
+    result = compare_fields(variable_name="t", data_path_a=str(a), data_path_b=str(b))
+
+    assert result["units"] == {"a": "K", "b": "degC", "comparable": False}
+    assert "UNITS_MISMATCHED" in result["scientific_status"]["warning_codes"]
+
+
+def test_compare_fields_accepts_synonymous_unit_spellings(tmp_path):
+    import xarray as xr
+
+    a = tmp_path / "syn_a.nc"
+    b = tmp_path / "syn_b.nc"
+    xr.Dataset(
+        {"t": (["n_face"], np.array([1.0, 2.0, 3.0]), {"units": "m/s"})}
+    ).to_netcdf(a)
+    xr.Dataset({"t": (["n_face"], np.zeros(3), {"units": "m s-1"})}).to_netcdf(b)
+
+    result = compare_fields(variable_name="t", data_path_a=str(a), data_path_b=str(b))
+
+    assert result["units"]["comparable"] is True
+    assert "UNITS_MISMATCHED" not in result["scientific_status"]["warning_codes"]

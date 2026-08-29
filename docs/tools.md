@@ -98,6 +98,28 @@ then comes back with `preconditions.status: "overridden"`,
 and a `PRECONDITION_FAILED_<ID>` code per failed check. A wrong or guessed
 token is a failed override, not a silent pass.
 
+`compare_fields`, `bias`, `rmse` and `pattern_correlation` declare
+`units_comparable` on the same machinery. All four are built from `a - b`,
+which measures something only when both fields are on the same scale, so a
+declared disagreement (K against degC) refuses rather than reporting the
+273.15 offset as model error. Unit strings are folded through a fixed synonym
+table — `K`/`kelvin`, `m/s`/`m s-1`, `degC`/`degrees_Celsius` — and nothing
+more: the server does not parse unit algebra, so `mm day-1` against
+`kg m-2 s-1` refuses even though the two are convertible. The repair says so.
+A field that declares no `units` at all is a gap in the metadata rather than a
+contradiction, so it warns with `UNITS_UNDECLARED` and the call proceeds.
+
+Those four operations also report an `area_weighting` block. Their metrics are
+weighted by `face_areas`, because a plain mean over faces answers "the average
+over cells" and not "the average over the sphere" — on a variable-resolution
+mesh the two differ in magnitude and can differ in sign. The block names the
+face dimension and the max/min area ratio, so a caller can see whether
+weighting mattered; HEALPix is equal-area and reports a ratio of 1.0. When
+weighting is impossible — no `grid_path`, a field that is not face-centered,
+or `face_areas` unavailable — the result says so with
+`AREA_WEIGHTING_UNAVAILABLE` instead of presenting a cell-count mean as a
+spatial one.
+
 `validate_dataset` is deliberately exempt from refusal: reporting that a
 dataset is invalid *is* its answer, so refusing to report it would be
 circular. It reports `scientific_status.status: "invalid"` instead.

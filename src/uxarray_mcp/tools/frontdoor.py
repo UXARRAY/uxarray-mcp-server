@@ -19,6 +19,7 @@ from uxarray_mcp.preconditions import (
     RESULT_TYPE_COMPLETE,
     PreconditionRefusal,
     enforce,
+    evaluate_comparison_preconditions,
     evaluate_remap_preconditions,
     evaluate_validation_preconditions,
     evaluate_vector_preconditions,
@@ -50,6 +51,12 @@ SUPPORTED_OPERATIONS: tuple[str, ...] = (
     "ensemble_mean",
     "ensemble_spread",
     "export",
+)
+
+#: Operations whose answer is built from ``a - b`` and so depend on both
+#: fields being on the same scale.
+COMPARISON_OPERATIONS: frozenset[str] = frozenset(
+    {"compare_fields", "bias", "rmse", "pattern_correlation"}
 )
 
 #: Vocabulary an agent is likely to reach for, mapped to the operation that
@@ -198,6 +205,19 @@ def _finalize_analysis_result(
                 warning_codes.append("VECTOR_COMPONENTS_UNVERIFIED")
             if metadata_supported and not scaling_supported:
                 warning_codes.append("PHYSICAL_SCALING_UNVERIFIED")
+    elif operation in COMPARISON_OPERATIONS and "units" in result:
+        # bias, rmse and the difference field are all a - b, which is only a
+        # physical quantity when both sides are on the same scale. Undeclared
+        # units stay a warning; a declared disagreement refuses.
+        units = result["units"]
+        status_block = result.get("scientific_status") or {}
+        warning_codes.extend(status_block.get("warning_codes", []))
+        physically_interpretable = not warning_codes
+        if warning_codes:
+            status = "warning"
+        preconditions = evaluate_comparison_preconditions(
+            str(result.get("variable_name", "")), units.get("a"), units.get("b")
+        )
     elif operation == "remap_to_rectilinear" and "source_coverage" in result:
         # Absent coverage stays unknown rather than becoming a claim of
         # interpretability: a remote worker on an older build may not send it.

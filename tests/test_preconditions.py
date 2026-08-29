@@ -11,8 +11,10 @@ from uxarray_mcp.preconditions import (
     RESULT_TYPE_INPUT_REQUIRED,
     PreconditionRefusal,
     enforce,
+    evaluate_comparison_preconditions,
     evaluate_validation_preconditions,
     evaluate_vector_preconditions,
+    normalize_units,
 )
 
 VELOCITY_EVIDENCE = {
@@ -198,3 +200,54 @@ class TestRefusalPayloadShape:
 
     def test_payload_is_json_serializable(self, payload):
         assert json.loads(json.dumps(payload))["operation"] == "curl"
+
+
+class TestComparisonPreconditions:
+    """``bias``/``rmse`` are built from ``a - b``, which is only a physical
+    quantity when both sides are on the same scale."""
+
+    def test_matching_units_pass(self):
+        checks = evaluate_comparison_preconditions("tas", "K", "K")
+
+        assert [c["id"] for c in checks] == ["units_comparable"]
+        assert checks[0]["passed"]
+
+    def test_kelvin_against_celsius_is_refusable(self):
+        """The 273.15 offset reads as model error, which is the whole hazard."""
+        checks = evaluate_comparison_preconditions("tas", "K", "degC")
+
+        assert not checks[0]["passed"]
+        with pytest.raises(PreconditionRefusal):
+            enforce("compare_fields", checks, None)
+
+    @pytest.mark.parametrize(
+        ("left", "right"),
+        [("K", "kelvin"), ("m/s", "m s-1"), ("degC", "degrees_Celsius"), ("1", "")],
+    )
+    def test_known_synonyms_are_not_treated_as_a_mismatch(self, left, right):
+        assert evaluate_comparison_preconditions("v", left, right)[0]["passed"]
+
+    @pytest.mark.parametrize(
+        ("left", "right"), [(None, "K"), ("K", None), (None, None)]
+    )
+    def test_undeclared_units_abstain_rather_than_refuse(self, left, right):
+        """An absent attribute is a gap in the metadata, not evidence that the
+        two fields disagree. Comparing unlabeled anomaly fields is ordinary."""
+        assert evaluate_comparison_preconditions("v", left, right)[0]["passed"]
+
+    def test_unparsed_equivalents_refuse_and_say_so_in_the_repair(self):
+        """We do not do unit algebra, so equivalent-but-unaliased spellings
+        refuse. The repair has to name that, or the caller cannot act on it."""
+        checks = evaluate_comparison_preconditions("pr", "mm day-1", "kg m-2 s-1")
+
+        assert not checks[0]["passed"]
+        assert "unit algebra" in checks[0]["repair"]
+
+
+class TestNormalizeUnits:
+    def test_blank_and_missing_fold_to_none(self):
+        for value in (None, "", "   "):
+            assert normalize_units(value) is None
+
+    def test_case_and_whitespace_do_not_make_units_differ(self):
+        assert normalize_units("  M/S ") == normalize_units("m/s")

@@ -16,6 +16,7 @@ from uxarray_mcp.domain.dims import FACE_DIMS
 from uxarray_mcp.domain.mesh import load_dataset, load_grid
 from uxarray_mcp.domain.remap_coverage import compute_target_coverage
 from uxarray_mcp.next_steps import call, needed
+from uxarray_mcp.preconditions import normalize_units
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.state import (
     OperationTracker,
@@ -496,6 +497,22 @@ def _load_comparison_arrays(
     return first, second, uxgrid
 
 
+def _comparison_units(first: xr.DataArray, second: xr.DataArray) -> dict[str, Any]:
+    """Report the two fields' declared units and whether they can be differenced.
+
+    ``comparable`` is deliberately three-valued. ``None`` means at least one
+    side declared nothing, which is a gap in the metadata rather than a
+    contradiction; ``False`` means both declared and they disagree.
+    """
+    left = str((first.attrs or {}).get("units", "")).strip() or None
+    right = str((second.attrs or {}).get("units", "")).strip() or None
+    if left is None or right is None:
+        comparable: bool | None = None
+    else:
+        comparable = normalize_units(left) == normalize_units(right)
+    return {"a": left, "b": right, "comparable": comparable}
+
+
 #: Ratio of largest to smallest face area below which weighting changes
 #: nothing worth reporting. HEALPix is equal-area, so it lands at 1.0.
 _EQUAL_AREA_TOLERANCE = 1.000001
@@ -604,6 +621,7 @@ def compare_fields(
         variable_name=variable_name,
     )
     tracker.stage("comparing", "Computing field-to-field metrics.")
+    units = _comparison_units(first, second)
     diff = first - second
     weights, weighting = _area_weights(diff, uxgrid)
     bias = _weighted_mean(diff, weights)
@@ -637,18 +655,40 @@ def compare_fields(
             "max_abs_difference": float(np.nanmax(np.abs(diff.values))),
         },
         "area_weighting": weighting,
+        "units": units,
         "difference_field_handle": result_handle,
     }
+
+    warnings: list[str] = []
+    warning_codes: list[str] = []
     if not weighting["weighted"]:
+        warning_codes.append("AREA_WEIGHTING_UNAVAILABLE")
+        warnings.append(
+            "bias, rmse and pattern_correlation weight every cell equally "
+            f"because {weighting['reason']}. On a variable-resolution mesh "
+            "that is a mean over cells, not over the sphere."
+        )
+    if units["comparable"] is None:
+        warning_codes.append("UNITS_UNDECLARED")
+        warnings.append(
+            f"units_a={units['a'] or 'unset'!r}, units_b={units['b'] or 'unset'!r}: "
+            "at least one field does not declare its units, so nothing here "
+            "confirms the two are on the same scale. bias and rmse carry the "
+            "units of the difference only if they are."
+        )
+    elif not units["comparable"]:
+        warning_codes.append("UNITS_MISMATCHED")
+        warnings.append(
+            f"units_a={units['a']!r} and units_b={units['b']!r} do not match, "
+            "so the difference mixes two scales. A K-versus-degC comparison "
+            "reports the 273.15 offset as if it were model error."
+        )
+    if warning_codes:
         result["scientific_status"] = {
             "status": "warning",
             "physically_interpretable": False,
-            "warning_codes": ["AREA_WEIGHTING_UNAVAILABLE"],
-            "warnings": [
-                "bias, rmse and pattern_correlation weight every cell equally "
-                f"because {weighting['reason']}. On a variable-resolution mesh "
-                "that is a mean over cells, not over the sphere."
-            ],
+            "warning_codes": warning_codes,
+            "warnings": warnings,
         }
     result = attach_provenance(
         result,
@@ -675,6 +715,7 @@ def _carry_weighting(
     the very ambiguity the disclosure exists to remove.
     """
     payload["area_weighting"] = comparison["area_weighting"]
+    payload["units"] = comparison["units"]
     if "scientific_status" in comparison:
         payload["scientific_status"] = comparison["scientific_status"]
     return payload
