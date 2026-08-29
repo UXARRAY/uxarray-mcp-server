@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from uxarray_mcp.domain.dims import face_slice_selection
+
 
 def compute_zonal_mean_stats(
     uxds: Any,
@@ -11,6 +13,7 @@ def compute_zonal_mean_stats(
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> dict:
     """Compute zonal mean statistics from a loaded UXarray dataset.
 
@@ -53,7 +56,7 @@ def compute_zonal_mean_stats(
         zonal_result = var.zonal_mean(conservative=conservative)
 
     latitudes, zonal_mean_values, reduced_dims = extract_profile(
-        zonal_result, "latitudes", time_index=time_index
+        zonal_result, "latitudes", time_index=time_index, level_index=level_index
     )
 
     grid_info = {
@@ -179,6 +182,7 @@ def extract_profile(
     result: Any,
     coord_name: str,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> tuple[list, list, dict]:
     """Return ``(coordinate_values, profile_values, reduced_dims)``.
 
@@ -191,11 +195,15 @@ def extract_profile(
 
     Any remaining dimension is collapsed to a single index so callers get the
     1-D series a line plot requires.  Which index is used depends on the
-    dimension: a time axis uses ``time_index``, anything else (a vertical
-    level, an ensemble member) uses 0, because ``time_index`` says nothing
-    about those.  Every collapse is reported in ``reduced_dims`` -- returning a
-    profile that is one slice of a multi-level field without saying so is how a
-    caller ends up believing a single level is the whole answer.
+    dimension: a time axis uses ``time_index``, a vertical axis uses
+    ``level_index``, anything else (an ensemble member) uses 0, because
+    neither selector says anything about it.  The classification is shared
+    with the plotting and vector-calculus paths via
+    :func:`uxarray_mcp.domain.dims.face_slice_selection`, so the three cannot
+    drift on what counts as a time axis.  Every collapse is reported in
+    ``reduced_dims`` -- returning a profile that is one slice of a
+    multi-level field without saying so is how a caller ends up believing a
+    single level is the whole answer.
     """
     if coord_name in result.coords:
         coords = result.coords[coord_name].values.tolist()
@@ -205,18 +213,13 @@ def extract_profile(
         coord_name = result.dims[-1]
         coords = result.coords[coord_name].values.tolist()
 
-    reduced: dict = {}
-    selection: dict = {}
-    for dim in result.dims:
-        if dim == coord_name:
-            continue
-        size = int(result.sizes[dim])
-        if size == 1:
-            selection[dim] = 0
-            continue
-        index = time_index if "time" in str(dim).lower() else 0
-        selection[dim] = index
-        reduced[str(dim)] = {"index": index, "size": size}
+    # The axis to keep here is the new coordinate, not a face dimension.
+    selection, reduced = face_slice_selection(
+        result.sizes,
+        time_index=time_index,
+        level_index=level_index,
+        keep=[coord_name],
+    )
 
     if selection:
         result = result.isel(**selection)

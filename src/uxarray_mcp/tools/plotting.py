@@ -5,10 +5,10 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-from mcp.types import ImageContent, TextContent
-
+from uxarray_mcp.content_blocks import image_block, resource_link_block, text_block
 from uxarray_mcp.domain.mesh import is_healpix_spec, load_dataset, load_grid
 from uxarray_mcp.domain.plotting import (
+    describe_reduction,
     render_mesh,
     render_mesh_geo,
     render_variable,
@@ -19,7 +19,9 @@ from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.typed_results import spill_png
 
 
-def _png_content(png_bytes: bytes, *, plot_type: str) -> tuple[Any, dict[str, Any]]:
+def _png_content(
+    png_bytes: bytes, *, plot_type: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return the content block for a rendered PNG, plus a note about it.
 
     Small images are inlined as an ``image`` block, which keeps the common
@@ -32,24 +34,18 @@ def _png_content(png_bytes: bytes, *, plot_type: str) -> tuple[Any, dict[str, An
     link = spill_png(png_bytes, plot_type=plot_type)
     if link is None:
         b64 = base64.b64encode(png_bytes).decode("utf-8")
-        return (
-            ImageContent(type="image", data=b64, mimeType="image/png"),
-            {"image_delivery": "inline"},
-        )
-    from mcp.types import ResourceLink
+        return image_block(b64), {"image_delivery": "inline"}
 
-    block = ResourceLink(
-        type="resource_link",
-        uri=link["uri"],
-        name=link["name"],
-        title=link.get("title"),
-        description=link.get("description"),
-        mimeType=link["mime_type"],
-        size=link.get("size"),
-    )
-    return block, {
+    # The adapter keeps only uri/name/mimeType off a resource_link, so the
+    # title, description and byte count ride along in the metadata block
+    # instead of being dropped on the floor.
+    return resource_link_block(
+        link["uri"], link["name"], mime_type=link["mime_type"]
+    ), {
         "image_delivery": "resource_link",
         "image_uri": link["uri"],
+        "image_size_bytes": link.get("size"),
+        "image_description": link.get("description"),
     }
 
 
@@ -121,7 +117,7 @@ def _plot_mesh_local(
     grid = load_grid(grid_path)
 
     png_bytes = render_mesh(grid, width=width, height=height)
-    image_block, delivery = _png_content(png_bytes, plot_type="mesh_wireframe")
+    img_block, delivery = _png_content(png_bytes, plot_type="mesh_wireframe")
 
     result = {
         "image_size_bytes": len(png_bytes),
@@ -154,8 +150,8 @@ def _plot_mesh_local(
     )
 
     return [
-        image_block,
-        TextContent(type="text", text=json.dumps(provenance, indent=2)),
+        img_block,
+        text_block(json.dumps(provenance, indent=2)),
     ]
 
 
@@ -287,7 +283,7 @@ def plot_mesh_geo(
     Returns
     -------
     list
-        MCP content list: [ImageContent (inline PNG), TextContent (provenance JSON)].
+        MCP content blocks: [image (inline PNG) or resource_link, text (provenance JSON)].
     """
     grid_path, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
 
@@ -328,7 +324,7 @@ def plot_mesh_geo(
             city_scale=city_scale,
         )
 
-    image_block, delivery = _png_content(png_bytes, plot_type="mesh_geographic")
+    img_block, delivery = _png_content(png_bytes, plot_type="mesh_geographic")
 
     # ── Build human-readable plot note ───────────────────────────────────────
     note = _build_plot_note(
@@ -367,8 +363,8 @@ def plot_mesh_geo(
         ],
     )
     return [
-        image_block,
-        TextContent(type="text", text=note + "\n\n" + json.dumps(provenance, indent=2)),
+        img_block,
+        text_block(note + "\n\n" + json.dumps(provenance, indent=2)),
     ]
 
 
@@ -578,6 +574,7 @@ def _plot_variable_local(
     vmax: Optional[float] = None,
     title: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
     session_id: Optional[str] = None,
     dataset_handle: Optional[str] = None,
 ) -> list[Any]:
@@ -600,12 +597,19 @@ def _plot_variable_local(
               Useful for comparing plots across datasets on a consistent scale.
         vmax: Maximum value for the colormap scale. Defaults to data maximum.
         title: Custom plot title. Defaults to the variable name.
+        time_index: Index along a time-like dimension (default 0).
+        level_index: Index along a vertical dimension (default 0). Separate
+                     from ``time_index`` on purpose: a level is not a time
+                     step, and indexing one with the other plots a slice the
+                     caller never asked for.
 
     Returns:
         Dictionary containing:
         - image: Base64-encoded PNG data URI
         - image_size_bytes: Size of the PNG in bytes
         - variable_name: Name of the plotted variable
+        - reduced_dims: Each non-face dimension that was collapsed, with the
+          index chosen and its full size
         - grid_info: Grid summary (n_face, n_node, n_edge)
         - _provenance: Provenance metadata
 
@@ -678,6 +682,10 @@ def _plot_variable_local(
             "Polygon plots require face-centered data."
         )
 
+    reduced_dims = describe_reduction(
+        uxda, time_index=time_index, level_index=level_index
+    )
+
     png_bytes = render_variable(
         uxda,
         width=width,
@@ -687,13 +695,17 @@ def _plot_variable_local(
         vmax=vmax,
         title=title,
         time_index=time_index,
+        level_index=level_index,
     )
-    image_block, delivery = _png_content(png_bytes, plot_type="variable_polygons")
+    img_block, delivery = _png_content(png_bytes, plot_type="variable_polygons")
 
     result = {
         "image_size_bytes": len(png_bytes),
         **delivery,
         "variable_name": variable_name,
+        # A PNG of one slice is indistinguishable from a PNG of the whole
+        # field, so say which slice it is.
+        "reduced_dims": reduced_dims,
         "grid_info": {
             "n_face": int(uxds.uxgrid.n_face),
             "n_node": int(uxds.uxgrid.n_node),
@@ -714,6 +726,8 @@ def _plot_variable_local(
             "vmin": vmin,
             "vmax": vmax,
             "title": title,
+            "time_index": time_index,
+            "level_index": level_index,
             "session_id": session_id,
             "dataset_handle": dataset_handle,
         },
@@ -730,8 +744,8 @@ def _plot_variable_local(
     )
 
     return [
-        image_block,
-        TextContent(type="text", text=json.dumps(provenance, indent=2)),
+        img_block,
+        text_block(json.dumps(provenance, indent=2)),
     ]
 
 
@@ -748,6 +762,7 @@ def _plot_zonal_mean_local(
     session_id: Optional[str] = None,
     dataset_handle: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> list[Any]:
     """Plot a zonal mean profile (latitude vs value).
 
@@ -768,6 +783,11 @@ def _plot_zonal_mean_local(
                     strings ("#e74c3c"), or any valid matplotlib color.
                     Defaults to "#1f77b4" (matplotlib blue).
         title: Custom plot title. Defaults to "Zonal Mean — <variable_name>".
+        time_index: Index used to reduce a time-like dimension so the profile
+                    is one-dimensional.
+        level_index: Index used to reduce a vertical dimension. Separate from
+                     ``time_index`` so a level is never selected by a time
+                     index, or the reverse.
 
     Returns:
         Dictionary containing:
@@ -840,6 +860,7 @@ def _plot_zonal_mean_local(
         lat_spec=lat_spec,
         conservative=conservative,
         time_index=time_index,
+        level_index=level_index,
     )
 
     latitudes = zonal_result["latitudes"]
@@ -854,7 +875,7 @@ def _plot_zonal_mean_local(
         line_color=line_color,
         title=title,
     )
-    image_block, delivery = _png_content(png_bytes, plot_type="zonal_mean_profile")
+    img_block, delivery = _png_content(png_bytes, plot_type="zonal_mean_profile")
 
     result = {
         "image_size_bytes": len(png_bytes),
@@ -881,6 +902,8 @@ def _plot_zonal_mean_local(
             "title": title,
             "session_id": session_id,
             "dataset_handle": dataset_handle,
+            "time_index": time_index,
+            "level_index": level_index,
         },
         selected_variable=variable_name,
         artifacts=[
@@ -895,6 +918,6 @@ def _plot_zonal_mean_local(
     )
 
     return [
-        image_block,
-        TextContent(type="text", text=json.dumps(provenance, indent=2)),
+        img_block,
+        text_block(json.dumps(provenance, indent=2)),
     ]

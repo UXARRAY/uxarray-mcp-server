@@ -31,6 +31,8 @@ from typing import Any
 
 import matplotlib
 
+from uxarray_mcp.domain.dims import face_slice_selection
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -354,15 +356,35 @@ def render_mesh_geo(
     return png_bytes, render_info
 
 
-_FACE_DIMS = {"n_face", "nCells"}
+def _reduce_to_face(
+    uxda: Any, time_index: int = 0, level_index: int = 0
+) -> tuple[Any, dict[str, dict[str, Any]]]:
+    """Squeeze or isel any non-face extra dims so uxda is 1-D face-centered.
+
+    Returns ``(reduced_array, reduced_dims)``. Each dimension is collapsed
+    according to what it is -- see :mod:`uxarray_mcp.domain.dims`; a vertical
+    axis is not a time axis and must not be indexed with ``time_index``.
+    """
+    selection, reduced = face_slice_selection(
+        uxda.sizes, time_index=time_index, level_index=level_index
+    )
+    if not selection:
+        return uxda, reduced
+    return uxda.isel(**selection), reduced
 
 
-def _reduce_to_face(uxda: Any, time_index: int = 0) -> Any:
-    """Squeeze or isel any non-face extra dims so uxda is 1-D face-centered."""
-    extra = [d for d in uxda.dims if d not in _FACE_DIMS]
-    if not extra:
-        return uxda
-    return uxda.isel(**{d: 0 if uxda.sizes[d] == 1 else time_index for d in extra})
+def describe_reduction(
+    uxda: Any, time_index: int = 0, level_index: int = 0
+) -> dict[str, dict[str, Any]]:
+    """Report which slice ``render_variable`` would take, without rendering.
+
+    A PNG cannot say which time step or level it shows, so the tool layer
+    needs this to put the answer in its provenance.
+    """
+    _, reduced = face_slice_selection(
+        uxda.sizes, time_index=time_index, level_index=level_index
+    )
+    return reduced
 
 
 def render_variable(
@@ -374,6 +396,7 @@ def render_variable(
     vmax: float | None = None,
     title: str | None = None,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> bytes:
     """Render a face-centered variable as a filled polygon plot to PNG bytes.
 
@@ -407,13 +430,16 @@ def render_variable(
     fig_w = width / dpi
     fig_h = height / dpi
 
+    # Reduce first: the open end of a one-sided vmin/vmax must come from the
+    # slice actually being drawn, not from the whole multi-time-step array.
+    uxda, _reduced = _reduce_to_face(uxda, time_index, level_index)
+
     kwargs: dict[str, Any] = {"backend": "matplotlib", "cmap": cmap}
     if vmin is not None:
         kwargs["clim"] = (vmin, vmax if vmax is not None else uxda.values.max())
     elif vmax is not None:
         kwargs["clim"] = (uxda.values.min(), vmax)
 
-    uxda = _reduce_to_face(uxda, time_index)
     element = uxda.plot.polygons(**kwargs)
 
     renderer = hv.Store.renderers["matplotlib"]

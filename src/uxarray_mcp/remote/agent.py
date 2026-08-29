@@ -224,6 +224,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         conservative: bool = False,
         use_remote: bool = False,
         time_index: int = 0,
+        level_index: int = 0,
     ) -> Dict[str, Any]:
         """Calculate zonal mean with optional remote execution.
 
@@ -241,6 +242,11 @@ class UXarrayComputeAgent(_AcademyAgent):
             Use conservative averaging
         use_remote : bool
             If True, execute on HPC; if False, execute locally
+        time_index : int
+            Index used to reduce a time-like dimension.
+        level_index : int
+            Index used to reduce a vertical dimension. Separate from
+            ``time_index`` so neither selector reaches the other's axis.
 
         Returns
         -------
@@ -256,10 +262,17 @@ class UXarrayComputeAgent(_AcademyAgent):
                 lat_spec,
                 conservative,
                 time_index,
+                level_index,
             )
         else:
             return self._run_local_calculate_zonal_mean(
-                grid_path, data_path, variable_name, lat_spec, conservative, time_index
+                grid_path,
+                data_path,
+                variable_name,
+                lat_spec,
+                conservative,
+                time_index,
+                level_index,
             )
 
     @action
@@ -313,6 +326,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         data_path: str,
         u_variable: str,
         v_variable: str,
+        scale_by_radius: bool = True,
         time_index: int = 0,
         level_index: int = 0,
     ) -> Dict[str, Any]:
@@ -323,6 +337,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             data_path,
             u_variable,
             v_variable,
+            scale_by_radius,
             time_index,
             level_index,
         )
@@ -338,6 +353,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         outer_radius: float,
         radius_step: float,
         time_index: int = 0,
+        level_index: int = 0,
     ) -> Dict[str, Any]:
         """Compute azimuthal mean around a centre point on HPC."""
         return await self._run_on_hpc(
@@ -350,6 +366,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             outer_radius,
             radius_step,
             time_index,
+            level_index,
         )
 
     @action
@@ -389,6 +406,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         vmax: Optional[float] = None,
         title: Optional[str] = None,
         time_index: int = 0,
+        level_index: int = 0,
         use_remote: bool = False,
     ) -> Dict[str, Any]:
         """Render face-centered variable PNG on HPC and return base64 bytes."""
@@ -405,6 +423,7 @@ class UXarrayComputeAgent(_AcademyAgent):
                 vmax,
                 title,
                 time_index,
+                level_index,
             )
         else:
             return remote_plot_variable(
@@ -418,6 +437,7 @@ class UXarrayComputeAgent(_AcademyAgent):
                 vmax,
                 title,
                 time_index,
+                level_index,
             )
 
     @action
@@ -434,6 +454,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         title: Optional[str] = None,
         use_remote: bool = False,
         time_index: int = 0,
+        level_index: int = 0,
     ) -> Dict[str, Any]:
         """Render zonal mean profile PNG on HPC and return base64 bytes."""
         if use_remote and self.config.endpoint_id:
@@ -449,6 +470,7 @@ class UXarrayComputeAgent(_AcademyAgent):
                 line_color,
                 title,
                 time_index,
+                level_index,
             )
         else:
             return remote_plot_zonal_mean(
@@ -462,6 +484,7 @@ class UXarrayComputeAgent(_AcademyAgent):
                 line_color,
                 title,
                 time_index,
+                level_index,
             )
 
     async def _run_on_hpc(self, func, *args, **kwargs) -> Dict[str, Any]:
@@ -611,6 +634,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         lat_spec: Optional[tuple | float | list],
         conservative: bool,
         time_index: int = 0,
+        level_index: int = 0,
     ) -> Dict[str, Any]:
         """Execute calculate_zonal_mean locally as fallback."""
         from uxarray_mcp.tools import calculate_zonal_mean
@@ -622,6 +646,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             lat_spec,
             conservative,
             time_index=time_index,
+            level_index=level_index,
         )
 
 

@@ -240,11 +240,13 @@ def make_resource_link(
     mime_type: str | None = None,
     size: int | None = None,
 ) -> dict[str, Any]:
-    """Build one ``_resource_links`` entry.
+    """Describe a spilled artifact.
 
-    The adapter turns each entry into an MCP ``resource_link`` content
-    block.  ``uri`` and ``name`` are the only required members; the rest
-    are advisory and are dropped when unset.
+    This is the internal descriptor, not the wire format: only ``uri``,
+    ``name`` and the MIME type survive into an MCP ``resource_link``
+    content block (see :mod:`uxarray_mcp.content_blocks`). The title,
+    description and size are still worth carrying because callers put
+    them in the accompanying metadata, where they do reach the client.
     """
     link: dict[str, Any] = {"uri": uri, "name": name}
     if title is not None:
@@ -256,15 +258,6 @@ def make_resource_link(
     if size is not None:
         link["size"] = int(size)
     return link
-
-
-def attach_resource_link(
-    result: dict[str, Any], link: dict[str, Any]
-) -> dict[str, Any]:
-    """Append one resource link to a result, creating the list if needed."""
-    links = result.setdefault("_resource_links", [])
-    links.append(link)
-    return result
 
 
 def should_link_rather_than_inline(size_bytes: int) -> bool:

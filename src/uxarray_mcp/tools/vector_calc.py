@@ -133,7 +133,11 @@ def calculate_gradient(
     dict
         Dictionary with keys ``components`` (list of output variable names),
         ``component_stats`` (min/max/mean per component), ``n_face``,
-        ``interpretation``, and ``_provenance``.
+        ``interpretation``, ``reduced_dims``, and ``_provenance``.
+        ``reduced_dims`` names every non-face axis collapsed to reach a single
+        face-centered slice, with the index used and how many were available:
+        a gradient of one level of a 40-level field is not the field's
+        gradient, and the numbers alone do not say which level was taken.
 
     Examples
     --------
@@ -251,7 +255,9 @@ def calculate_curl(
     dict
         Dictionary with keys ``u_variable``, ``v_variable``,
         ``interpretation``, ``n_face``, ``stats`` (min/max/mean/std),
-        and ``_provenance``.
+        ``reduced_dims``, and ``_provenance``. ``reduced_dims`` names every
+        non-face axis collapsed to reach a single face-centered slice, with
+        the index used and how many were available.
 
     Examples
     --------
@@ -322,6 +328,7 @@ def calculate_divergence(
     data_path: str,
     u_variable: str,
     v_variable: str,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
     use_remote: bool = False,
@@ -347,6 +354,11 @@ def calculate_divergence(
         Zonal (east-west) component.
     v_variable : str
         Meridional (north-south) component.
+    scale_by_radius : bool
+        Divide by the sphere radius so the result carries physical units.
+        The grid must declare ``sphere_radius``; UXarray warns and leaves the
+        result on the unit sphere if it does not, and the result reports the
+        ``scale_by_radius`` actually applied. Default True.
     time_index : int
         Time index to select if the components have a leading time dimension
         (e.g. real model output with shape (time, lev, n_face)). Ignored if
@@ -366,8 +378,11 @@ def calculate_divergence(
     -------
     dict
         Dictionary with keys ``u_variable``, ``v_variable``,
-        ``interpretation``, ``n_face``, ``stats`` (min/max/mean/std),
-        and ``_provenance``.
+        ``interpretation``, ``n_face``, ``scale_by_radius``,
+        ``stats`` (min/max/mean/std),
+        ``reduced_dims``, and ``_provenance``. ``reduced_dims`` names every
+        non-face axis collapsed to reach a single face-centered slice, with
+        the index used and how many were available.
 
     Examples
     --------
@@ -385,6 +400,7 @@ def calculate_divergence(
         "data_path": data_path,
         "u_variable": u_variable,
         "v_variable": v_variable,
+        "scale_by_radius": scale_by_radius,
         "time_index": time_index,
         "level_index": level_index,
     }
@@ -395,6 +411,7 @@ def calculate_divergence(
             uxds,
             u_variable,
             v_variable,
+            scale_by_radius=scale_by_radius,
             time_index=time_index,
             level_index=level_index,
         )
@@ -418,6 +435,7 @@ def calculate_divergence(
                 data_path,
                 u_variable,
                 v_variable,
+                scale_by_radius,
                 time_index,
                 level_index,
             )
@@ -437,6 +455,7 @@ def calculate_azimuthal_mean(
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Compute the azimuthal (radial) mean of a variable around a centre point.
 
@@ -470,15 +489,19 @@ def calculate_azimuthal_mean(
     session_id : str, optional
         Session to track this operation under.
     time_index : int
-        Index used to reduce any non-radial dimension (e.g. time) so the
-        returned profile is one-dimensional.
+        Index used to reduce a time-like dimension so the returned profile is
+        one-dimensional.
+    level_index : int
+        Index used to reduce a vertical dimension. Separate from
+        ``time_index`` so neither selector reaches the other's axis.
 
     Returns
     -------
     dict
         Dictionary with keys ``variable_name``, ``center``,
         ``outer_radius_deg``, ``radius_step_deg``, ``radii_deg``,
-        ``azimuthal_mean_values``, ``n_face``, and ``_provenance``.
+        ``azimuthal_mean_values``, ``reduced_dims``, ``n_face``, and
+        ``_provenance``.
 
     Examples
     --------
@@ -506,6 +529,7 @@ def calculate_azimuthal_mean(
         "outer_radius": outer_radius,
         "radius_step": radius_step,
         "time_index": time_index,
+        "level_index": level_index,
     }
 
     def _local():
@@ -519,6 +543,7 @@ def calculate_azimuthal_mean(
                 outer_radius,
                 radius_step,
                 time_index,
+                level_index,
             ),
             tool="calculate_azimuthal_mean",
             inputs=inputs,
@@ -541,6 +566,7 @@ def calculate_azimuthal_mean(
                 outer_radius,
                 radius_step,
                 time_index,
+                level_index,
             )
         ),
     )

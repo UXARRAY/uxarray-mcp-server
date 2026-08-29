@@ -265,6 +265,7 @@ def _calculate_zonal_mean_local(
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """
     Calculate zonal mean of a face-centered variable along latitude bands.
@@ -283,8 +284,12 @@ def _calculate_zonal_mean_local(
             - list: Explicit latitudes or band edges
         conservative: If True, performs area-weighted averaging over latitude bands.
                      If False, performs intersection-weighted averaging at latitude lines.
-        time_index: Index used to reduce any non-latitude dimension (e.g. time)
-                    so the returned profile is one-dimensional.
+        time_index: Index used to reduce a time-like dimension so the returned
+                    profile is one-dimensional.
+        level_index: Index used to reduce a vertical dimension. Kept separate
+                     from ``time_index`` on purpose: a level is not a time
+                     step, and reusing one selector for both silently returns
+                     the wrong slice.
 
     Returns:
         Dictionary containing:
@@ -292,6 +297,7 @@ def _calculate_zonal_mean_local(
         - latitudes: List of latitude values/bands
         - zonal_mean_values: List of computed zonal mean values
         - conservative: Whether conservative method was used
+        - reduced_dims: Which dimensions were collapsed, and to which index
         - grid_info: Grid summary {n_face, n_node, n_edge}
 
     Example:
@@ -316,7 +322,12 @@ def _calculate_zonal_mean_local(
 
     try:
         result = compute_zonal_mean_stats(
-            uxds, variable_name, lat_spec, conservative, time_index=time_index
+            uxds,
+            variable_name,
+            lat_spec,
+            conservative,
+            time_index=time_index,
+            level_index=level_index,
         )
     except ValueError:
         raise
