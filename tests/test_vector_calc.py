@@ -325,6 +325,14 @@ class TestSphereRadiusWarningCapture:
             "component_warnings"
         ]
 
+    def test_divergence_scale_by_radius_warning_captured(self):
+        ds = _make_wind_dataset(with_units=True)
+        assert "sphere_radius" not in ds.uxgrid.attrs
+        result = compute_divergence(ds, "u", "v", scale_by_radius=True)
+        assert any("sphere_radius" in w for w in result["component_warnings"]), result[
+            "component_warnings"
+        ]
+
     def test_curl_scale_by_radius_false_has_no_sphere_warning(self):
         ds = _make_wind_dataset(with_units=True)
         result = compute_curl(ds, "u", "v", scale_by_radius=False)
@@ -376,6 +384,29 @@ class TestComputeAzimuthalMean:
         )
         assert result["center"]["lon"] == -90.0
         assert result["center"]["lat"] == 25.0
+
+    def test_level_index_selects_that_level(self, multi_level_mesh_files):
+        """``level_index`` reached nothing on this path until now.
+
+        The fixture's level k is uniformly ``100*(k+1)``, so the profile value
+        alone names the level that was averaged.
+        """
+        grid_file, data_file = multi_level_mesh_files
+        uxds = ux.open_dataset(grid_file, data_file)
+        result = compute_azimuthal_mean(
+            uxds,
+            "temperature",
+            center_lon=0.0,
+            center_lat=0.0,
+            outer_radius=30.0,
+            radius_step=10.0,
+            level_index=2,
+        )
+        values = np.asarray(result["azimuthal_mean_values"], dtype=float)
+        finite = values[np.isfinite(values)]
+        assert finite.size > 0
+        assert finite == pytest.approx(300.0)
+        assert result["reduced_dims"]["n_level"]["index"] == 2
 
     def test_missing_variable_raises(self, healpix_wind_dataset):
         with pytest.raises(ValueError, match="not found"):
@@ -543,6 +574,56 @@ class TestScaleByRadius:
         result = compute_curl(healpix_wind_dataset, "u", "v")
         assert result["scale_by_radius"] is True
 
+    def test_divergence_default_requests_radius_scaling(self, healpix_wind_dataset):
+        """UXarray's ``divergence`` takes the same flag as ``curl``; we passed
+        it for curl and gradient but silently dropped it here, so a caller who
+        asked for unit-sphere output got physical output and was never told."""
+        result = compute_divergence(healpix_wind_dataset, "u", "v")
+        assert result["scale_by_radius"] is True
+
+    def test_divergence_honours_scale_by_radius_false(self, healpix_wind_dataset):
+        result = compute_divergence(
+            healpix_wind_dataset, "u", "v", scale_by_radius=False
+        )
+        assert result["scale_by_radius"] is False
+        assert result["scientific_status"]["physical_scaling_requested"] is False
+        assert result["scientific_status"]["physical_scaling_applied"] is False
+
+    def test_remote_divergence_threads_scale_by_radius(self):
+        """The remote dispatch must forward scale_by_radius to the agent."""
+        from uxarray_mcp.tools import vector_calc
+
+        agent = MagicMock()
+        agent.config.endpoint_id = "fake-endpoint"
+        agent.config.endpoint_name = "fake"
+        agent.config.timeout_seconds = 60
+        agent.calculate_divergence_remote.return_value = {
+            "stats": {},
+            "n_face": 1,
+            "scale_by_radius": False,
+            "_provenance": {"warnings": []},
+        }
+
+        with (
+            patch("uxarray_mcp.remote.agent.get_agent", return_value=agent),
+            patch.object(
+                vector_calc, "_endpoint_manager_is_up", return_value=(True, "ok")
+            ),
+            patch.object(vector_calc, "_run_sync", side_effect=lambda f: f()),
+        ):
+            vector_calc.calculate_divergence(
+                "/hpc/grid.nc",
+                "/hpc/data.nc",
+                "u",
+                "v",
+                scale_by_radius=False,
+                use_remote=True,
+                endpoint="improv",
+            )
+
+        args, kwargs = agent.calculate_divergence_remote.call_args
+        assert (False in args) or (kwargs.get("scale_by_radius") is False)
+
     def test_gradient_records_scale_by_radius_flag(self, healpix_wind_dataset):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # grid has no sphere_radius
@@ -614,3 +695,88 @@ def test_prompts_registered_as_tools():
     sep = registry._name_sep
     for name in ("first_look", "vorticity_analysis", "hpc_diagnose"):
         assert f"prompt{sep}{name}" in tools, f"prompt tool {name} missing"
+
+
+# ---------------------------------------------------------------------------
+# reduced_dims disclosure for gradient / curl / divergence
+# ---------------------------------------------------------------------------
+
+
+class TestVectorCalcReducedDims:
+    """A derivative of one slice is not the field's derivative.
+
+    gradient/curl/divergence must collapse every non-face axis before UXarray
+    will differentiate at all, so the answer always describes one time and one
+    level out of however many the file holds. Without ``reduced_dims`` the
+    caller sees only the numbers, which look the same whether they came from
+    the level asked for or from level 0 of forty.
+    """
+
+    def test_gradient_reports_the_slice_it_differentiated(self, time_level_mesh_files):
+        grid_file, data_file = time_level_mesh_files
+        result = calculate_gradient(
+            grid_file, data_file, "temperature", time_index=2, level_index=1
+        )
+        reduced = result["reduced_dims"]
+        assert reduced["time"] == {"kind": "time", "index": 2, "size": 3}
+        assert reduced["n_level"] == {"kind": "level", "index": 1, "size": 4}
+
+    @pytest.mark.parametrize("tool", [calculate_curl, calculate_divergence])
+    def test_curl_and_divergence_report_both_components(
+        self, tool, time_level_mesh_files
+    ):
+        """Both components are sliced; the merged record covers either one."""
+        grid_file, data_file = time_level_mesh_files
+        result = tool(
+            grid_file,
+            data_file,
+            "temperature",
+            "temperature",
+            time_index=1,
+            level_index=3,
+        )
+        reduced = result["reduced_dims"]
+        assert reduced["time"] == {"kind": "time", "index": 1, "size": 3}
+        assert reduced["n_level"] == {"kind": "level", "index": 3, "size": 4}
+
+    def test_size_one_axes_are_not_reported(self, multi_level_mesh_files):
+        """Collapsing a length-1 axis discards nothing, so it is not noise."""
+        grid_file, data_file = multi_level_mesh_files
+        result = calculate_gradient(grid_file, data_file, "temperature", level_index=2)
+        assert result["reduced_dims"] == {
+            "n_level": {"kind": "level", "index": 2, "size": 4}
+        }
+
+    @pytest.mark.parametrize(
+        "worker_name,tool,args",
+        [
+            ("remote_calculate_gradient", calculate_gradient, ("temperature",)),
+            (
+                "remote_calculate_curl",
+                calculate_curl,
+                ("temperature", "temperature"),
+            ),
+            (
+                "remote_calculate_divergence",
+                calculate_divergence,
+                ("temperature", "temperature"),
+            ),
+        ],
+    )
+    def test_worker_selects_the_same_slice_as_local(
+        self, worker_name, tool, args, time_level_mesh_files
+    ):
+        """The worker copies are hand-inlined and can drift from the local one.
+
+        Globus Compute serializes each function body standalone, so the worker
+        cannot import ``domain.dims``. Divergence here means the same request
+        answers differently depending on where it ran.
+        """
+        import uxarray_mcp.remote.compute_functions as cf
+
+        grid_file, data_file = time_level_mesh_files
+        local = tool(grid_file, data_file, *args, time_index=2, level_index=1)
+        remote = getattr(cf, worker_name)(
+            grid_file, data_file, *args, time_index=2, level_index=1
+        )
+        assert remote["reduced_dims"] == local["reduced_dims"]

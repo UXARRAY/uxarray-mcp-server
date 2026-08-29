@@ -542,6 +542,7 @@ def remote_plot_variable(
     vmax: Optional[float] = None,
     title: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Render a face-centered variable plot on the remote HPC node and return base64 PNG.
 
@@ -565,6 +566,11 @@ def remote_plot_variable(
         Colormap maximum.
     title : str | None
         Plot title.
+    time_index : int
+        Index along a time-like dimension.
+    level_index : int
+        Index along a vertical dimension. Independent of ``time_index``:
+        applying one to the other silently plots the wrong slice.
 
     Returns
     -------
@@ -572,6 +578,8 @@ def remote_plot_variable(
         - png_b64: base64-encoded PNG string
         - image_size_bytes: size of the PNG
         - variable_name: plotted variable name
+        - reduced_dims: which non-face dimension was collapsed, and at what
+          index -- a PNG cannot say which slice it shows
         - grid_info: n_face, n_node, n_edge
     """
     import base64
@@ -616,11 +624,34 @@ def remote_plot_variable(
     if not any(d in face_dims for d in uxda.dims):
         raise ValueError(f"Variable '{variable_name}' is not face-centered.")
 
-    extra_dims = [d for d in uxda.dims if d not in face_dims]
-    if extra_dims:
-        uxda = uxda.isel(
-            **{d: 0 if uxda.sizes[d] == 1 else time_index for d in extra_dims}
-        )
+    # Mirrors domain.dims.face_slice_selection. Kept inline because this
+    # function is serialized and shipped to a Globus Compute endpoint that has
+    # no uxarray_mcp install to import from.
+    #
+    # ``time_index`` selects a time axis and nothing else: applying it to a
+    # vertical axis returns level 3 when the caller asked for time step 3.
+    _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
+    _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
+    selection = {}
+    reduced_dims = {}
+    for dim in uxda.dims:
+        if dim in face_dims:
+            continue
+        size = int(uxda.sizes[dim])
+        if size == 1:
+            selection[dim] = 0
+            continue
+        name = str(dim).lower()
+        if "time" in name:
+            kind, index = "time", time_index
+        elif name in _LEVEL_EXACT or any(s in name for s in _LEVEL_SUBSTR):
+            kind, index = "level", level_index
+        else:
+            kind, index = "other", 0
+        selection[dim] = index
+        reduced_dims[str(dim)] = {"kind": kind, "index": index, "size": size}
+    if selection:
+        uxda = uxda.isel(**selection)
 
     import holoviews as hv
 
@@ -662,6 +693,7 @@ def remote_plot_variable(
         "png_b64": base64.b64encode(png_bytes).decode("utf-8"),
         "image_size_bytes": len(png_bytes),
         "variable_name": variable_name,
+        "reduced_dims": reduced_dims,
         "grid_info": {
             "n_face": int(uxds.uxgrid.n_face),
             "n_node": int(uxds.uxgrid.n_node),
@@ -689,6 +721,7 @@ def remote_plot_zonal_mean(
     line_color: str = "#1f77b4",
     title: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Render a zonal mean profile on the remote HPC node and return base64 PNG.
 
@@ -765,6 +798,11 @@ def remote_plot_zonal_mean(
     # helpers do not survive AllCodeStrategies serialization.
     _coord = "latitudes" if "latitudes" in result.coords else result.dims[-1]
     latitudes = result.coords[_coord].values.tolist()
+    # Mirrors domain.dims.face_slice_selection. Inlined because module-level
+    # helpers do not survive AllCodeStrategies serialization -- change both
+    # together; tests/test_physical_fixtures.py pins them to each other.
+    _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
+    _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
     _reduced = {}
     _sel = {}
     for _d in result.dims:
@@ -774,9 +812,15 @@ def remote_plot_zonal_mean(
         if _n == 1:
             _sel[_d] = 0
             continue
-        _i = time_index if "time" in str(_d).lower() else 0
+        _name = str(_d).lower()
+        if "time" in _name:
+            _k, _i = "time", time_index
+        elif _name in _LEVEL_EXACT or any(_s in _name for _s in _LEVEL_SUBSTR):
+            _k, _i = "level", level_index
+        else:
+            _k, _i = "other", 0
         _sel[_d] = _i
-        _reduced[str(_d)] = {"index": _i, "size": _n}
+        _reduced[str(_d)] = {"kind": _k, "index": _i, "size": _n}
     if _sel:
         result = result.isel(**_sel)
     values = result.values.tolist()
@@ -804,6 +848,7 @@ def remote_plot_zonal_mean(
         "variable_name": variable_name,
         "latitudes": latitudes,
         "zonal_mean_values": values,
+        "reduced_dims": _reduced,
         "_worker_runtime": {
             "hostname": __import__("socket").gethostname(),
             "python_version": __import__("platform").python_version(),
@@ -822,6 +867,7 @@ def remote_calculate_zonal_mean(
     lat_spec: Optional[tuple | float | list] = None,
     conservative: bool = False,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Calculate zonal mean on remote HPC node.
 
@@ -885,6 +931,11 @@ def remote_calculate_zonal_mean(
     # AllCodeStrategies serialization.
     _coord = "latitudes" if "latitudes" in result.coords else result.dims[-1]
     latitudes = result.coords[_coord].values.tolist()
+    # Mirrors domain.dims.face_slice_selection. Inlined because module-level
+    # helpers do not survive AllCodeStrategies serialization -- change both
+    # together; tests/test_physical_fixtures.py pins them to each other.
+    _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
+    _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
     _reduced = {}
     _sel = {}
     for _d in result.dims:
@@ -894,9 +945,15 @@ def remote_calculate_zonal_mean(
         if _n == 1:
             _sel[_d] = 0
             continue
-        _i = time_index if "time" in str(_d).lower() else 0
+        _name = str(_d).lower()
+        if "time" in _name:
+            _k, _i = "time", time_index
+        elif _name in _LEVEL_EXACT or any(_s in _name for _s in _LEVEL_SUBSTR):
+            _k, _i = "level", level_index
+        else:
+            _k, _i = "other", 0
         _sel[_d] = _i
-        _reduced[str(_d)] = {"index": _i, "size": _n}
+        _reduced[str(_d)] = {"kind": _k, "index": _i, "size": _n}
     if _sel:
         result = result.isel(**_sel)
 
@@ -1315,21 +1372,36 @@ def remote_calculate_gradient(
     # Inlined (not imported) since this function is serialized whole and
     # shipped to Globus Compute workers.
     _face_dims = {"n_face", "nCells"}
-    _time_dims = ("time", "Time", "time_counter")
-    _level_dims = ("lev", "level", "levels", "plev", "z", "nVertLevels")
+    # Mirrors domain.dims.classify_dim. An exact-name list kept missing real
+    # spellings (``n_level``, ``nlev``, ``num_levels``), which silently pinned
+    # those axes to index 0 here while the local path honored level_index --
+    # the same request answering differently by venue. Inlined because
+    # module-level helpers do not survive AllCodeStrategies serialization;
+    # change both together.
+    _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
+    _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
     _extra = [d for d in var.dims if d not in _face_dims]
+    # Size-1 axes collapse without being reported: nothing was chosen over an
+    # alternative, so there is nothing for the caller to second-guess.
+    _reduced = {}
     if _extra:
         _sel = {}
         for _d in _extra:
-            if var.sizes[_d] == 1:
+            _n = int(var.sizes[_d])
+            if _n == 1:
                 _sel[_d] = 0
-            elif _d in _time_dims:
-                _sel[_d] = time_index
-            elif _d in _level_dims:
-                _sel[_d] = level_index
+                continue
+            _dname = str(_d).lower()
+            if "time" in _dname:
+                _k, _i = "time", time_index
+            elif _dname in _LEVEL_EXACT or any(_s in _dname for _s in _LEVEL_SUBSTR):
+                _k, _i = "level", level_index
             else:
-                _sel[_d] = 0
-        var = var.isel(**_sel)
+                _k, _i = "other", 0
+            _sel[_d] = _i
+            _reduced[str(_d)] = {"kind": _k, "index": _i, "size": _n}
+        if _sel:
+            var = var.isel(**_sel)
 
     # Honor scale_by_radius when the worker's UXarray supports it; otherwise
     # fall back to the unit-sphere call so older workers keep working.
@@ -1374,6 +1446,7 @@ def remote_calculate_gradient(
         "scale_by_radius": applied_scale,
         "interpretation": "zonal (d/dx) and meridional (d/dy) components of the gradient",
         "component_warnings": uxarray_warnings,
+        "reduced_dims": _reduced,
         "scientific_status": {
             "status": "warning" if uxarray_warnings else "complete",
             "physically_interpretable": not uxarray_warnings,
@@ -1439,23 +1512,40 @@ def remote_calculate_curl(
     # Inlined (not imported) since this function is serialized whole and
     # shipped to Globus Compute workers.
     _face_dims = {"n_face", "nCells"}
-    _time_dims = ("time", "Time", "time_counter")
-    _level_dims = ("lev", "level", "levels", "plev", "z", "nVertLevels")
-    for _name, _var in (("u", u), ("v", v)):
+    # Mirrors domain.dims.classify_dim. An exact-name list kept missing real
+    # spellings (``n_level``, ``nlev``, ``num_levels``), which silently pinned
+    # those axes to index 0 here while the local path honored level_index --
+    # the same request answering differently by venue. Inlined because
+    # module-level helpers do not survive AllCodeStrategies serialization;
+    # change both together.
+    _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
+    _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
+    # Both components are sliced the same way whenever they share dims, which
+    # is the normal case; v's entry overwrites u's only where they differ,
+    # matching the local {**u_reduced, **v_reduced} merge.
+    _reduced = {}
+    for _which, _var in (("u", u), ("v", v)):
         _extra = [d for d in _var.dims if d not in _face_dims]
         if not _extra:
             continue
         _sel = {}
         for _d in _extra:
-            if _var.sizes[_d] == 1:
+            _n = int(_var.sizes[_d])
+            if _n == 1:
                 _sel[_d] = 0
-            elif _d in _time_dims:
-                _sel[_d] = time_index
-            elif _d in _level_dims:
-                _sel[_d] = level_index
+                continue
+            _dname = str(_d).lower()
+            if "time" in _dname:
+                _k, _i = "time", time_index
+            elif _dname in _LEVEL_EXACT or any(_s in _dname for _s in _LEVEL_SUBSTR):
+                _k, _i = "level", level_index
             else:
-                _sel[_d] = 0
-        if _name == "u":
+                _k, _i = "other", 0
+            _sel[_d] = _i
+            _reduced[str(_d)] = {"kind": _k, "index": _i, "size": _n}
+        if not _sel:
+            continue
+        if _which == "u":
             u = u.isel(**_sel)
         else:
             v = v.isel(**_sel)
@@ -1529,6 +1619,7 @@ def remote_calculate_curl(
         "scale_by_radius": applied_scale,
         "stats": stats,
         "component_warnings": component_warnings,
+        "reduced_dims": _reduced,
         "scientific_status": {
             "status": "warning" if component_warnings else "complete",
             "physically_interpretable": not component_warnings,
@@ -1553,6 +1644,7 @@ def remote_calculate_divergence(
     data_path: str,
     u_variable: str,
     v_variable: str,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
 ) -> Dict[str, Any]:
@@ -1560,6 +1652,7 @@ def remote_calculate_divergence(
 
     divergence = du/dx + dv/dy
     """
+    import inspect as _inspect
     import os
 
     import numpy as np
@@ -1592,23 +1685,40 @@ def remote_calculate_divergence(
     # Inlined (not imported) since this function is serialized whole and
     # shipped to Globus Compute workers.
     _face_dims = {"n_face", "nCells"}
-    _time_dims = ("time", "Time", "time_counter")
-    _level_dims = ("lev", "level", "levels", "plev", "z", "nVertLevels")
-    for _name, _var in (("u", u), ("v", v)):
+    # Mirrors domain.dims.classify_dim. An exact-name list kept missing real
+    # spellings (``n_level``, ``nlev``, ``num_levels``), which silently pinned
+    # those axes to index 0 here while the local path honored level_index --
+    # the same request answering differently by venue. Inlined because
+    # module-level helpers do not survive AllCodeStrategies serialization;
+    # change both together.
+    _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
+    _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
+    # Both components are sliced the same way whenever they share dims, which
+    # is the normal case; v's entry overwrites u's only where they differ,
+    # matching the local {**u_reduced, **v_reduced} merge.
+    _reduced = {}
+    for _which, _var in (("u", u), ("v", v)):
         _extra = [d for d in _var.dims if d not in _face_dims]
         if not _extra:
             continue
         _sel = {}
         for _d in _extra:
-            if _var.sizes[_d] == 1:
+            _n = int(_var.sizes[_d])
+            if _n == 1:
                 _sel[_d] = 0
-            elif _d in _time_dims:
-                _sel[_d] = time_index
-            elif _d in _level_dims:
-                _sel[_d] = level_index
+                continue
+            _dname = str(_d).lower()
+            if "time" in _dname:
+                _k, _i = "time", time_index
+            elif _dname in _LEVEL_EXACT or any(_s in _dname for _s in _LEVEL_SUBSTR):
+                _k, _i = "level", level_index
             else:
-                _sel[_d] = 0
-        if _name == "u":
+                _k, _i = "other", 0
+            _sel[_d] = _i
+            _reduced[str(_d)] = {"kind": _k, "index": _i, "size": _n}
+        if not _sel:
+            continue
+        if _which == "u":
             u = u.isel(**_sel)
         else:
             v = v.isel(**_sel)
@@ -1637,14 +1747,26 @@ def remote_calculate_divergence(
 
     import warnings as _warnings_module
 
+    applied_scale = False
     with _warnings_module.catch_warnings(record=True) as _caught:
         _warnings_module.simplefilter("always")
-        result = u.divergence(v)
+        if "scale_by_radius" in _inspect.signature(u.divergence).parameters:
+            result = u.divergence(v, scale_by_radius=scale_by_radius)
+            applied_scale = bool(scale_by_radius)
+        else:
+            result = u.divergence(v)
+            if scale_by_radius:
+                component_warnings.append(
+                    "Worker UXarray does not support scale_by_radius; returned "
+                    "the unit-sphere divergence."
+                )
+                warning_codes.append("SCALE_BY_RADIUS_UNSUPPORTED")
         for _warning in _caught:
             _message = str(_warning.message)
             if _message not in component_warnings:
                 component_warnings.append(_message)
                 warning_codes.append("SPHERE_RADIUS_UNAVAILABLE")
+                applied_scale = False
     vals = result.values
     finite = vals[np.isfinite(vals)]
     stats: Dict[str, Any] = (
@@ -1662,11 +1784,15 @@ def remote_calculate_divergence(
         "v_variable": v_variable,
         "interpretation": "horizontal divergence du/dx + dv/dy",
         "n_face": int(uxds.uxgrid.n_face),
+        "scale_by_radius": applied_scale,
         "stats": stats,
         "component_warnings": component_warnings,
+        "reduced_dims": _reduced,
         "scientific_status": {
             "status": "warning" if component_warnings else "complete",
             "physically_interpretable": not component_warnings,
+            "physical_scaling_requested": bool(scale_by_radius),
+            "physical_scaling_applied": bool(applied_scale),
             "warning_codes": warning_codes,
             "warnings": component_warnings,
         },
@@ -1690,6 +1816,7 @@ def remote_calculate_azimuthal_mean(
     outer_radius: float,
     radius_step: float,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Compute the azimuthal (radial) mean around a centre point on HPC."""
     import os
@@ -1727,6 +1854,11 @@ def remote_calculate_azimuthal_mean(
     # AllCodeStrategies serialization.
     _coord = "radius" if "radius" in result.coords else result.dims[-1]
     radii = result.coords[_coord].values.tolist()
+    # Mirrors domain.dims.face_slice_selection. Inlined because module-level
+    # helpers do not survive AllCodeStrategies serialization -- change both
+    # together; tests/test_physical_fixtures.py pins them to each other.
+    _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
+    _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
     _reduced = {}
     _sel = {}
     for _d in result.dims:
@@ -1736,9 +1868,15 @@ def remote_calculate_azimuthal_mean(
         if _n == 1:
             _sel[_d] = 0
             continue
-        _i = time_index if "time" in str(_d).lower() else 0
+        _name = str(_d).lower()
+        if "time" in _name:
+            _k, _i = "time", time_index
+        elif _name in _LEVEL_EXACT or any(_s in _name for _s in _LEVEL_SUBSTR):
+            _k, _i = "level", level_index
+        else:
+            _k, _i = "other", 0
         _sel[_d] = _i
-        _reduced[str(_d)] = {"index": _i, "size": _n}
+        _reduced[str(_d)] = {"kind": _k, "index": _i, "size": _n}
     if _sel:
         result = result.isel(**_sel)
     values = result.values.tolist()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import warnings as _warnings_module
 from typing import Any, Callable, TypeVar
 
+from uxarray_mcp.domain.dims import face_slice_selection
 from uxarray_mcp.domain.zonal import extract_profile
 
 _T = TypeVar("_T")
@@ -49,21 +50,12 @@ _VELOCITY_LIKE_UNIT_HINTS = (
 )
 
 
-_FACE_DIMS = {"n_face", "nCells"}
-
-# Common non-spatial dimension names, in the order we prefer to select from
-# when a caller gives a single generic index but the data has both a time and
-# a vertical dimension (rare, but keeps behavior predictable).
-_TIME_DIM_NAMES = ("time", "Time", "time_counter")
-_LEVEL_DIM_NAMES = ("lev", "level", "levels", "plev", "z", "nVertLevels")
-
-
 def _reduce_to_face(
     var: Any,
     *,
     time_index: int = 0,
     level_index: int = 0,
-) -> Any:
+) -> tuple[Any, dict]:
     """Select a single time/level slice so ``var`` is 1-D face-centered.
 
     UXarray's vector-calculus operators (``.curl()``, ``.divergence()``,
@@ -75,27 +67,20 @@ def _reduce_to_face(
     the file themselves.
 
     Any extra dimension not recognized as time-like or level-like, and not
-    size-1, is squeezed via index 0 with a caveat left to the caller to
-    surface as a warning if desired.
+    size-1, is squeezed via index 0.
+
+    Returns ``(reduced_var, reduced_dims)``. The second element names every
+    axis that was collapsed, the index used, and how many were available --
+    a derivative computed from one level of a 40-level field is not the
+    field's derivative, and the caller cannot tell the difference from the
+    numbers alone.
     """
-    extra = [d for d in var.dims if d not in _FACE_DIMS]
-    if not extra:
-        return var
-
-    selection: dict[str, int] = {}
-    for dim in extra:
-        if var.sizes[dim] == 1:
-            selection[dim] = 0
-        elif dim in _TIME_DIM_NAMES:
-            selection[dim] = time_index
-        elif dim in _LEVEL_DIM_NAMES:
-            selection[dim] = level_index
-        else:
-            # Unrecognized extra dimension: fall back to the first slice
-            # rather than erroring, matching plotting.py's existing behavior.
-            selection[dim] = 0
-
-    return var.isel(**selection)
+    selection, reduced = face_slice_selection(
+        var.sizes, time_index=time_index, level_index=level_index
+    )
+    if not selection:
+        return var, reduced
+    return var.isel(**selection), reduced
 
 
 def _vector_component_warnings(
@@ -225,7 +210,8 @@ def compute_gradient(
     -------
     dict
         Keys: variable_name, zonal_component_name, meridional_component_name,
-        n_face, stats (min/max/mean for each component).
+        n_face, stats (min/max/mean for each component), reduced_dims (which
+        time/level axes were collapsed to reach a single face-centered slice).
     """
     if variable_name not in uxds.data_vars:
         raise ValueError(
@@ -237,7 +223,9 @@ def compute_gradient(
             f"Variable '{variable_name}' is not face-centered. "
             "Gradient requires face-centered data."
         )
-    var = _reduce_to_face(var, time_index=time_index, level_index=level_index)
+    var, reduced_dims = _reduce_to_face(
+        var, time_index=time_index, level_index=level_index
+    )
 
     import numpy as np
 
@@ -275,6 +263,7 @@ def compute_gradient(
         "scale_by_radius": bool(scale_by_radius),
         "interpretation": "zonal (∂/∂x) and meridional (∂/∂y) components of the gradient",
         "component_warnings": uxarray_warnings,
+        "reduced_dims": reduced_dims,
     }
     from uxarray_mcp.provenance import attach_scientific_status
 
@@ -338,8 +327,12 @@ def compute_curl(
                 f"Variable '{name}' is not face-centered. "
                 "Curl requires face-centered vector components."
             )
-    u = _reduce_to_face(u, time_index=time_index, level_index=level_index)
-    v = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    u, u_reduced = _reduce_to_face(u, time_index=time_index, level_index=level_index)
+    v, v_reduced = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    # Both components are sliced the same way whenever they share dims, which
+    # is the normal case; merging covers the mismatched one rather than
+    # reporting only whatever u happened to have.
+    reduced_dims = {**u_reduced, **v_reduced}
 
     import numpy as np
 
@@ -387,6 +380,7 @@ def compute_curl(
         "stats": stats,
         "component_warnings": component_warnings,
         "component_evidence": component_evidence,
+        "reduced_dims": reduced_dims,
     }
     from uxarray_mcp.provenance import attach_scientific_status
 
@@ -407,6 +401,7 @@ def compute_divergence(
     uxds: Any,
     u_variable: str,
     v_variable: str,
+    scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
 ) -> dict:
@@ -426,6 +421,10 @@ def compute_divergence(
         Zonal (east–west) component variable name.
     v_variable : str
         Meridional (north–south) component variable name.
+    scale_by_radius : bool, default True
+        Divide by the sphere radius so the result carries physical units.
+        Requires the grid to declare ``sphere_radius``; UXarray warns and
+        leaves the result on the unit sphere when it does not.
     time_index : int, default 0
         Time index to select if the components carry a leading time
         dimension. Ignored if there is no time dimension.
@@ -437,7 +436,10 @@ def compute_divergence(
     Returns
     -------
     dict
-        Keys: u_variable, v_variable, n_face, stats (min/max/mean/std).
+        Keys: u_variable, v_variable, n_face, stats (min/max/mean/std),
+        scale_by_radius (the value actually passed to UXarray),
+        reduced_dims (which time/level axes were collapsed to reach a single
+        face-centered slice).
     """
     for name in (u_variable, v_variable):
         if name not in uxds.data_vars:
@@ -452,8 +454,9 @@ def compute_divergence(
                 f"Variable '{name}' is not face-centered. "
                 "Divergence requires face-centered vector components."
             )
-    u = _reduce_to_face(u, time_index=time_index, level_index=level_index)
-    v = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    u, u_reduced = _reduce_to_face(u, time_index=time_index, level_index=level_index)
+    v, v_reduced = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    reduced_dims = {**u_reduced, **v_reduced}
 
     import numpy as np
 
@@ -462,7 +465,9 @@ def compute_divergence(
     )
     component_evidence = _vector_component_evidence(u, v)
 
-    result, uxarray_warnings = _call_capturing_warnings(lambda: u.divergence(v))
+    result, uxarray_warnings = _call_capturing_warnings(
+        lambda: u.divergence(v, scale_by_radius=scale_by_radius)
+    )
     for warning in uxarray_warnings:
         if warning not in component_warnings:
             component_warnings.append(warning)
@@ -487,14 +492,22 @@ def compute_divergence(
         "v_variable": v_variable,
         "interpretation": "horizontal divergence ∂u/∂x + ∂v/∂y",
         "n_face": int(uxds.uxgrid.n_face),
+        "scale_by_radius": bool(scale_by_radius),
         "stats": stats,
         "component_warnings": component_warnings,
         "component_evidence": component_evidence,
+        "reduced_dims": reduced_dims,
     }
     from uxarray_mcp.provenance import attach_scientific_status
 
     return attach_scientific_status(
-        output, warnings=component_warnings, warning_codes=warning_codes
+        output,
+        warnings=component_warnings,
+        warning_codes=warning_codes,
+        extra={
+            "physical_scaling_requested": bool(scale_by_radius),
+            "physical_scaling_applied": bool(scale_by_radius and not uxarray_warnings),
+        },
     )
 
 
@@ -506,6 +519,7 @@ def compute_azimuthal_mean(
     outer_radius: float,
     radius_step: float,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> dict:
     """Compute the azimuthal (radial) mean around a centre point.
 
@@ -529,8 +543,11 @@ def compute_azimuthal_mean(
     radius_step : float
         Radial bin width in great-circle degrees.
     time_index : int
-        Index used to reduce any non-radial dimension (e.g. time) so the
+        Index used to reduce a time-like non-radial dimension so the
         returned profile is 1-D.
+    level_index : int
+        Index used to reduce a vertical non-radial dimension. Separate from
+        ``time_index``: a level is not a time step.
 
     Returns
     -------
@@ -557,7 +574,7 @@ def compute_azimuthal_mean(
     # ``radius`` replaces the face axis, which is not necessarily axis 0, so
     # the coordinate is looked up by name rather than by position.
     radii, values, reduced_dims = extract_profile(
-        result, "radius", time_index=time_index
+        result, "radius", time_index=time_index, level_index=level_index
     )
 
     return {

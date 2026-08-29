@@ -22,9 +22,11 @@ in the tool result:
   describing the acknowledgment we need
 - ``request_state`` is an opaque token the caller passes back verbatim
 
-Why mirror it rather than emit it: ``toolregistry-server`` serializes
-tool returns into ``TextContent``, so we cannot hand a real
-``InputRequiredResult`` to the transport today. Building the payload in
+Why mirror it rather than emit it: the adapter recognizes only the five
+content-block types in :mod:`uxarray_mcp.content_blocks`, and an
+``input_required`` result is not one of them -- a real
+``InputRequiredResult`` would be serialized into ``TextContent`` rather
+than reaching the transport as an elicitation. Building the payload in
 the spec's shape now means the day the adapter grows MRTR support this
 becomes a passthrough rather than a redesign.
 
@@ -130,7 +132,7 @@ def evaluate_vector_preconditions(
             "'northward_sea_water_velocity') so the pairing is unambiguous.",
         ),
     ]
-    if operation == "curl":
+    if operation in {"curl", "divergence"}:
         checks.append(
             _check(
                 "radius_scaling",

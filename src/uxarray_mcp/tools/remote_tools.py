@@ -8,8 +8,14 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from mcp.types import ImageContent, TextContent
-
+from uxarray_mcp.content_blocks import (
+    block_image_data,
+    block_text,
+    block_uri,
+    image_block,
+    resource_link_block,
+    text_block,
+)
 from uxarray_mcp.domain.mesh import is_healpix_spec
 from uxarray_mcp.state import OperationTracker
 
@@ -177,14 +183,11 @@ def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
     biggest meshes.
     """
     metadata = {key: value for key, value in result.items() if key != "png_b64"}
-    text = TextContent(type="text", text=json.dumps(metadata, indent=2))
+    text = text_block(json.dumps(metadata, indent=2))
 
     b64 = result.get("png_b64")
     if b64 is not None:
-        return [
-            ImageContent(type="image", data=b64, mimeType="image/png"),
-            text,
-        ]
+        return [image_block(b64), text]
 
     uri = result.get("image_uri")
     if uri is None:
@@ -192,20 +195,10 @@ def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
         # still carries the numbers the caller asked for.
         return [text]
 
-    from mcp.types import ResourceLink
-
+    # The byte count the adapter would drop off the link is already in
+    # ``metadata`` as image_size_bytes, so nothing is lost by omitting it here.
     name = str(uri).rsplit("/", 1)[-1] or "plot.png"
-    return [
-        ResourceLink(
-            type="resource_link",
-            uri=uri,
-            name=name,
-            title="plot",
-            mimeType="image/png",
-            size=result.get("image_size_bytes"),
-        ),
-        text,
-    ]
+    return [resource_link_block(str(uri), name, mime_type="image/png"), text]
 
 
 def _image_payload(img: Any, meta: dict) -> Dict[str, Any]:
@@ -213,13 +206,13 @@ def _image_payload(img: Any, meta: dict) -> Dict[str, Any]:
 
     A large figure is handed back as a ``resource_link`` rather than
     inlined, so ``png_b64`` is absent and the URI is what the caller
-    follows. Reading ``.data`` unconditionally raised on exactly those
-    plots, which meant the biggest meshes -- the ones most worth looking
-    at -- failed here.
+    follows. Reading the image data unconditionally raised on exactly
+    those plots, which meant the biggest meshes -- the ones most worth
+    looking at -- failed here.
     """
     import base64
 
-    b64 = getattr(img, "data", None)
+    b64 = block_image_data(img)
     if b64 is not None:
         return {
             "png_b64": b64,
@@ -227,12 +220,14 @@ def _image_payload(img: Any, meta: dict) -> Dict[str, Any]:
                 "image_size_bytes", len(base64.b64decode(b64))
             ),
         }
-    uri = getattr(img, "uri", None)
+    uri = block_uri(img)
     return {
         "png_b64": None,
-        "image_uri": str(uri) if uri is not None else None,
+        "image_uri": uri,
         "image_delivery": "resource_link",
-        "image_size_bytes": meta.get("image_size_bytes") or getattr(img, "size", None),
+        # The block itself never carries a size -- the adapter drops that
+        # field -- so the byte count is only ever in the metadata.
+        "image_size_bytes": meta.get("image_size_bytes"),
     }
 
 
@@ -431,6 +426,7 @@ def calculate_zonal_mean(
     endpoint: str | None = None,
     session_id: str | None = None,
     time_index: int = 0,
+    level_index: int = 0,
 ) -> Dict[str, Any]:
     """Calculate zonal mean with optional HPC execution.
 
@@ -449,8 +445,12 @@ def calculate_zonal_mean(
     use_remote : bool
         If True and HPC is configured, execute on remote endpoint
     time_index : int
-        Index used to reduce any non-latitude dimension (e.g. time) so the
-        returned profile is one-dimensional.
+        Index used to reduce a time-like dimension so the returned profile is
+        one-dimensional.
+    level_index : int
+        Index used to reduce a vertical dimension. Separate from
+        ``time_index``: a level is not a time step, and one selector for both
+        silently returns the wrong slice.
 
     Returns
     -------
@@ -460,6 +460,7 @@ def calculate_zonal_mean(
         - latitudes: List of latitude values
         - zonal_mean_values: List of zonal mean values
         - conservative: Whether conservative method was used
+        - reduced_dims: Which dimensions were collapsed, and to which index
         - grid_info: Grid summary
 
     Examples
@@ -481,7 +482,13 @@ def calculate_zonal_mean(
         path_hint=grid_path,
         session_id=session_id,
         local_call=lambda: _calculate_zonal_mean_local(
-            grid_path, data_path, variable_name, lat_spec, conservative, time_index
+            grid_path,
+            data_path,
+            variable_name,
+            lat_spec,
+            conservative,
+            time_index,
+            level_index,
         ),
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_zonal_mean_remote(
@@ -492,6 +499,7 @@ def calculate_zonal_mean(
                 conservative,
                 use_remote,
                 time_index,
+                level_index,
             )
         ),
     )
@@ -549,9 +557,10 @@ def plot_mesh(
         import json
 
         items = _plot_mesh_local(resolved_grid, width=width, height=height)
-        # _plot_mesh_local returns [ImageContent, TextContent]; extract png_b64 + metadata
+        # _plot_mesh_local returns [image|resource_link, text] blocks; unpack
+        # the bytes-or-URI and the metadata back out of them.
         img = items[0]
-        meta = json.loads(items[1].text)
+        meta = json.loads(block_text(items[1]) or "{}")
         return {
             **_image_payload(img, meta),
             "grid_info": meta.get("grid_info", {}),
@@ -584,6 +593,7 @@ def plot_variable(
     vmax: Optional[float] = None,
     title: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
@@ -617,6 +627,11 @@ def plot_variable(
         Which time step to plot when the variable has a Time dimension
         (default 0, i.e. the first step). Size-1 time dimensions are
         always squeezed automatically regardless of this value.
+    level_index : int
+        Which vertical level to plot when the variable has a level
+        dimension (default 0). A level is not a time step: this index is
+        applied only to level-like dimensions, and ``time_index`` only to
+        time-like ones.
     use_remote : bool
         If True and HPC is configured, render on the remote endpoint.
     session_id, dataset_handle : str | None
@@ -630,6 +645,8 @@ def plot_variable(
         - png_b64: Base64-encoded PNG string
         - image_size_bytes: PNG size in bytes
         - variable_name: Name of the plotted variable
+        - reduced_dims: Which non-face dimensions were collapsed to make
+          the 2-D picture, and at which index -- the PNG itself cannot say
         - grid_info: {n_face, n_node, n_edge}
         - execution_venue: "local" or "hpc:<endpoint-name>"
     """
@@ -653,12 +670,17 @@ def plot_variable(
             vmax=vmax,
             title=title,
             time_index=time_index,
+            level_index=level_index,
         )
         img = items[0]
-        meta = json.loads(items[1].text)
+        meta = json.loads(block_text(items[1]) or "{}")
         return {
             **_image_payload(img, meta),
             "variable_name": meta.get("variable_name", variable_name),
+            # Forwarded rather than recomputed: this is the only record of
+            # which slice the PNG shows, and dropping it here would leave
+            # the caller unable to tell one level from the whole field.
+            "reduced_dims": meta.get("reduced_dims", {}),
             "grid_info": meta.get("grid_info", {}),
             "execution_venue": "local",
             "_provenance": meta.get("_provenance", {}),
@@ -683,6 +705,7 @@ def plot_variable(
                 vmax,
                 title,
                 time_index,
+                level_index,
                 use_remote,
             )
         ),
@@ -701,6 +724,7 @@ def plot_zonal_mean(
     line_color: str = "#1f77b4",
     title: Optional[str] = None,
     time_index: int = 0,
+    level_index: int = 0,
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
@@ -730,6 +754,11 @@ def plot_zonal_mean(
         Matplotlib color for the profile line (default "#1f77b4").
     title : str | None
         Custom plot title.
+    time_index : int
+        Index used to reduce a time-like dimension.
+    level_index : int
+        Index used to reduce a vertical dimension. Separate from
+        ``time_index`` so neither selector reaches the other's axis.
     use_remote : bool
         If True and HPC is configured, render on the remote endpoint.
     session_id, dataset_handle : str | None
@@ -745,6 +774,7 @@ def plot_zonal_mean(
         - variable_name: Name of the plotted variable
         - latitudes: List of latitude values
         - zonal_mean_values: List of zonal mean values
+        - reduced_dims: Which dimensions were collapsed, and to which index
         - execution_venue: "local" or "hpc:<endpoint-name>"
     """
     from .plotting import _plot_zonal_mean_local, _resolve_plot_paths
@@ -767,9 +797,10 @@ def plot_zonal_mean(
             line_color=line_color,
             title=title,
             time_index=time_index,
+            level_index=level_index,
         )
         img = items[0]
-        meta = json.loads(items[1].text)
+        meta = json.loads(block_text(items[1]) or "{}")
         return {
             **_image_payload(img, meta),
             "variable_name": meta.get("variable_name", variable_name),
@@ -800,6 +831,7 @@ def plot_zonal_mean(
                 title,
                 use_remote,
                 time_index,
+                level_index,
             )
         ),
     )

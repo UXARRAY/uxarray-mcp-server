@@ -121,6 +121,7 @@ def test_supported_vector_is_physically_interpretable():
                 "units_supported": True,
                 "component_identity_supported": True,
             },
+            "scale_by_radius": True,
         },
     )
 
@@ -137,6 +138,27 @@ def test_unscaled_curl_refuses_on_the_radius_scaling_precondition():
     with pytest.raises(PreconditionRefusal) as excinfo:
         _finalize_analysis_result(
             "curl",
+            {
+                "component_warnings": [],
+                "component_evidence": {
+                    "units_supported": True,
+                    "component_identity_supported": True,
+                },
+                "scale_by_radius": False,
+            },
+        )
+
+    assert "radius_scaling" in [
+        c["id"] for c in excinfo.value.payload["refusal"]["failed_checks"]
+    ]
+
+
+def test_unscaled_divergence_refuses_on_the_radius_scaling_precondition():
+    """Divergence takes ``scale_by_radius`` exactly as curl does, so unit-sphere
+    output must be refused for it too rather than returned as if physical."""
+    with pytest.raises(PreconditionRefusal) as excinfo:
+        _finalize_analysis_result(
+            "divergence",
             {
                 "component_warnings": [],
                 "component_evidence": {

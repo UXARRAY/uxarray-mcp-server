@@ -133,7 +133,9 @@ class TestVerticalCoordinate:
         # The collapse is disclosed, not silent.
         reduced = result["reduced_dims"]
         assert "n_level" in reduced, reduced
-        assert reduced["n_level"] == {"index": 0, "size": 4}
+        # ``kind`` is what tells the caller which selector reaches this axis:
+        # "level" means level_index, not time_index, moves it.
+        assert reduced["n_level"] == {"kind": "level", "index": 0, "size": 4}
 
     def test_remote_zonal_mean_collapses_the_same_axis_as_local(
         self, state_dir, multi_level_mesh_files

@@ -44,12 +44,17 @@ class TestVectorPreconditions:
         ]
         assert all(c["passed"] for c in checks)
 
-    def test_divergence_does_not_require_radius_scaling(self):
+    def test_divergence_requires_radius_scaling_like_curl(self):
+        """UXarray's ``divergence`` takes ``scale_by_radius`` just as ``curl``
+        does, so an unscaled divergence is unit-sphere output for the same
+        reason and must be refused the same way."""
         checks = evaluate_vector_preconditions(
-            "divergence", "uo", "vo", VELOCITY_EVIDENCE, None
+            "divergence", "uo", "vo", VELOCITY_EVIDENCE, False
         )
 
-        assert "radius_scaling" not in [c["id"] for c in checks]
+        radius = next(c for c in checks if c["id"] == "radius_scaling")
+        assert not radius["passed"]
+        assert all(c["passed"] for c in checks if c["id"] != "radius_scaling")
 
     def test_same_field_as_both_components_fails(self):
         checks = evaluate_vector_preconditions(

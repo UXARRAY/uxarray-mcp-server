@@ -212,6 +212,7 @@ __marimo__/
 
 # Local scratch — generated artifacts, debug probes
 tmp/
+workflow_state.txt
 
 # Companion paper/poster (separate git repo at outputs/)
 outputs/

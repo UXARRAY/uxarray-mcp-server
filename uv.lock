@@ -1834,7 +1834,7 @@ wheels = [
 
 [[package]]
 name = "mcp"
-version = "2.0.0"
+version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1852,22 +1852,22 @@ dependencies = [
     { name = "typing-inspection" },
     { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/74/33/32d4dff2c95bb5d897c3ef4c83649a08996b17b58f0a326d2495d4c81179/mcp-2.0.0.tar.gz", hash = "sha256:0f440e735c13ece8bb19bc62cf0b86f4313448432fbb77d35e14034f4e050728", size = 1662284, upload-time = "2026-07-28T13:45:32.346Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/6e/21fb8e5d579dbe21d96ea4d5034200d46d8bdf2261053b5bd041f3c2f612/mcp-2.1.1.tar.gz", hash = "sha256:50b7ba1ebbe117008ea7bdd288234043e69c20b403d6851d19661e6d431a75ef", size = 3984589, upload-time = "2026-08-25T16:14:02.376Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/67/72/7d7897418912c1d12e87556630dfb7bf0eac71160e9bef8b447960804ee3/mcp-2.0.0-py3-none-any.whl", hash = "sha256:1cb4c75d2d2c7b8c1d756355e5d82a39f2822cc7f13e22a2051d7ca3592349d6", size = 349980, upload-time = "2026-07-28T13:45:28.853Z" },
+    { url = "https://files.pythonhosted.org/packages/50/af/8644cc5fa26a59afd2df2e98eeb19e72926887fa4b7441aba4ff661140db/mcp-2.1.1-py3-none-any.whl", hash = "sha256:1c6c31c5d6471c58db76af3af8af67f46d11d01f0a59077d0a308cbdb3d3e915", size = 357912, upload-time = "2026-08-25T16:13:59.024Z" },
 ]
 
 [[package]]
 name = "mcp-types"
-version = "2.0.0"
+version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bb/56/9b8e1c152f61f6c6b07c4b5896c88c7d0ae90bac6ee6306f852fcc5c1eb0/mcp_types-2.0.0.tar.gz", hash = "sha256:d7d939b9285c9961ae8866ba75ef85da34d12bafe276efbf4eb6a131786d8379", size = 66632, upload-time = "2026-07-28T13:45:33.804Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/dd/1c4417dc0b722c23a1669032d5f044e41170fe5d4773b488a50fcce98c32/mcp_types-2.1.1.tar.gz", hash = "sha256:77dcbe48fba73cca71a673f2646a5f037a017b7a0a07ac89cec1113028890eda", size = 66674, upload-time = "2026-08-25T16:14:03.861Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/4c/c78d78c3d52b0ac594ad7cc8ef5972adfe070e3597a8a4c6ce0cd39196ea/mcp_types-2.0.0-py3-none-any.whl", hash = "sha256:6b2de797ca2797f568b79529e1b25948e34de511bcc0bd82fef1039a6d1b8eb0", size = 69649, upload-time = "2026-07-28T13:45:30.713Z" },
+    { url = "https://files.pythonhosted.org/packages/71/d0/242e63c510f4a17381f55b1549a3f94f5687a0595984febd2b6f87a687a0/mcp_types-2.1.1-py3-none-any.whl", hash = "sha256:26f9f7f03f2a5730717a5b98e2ab7eb640ac352d05a00cdc725c311864778295", size = 69656, upload-time = "2026-08-25T16:14:00.667Z" },
 ]
 
 [[package]]
@@ -3866,28 +3866,28 @@ wheels = [
 
 [[package]]
 name = "toolregistry"
-version = "0.15.0"
+version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
     { name = "llm-rosetta" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2b/eb/d9a2d1c6bcebcb7505e61be25702e17acc4620099db95e136a11a223b1df/toolregistry-0.15.0.tar.gz", hash = "sha256:4978ab346ce27464fba5ba7f87fea0b4784877de23f54452662f2aa3d46c2046", size = 314820, upload-time = "2026-08-06T00:08:50.735Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/67/608a9e6282da35b469d9e9d5663889231c7a688d1641080686fe2c2ec992/toolregistry-0.16.0.tar.gz", hash = "sha256:adb3ab118aafd9db36267f6ba964b53c08470c15fd94bbeb4ae56d9b79c7478e", size = 317264, upload-time = "2026-08-25T19:32:45.18Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1b/8d/3bdee67ad4b9752f9c822c1f8cfd7b9b339a19fb70f780e6d0aa01997f3a/toolregistry-0.15.0-py3-none-any.whl", hash = "sha256:e6fa6183422f4ad9d2afb5f3f3e72f84ea7646e5fd1619a2e0744e10ad7ae468", size = 251013, upload-time = "2026-08-06T00:08:49.288Z" },
+    { url = "https://files.pythonhosted.org/packages/40/c2/dea5b709cec87c9e2d9949099251410b06ea7938cabc40bd3159ab38f44b/toolregistry-0.16.0-py3-none-any.whl", hash = "sha256:f2a88c40b620e2c9f31b5faa7a56899d88ee12fedba774381c4083ec39b18ac1", size = 252530, upload-time = "2026-08-25T19:32:43.713Z" },
 ]
 
 [[package]]
 name = "toolregistry-server"
-version = "0.4.3"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "toolregistry" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/9e/e89bca4f8b7997f121d2962dcd979712cc515eab34175d7fa576a3377a36/toolregistry_server-0.4.3.tar.gz", hash = "sha256:00a04151ff97d3054a8048a09a862df1af3e9105e7bb0f990fbaa1d529577955", size = 75891, upload-time = "2026-08-06T00:24:45.12Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/39/837d2186c580f28b4b57ee89edd38dfe771ac8fb932b9c04eb4199f67805/toolregistry_server-0.5.0.tar.gz", hash = "sha256:c534de48dbee6472b42fad9396dfcde0a7a5333b1b77161087ebc5781b000ffb", size = 79969, upload-time = "2026-08-25T20:46:50.568Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/65/7b1d1290b561dc18d5c01e41226f3143465a153dc7792b220c2078263ae9/toolregistry_server-0.4.3-py3-none-any.whl", hash = "sha256:484715d629930f6815413bb4358701dda87bc8aa3770b65bc79565eac7e08714", size = 62552, upload-time = "2026-08-06T00:24:43.647Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/e6/91de86891a07d85a61388625f660e40da5c1ad3a0dd2e3ba337597106d3c/toolregistry_server-0.5.0-py3-none-any.whl", hash = "sha256:59c1ba1fdd543f79be827cf7c04c3238dd22c4889445a5ba7c76cb2c14878018", size = 64439, upload-time = "2026-08-25T20:46:49.426Z" },
 ]
 
 [package.optional-dependencies]
@@ -4109,6 +4109,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "mcp" },
     { name = "pyyaml" },
+    { name = "toolregistry" },
     { name = "toolregistry-server", extra = ["mcp"] },
     { name = "uxarray" },
 ]
@@ -4148,8 +4149,9 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0" },
     { name = "sphinx-book-theme", marker = "extra == 'docs'", specifier = ">=1.1.0" },
-    { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.4.3" },
-    { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.4.3" },
+    { name = "toolregistry", specifier = ">=0.16.0" },
+    { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.5.0" },
+    { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.5.0" },
     { name = "uxarray", specifier = ">=2026.8.0" },
 ]
 provides-extras = ["openapi", "hpc", "docs"]
