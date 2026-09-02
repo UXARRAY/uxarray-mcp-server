@@ -4067,7 +4067,7 @@ wheels = [
 
 [[package]]
 name = "uxarray"
-version = "2026.8.0"
+version = "2026.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "antimeridian" },
@@ -4095,14 +4095,14 @@ dependencies = [
     { name = "spatialpandas" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/53/4f/b863585effaa4776998cdcabe2a33bc928cefb468c7eb5161f1122ba46cd/uxarray-2026.8.0.tar.gz", hash = "sha256:90f1ad0abc5c3d1b3bf49c78d1f0fb1f29996ab140b83ea53b037e9d1585183a", size = 221714, upload-time = "2026-08-18T00:56:01.976Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/7a/da84d50b9f86b90c85ba8698ac10560ed2cf75ae959d038a5d0de310afe6/uxarray-2026.8.1.tar.gz", hash = "sha256:6ac97991f6115dc4c9f4f15c0979184c447d0c465fb4e5fbcfa03d2dfb907714", size = 238360, upload-time = "2026-08-29T05:27:40.596Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c5/b3/ce31626b0e5c531a6e5fa4cd6cd9d60ce6922b8f19fd2fb6025dec7eb88f/uxarray-2026.8.0-py3-none-any.whl", hash = "sha256:2958c1cfec82ec83ff52cf94ebcd6513aa2d93e349fd7b400ba8a57786d0f0b4", size = 244440, upload-time = "2026-08-18T00:56:00.002Z" },
+    { url = "https://files.pythonhosted.org/packages/76/05/ef2d64b6a271abd435fb4dc565e3464c1597073e8c50794cd81a005274e5/uxarray-2026.8.1-py3-none-any.whl", hash = "sha256:5c5613dfc31ec3bd5a7498b992ed5dd7b9b46503e28caa2c92b42fe0e3b912cf", size = 262345, upload-time = "2026-08-29T05:27:38.736Z" },
 ]
 
 [[package]]
 name = "uxarray-mcp"
-version = "0.2.2"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "holoviews" },
@@ -4152,7 +4152,7 @@ requires-dist = [
     { name = "toolregistry", specifier = ">=0.16.0" },
     { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.5.0" },
     { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.5.0" },
-    { name = "uxarray", specifier = ">=2026.8.0" },
+    { name = "uxarray", specifier = ">=2026.8.1" },
 ]
 provides-extras = ["openapi", "hpc", "docs"]
 

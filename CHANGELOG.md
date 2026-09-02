@@ -3,6 +3,33 @@
 All notable changes are recorded here. Dates are ISO 8601 (UTC). The project
 uses Semantic Versioning for public releases.
 
+## Unreleased
+
+### Changed
+- Require `uxarray>=2026.8.1` (was `>=2026.8.0`), in `pyproject.toml` and the
+  conda recipe. 2026.8.0 matched structured-grid nodes in the lon/lat plane
+  rather than in Cartesian space, so the `nlon+1` nodes at each pole and the
+  two sides of the antimeridian were never identified with each other
+  (UXarray #1690). A global grid therefore carried phantom nodes and was not
+  a closed surface: on a 10° mesh, 703 nodes instead of 614 and `V - E + F`
+  of 1 instead of 2; on 1°, 65341 instead of 64442. `inspect_mesh` reports
+  `n_node` and `n_edge` straight from the grid, so it was returning those
+  inflated counts — 190 rather than 146 on this project's own structured
+  fixture, 23% high. Face areas are unaffected: the area ratio and the
+  `4*pi` total are identical across the two releases, because the defect is
+  in node identity rather than in the metric. Also picked up in 2026.8.1:
+  Dask-backed data is no longer silently realized as NumPy inside the core
+  routines (#1588), and `UxDataset.isel(..., ignore_grid=True)` no longer
+  crashes (#1684).
+
+### Added
+- `inspect_mesh` has a regression test asserting Euler's formula on a global
+  mesh. The whole suite passed unchanged against both 2026.8.0 and 2026.8.1
+  — 710 passed, 4 skipped either way — because nothing asserted a node count
+  on a grid that wraps the globe, so an open sphere and a closed one looked
+  the same from here. `V - E + F == 2` is the cheap invariant that separates
+  them.
+
 ## 0.3.0 — 2026-08-29
 
 Everything below landed after 0.1.2; the 0.2.x releases were cut without
