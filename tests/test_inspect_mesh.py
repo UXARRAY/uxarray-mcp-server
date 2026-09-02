@@ -136,3 +136,25 @@ def test_inspect_synthetic_mesh(synthetic_mesh_file):
     assert result["n_node"] == 3
     # Check that it detected valid mesh data (format name varies by detection)
     assert result["format"] is not None
+
+
+def test_global_mesh_is_reported_as_a_closed_surface(structured_mesh_files):
+    """A grid that wraps the globe must satisfy Euler's formula.
+
+    ``V - E + F == 2`` holds for any polyhedron topologically equivalent to
+    a sphere, so it is the one cheap invariant that catches a global mesh
+    whose seam or pole nodes were never identified with each other. UXarray
+    2026.8.0 matched structured-grid nodes in the lon/lat plane rather than
+    in Cartesian space (UXarray #1690), which left this fixture reporting
+    190 nodes instead of 146 and a characteristic of 1 -- an open surface.
+    The counts themselves are not what matters; the invariant is, because it
+    is what makes ``n_node`` mean something a caller can rely on.
+    """
+    grid_file, _ = structured_mesh_files
+    result = inspect_mesh(grid_file)
+
+    characteristic = result["n_node"] - result["n_edge"] + result["n_face"]
+    assert characteristic == 2, (
+        f"global mesh is not closed: V={result['n_node']} E={result['n_edge']} "
+        f"F={result['n_face']} gives V-E+F={characteristic}"
+    )

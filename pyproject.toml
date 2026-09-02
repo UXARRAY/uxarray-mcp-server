@@ -49,7 +49,7 @@ dependencies = [
     "holoviews>=1.19.0",
     "matplotlib>=3.9.0",
     "pyyaml>=6.0",
-    "uxarray>=2026.8.0",
+    "uxarray>=2026.8.1",
 ]
 
 [project.optional-dependencies]
