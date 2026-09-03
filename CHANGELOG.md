@@ -6,6 +6,18 @@ uses Semantic Versioning for public releases.
 ## Unreleased
 
 ### Changed
+- The `run_analysis` `outputSchema` now requires the scientific contract
+  fields per result branch instead of promising almost nothing. A result with
+  `result_type: "complete"` must carry `scientific_status`, `preconditions`
+  and `postconditions`; a result with `result_type: "input_required"` must
+  carry `refusal`, `input_requests` and `request_state`. Both shapes share one
+  schema, so a flat `required` list could only hold their intersection --
+  `result_type` alone -- which left a validating client unable to rely on
+  anything else being there. The front door has always emitted these; the
+  schema now says so, which is what makes a number and the judgment of whether
+  it means anything travel together. The refusal fields are also declared as
+  properties for the first time: the schema described them in prose and never
+  named them.
 - Require `uxarray>=2026.8.1` (was `>=2026.8.0`), in `pyproject.toml` and the
   conda recipe. 2026.8.0 matched structured-grid nodes in the lon/lat plane
   rather than in Cartesian space, so the `nlon+1` nodes at each pole and the
@@ -23,6 +35,17 @@ uses Semantic Versioning for public releases.
   crashes (#1684).
 
 ### Added
+- Conformance tests that drive the real front door and validate whatever comes
+  back against the `outputSchema` the server publishes for it, for a completed
+  analysis, a refusal, four single-dataset operations and a comparison. The one
+  test that existed validated a hand-built dict, which proves the schema is
+  well formed and cannot prove we honour it, because the fixture and the schema
+  were written to match. Two negative cases assert the schema rejects a
+  complete result with no `scientific_status` and a refusal with no repair
+  path, so a branch condition that matched nothing would fail rather than pass
+  everything. `jsonschema` is now a declared dev dependency for the same
+  reason: it arrives transitively today, and a resolver change would have
+  turned these checks into a green no-op.
 - `inspect_mesh` has a regression test asserting Euler's formula on a global
   mesh. The whole suite passed unchanged against both 2026.8.0 and 2026.8.1
   — 710 passed, 4 skipped either way — because nothing asserted a node count
