@@ -6,6 +6,15 @@ uses Semantic Versioning for public releases.
 ## Unreleased
 
 ### Fixed
+- The monthly release job relocks `uv.lock` and closes the `Unreleased`
+  changelog section under the new version. It bumped `pyproject.toml`,
+  `__init__.py` and the conda recipe and committed only those, so every tag
+  carried a lockfile still naming the previous release — invisible in CI,
+  which never passes `--locked`, and an error for anyone who checks out the
+  tag and runs `uv sync --locked`. The changelog had the matching gap: a
+  release shipped with its own notes still filed as unreleased, so the
+  published version had none and the next one inherited them. Stamping is
+  idempotent, because the release job is retryable.
 - The radius-scaling precondition on `curl` and `divergence` read whether
   scaling was *requested*, not whether it was *applied*. UXarray honours
   `scale_by_radius=True` as far as it can on a grid that declares no
