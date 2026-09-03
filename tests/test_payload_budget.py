@@ -46,7 +46,12 @@ RESULT_BYTE_BUDGETS = {
     # the study, which is the one payload increase we have evidence for.
     "calculate_area": 1550,
     "inspect_variable": 1700,
-    "calculate_zonal_mean": 2050,
+    # Raised from 2050 for the bin-coverage block and its precondition (#23),
+    # most of it the repair text. Before it, a regional mesh asked for bands
+    # it does not span returned a profile of the requested length and entirely
+    # NaN as `outcome: complete` with no warning codes -- shaped exactly like
+    # an answer. ~140 bytes to make that state refuse instead.
+    "calculate_zonal_mean": 2250,
     "validate_dataset": 2050,
 }
 

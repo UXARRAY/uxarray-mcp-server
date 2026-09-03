@@ -169,6 +169,10 @@ class TestVerticalCoordinate:
             np.asarray(local["zonal_mean_values"], dtype=float),
             equal_nan=True,
         )
+        # The bin-coverage measurement is inlined in the worker for the same
+        # reason, so it can drift the same way -- and a coverage block that
+        # disagrees decides whether the front door refuses.
+        assert remote["profile_coverage"] == local["profile_coverage"]
 
 
 class TestMaskedField:

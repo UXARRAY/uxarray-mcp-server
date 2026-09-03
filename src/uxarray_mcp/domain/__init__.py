@@ -6,6 +6,10 @@ Functions here contain the pure domain logic used by both local tools
 
 from .area import compute_area_stats
 from .mesh import is_healpix_spec, load_dataset, load_grid, parse_healpix_zoom
+from .profile_coverage import (
+    compute_profile_coverage,
+    profile_coverage_warning_codes,
+)
 from .remap_coverage import (
     compute_scattered_coverage,
     compute_target_coverage,
@@ -26,6 +30,8 @@ __all__ = [
     "is_healpix_spec",
     "parse_healpix_zoom",
     "compute_area_stats",
+    "compute_profile_coverage",
+    "profile_coverage_warning_codes",
     "compute_target_coverage",
     "compute_scattered_coverage",
     "method_is_conservative",

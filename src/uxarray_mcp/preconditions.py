@@ -399,6 +399,51 @@ def evaluate_ensemble_preconditions(
     return checks
 
 
+def evaluate_profile_preconditions(
+    operation: str,
+    coverage: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Declare that a binned profile must have at least one filled bin.
+
+    A profile whose bins all miss the mesh comes back the requested length
+    and entirely NaN, which is shaped exactly like an answer. That is the
+    same state ``remap_coverage_nonzero`` refuses over and for the same
+    reason: nothing in the returned array was measured.
+
+    Partly filled stays a warning. A regional mesh averaged over global
+    bands legitimately fills only the bands it spans, and refusing there
+    would make ordinary regional profiles unusable.
+    """
+    n_bins = coverage.get("n_bins", 0)
+    filled = coverage.get("n_bins_filled", 0)
+    if operation == "azimuthal_mean":
+        repair = (
+            "Move center_lon/center_lat onto the mesh, or widen outer_radius "
+            "so the rings reach it. Check the longitude convention too "
+            "(-180..180 against 0..360)."
+        )
+    else:
+        repair = (
+            "Choose lat_spec bands that fall within the latitudes the mesh "
+            "spans, so at least one band contains faces."
+        )
+    if coverage.get("cause") == "ambiguous":
+        # The field itself carries missing data, so an empty bin has two
+        # explanations and the repair should not assert only one of them.
+        repair += (
+            " The field also contains missing values, so empty bins may come "
+            "from the data rather than from the bins missing the mesh."
+        )
+    return [
+        _check(
+            "profile_coverage_nonzero",
+            filled > 0,
+            f"{operation}: {filled} of {n_bins} bins contain a value.",
+            repair,
+        )
+    ]
+
+
 def _request_state(operation: str, failed: list[dict[str, Any]]) -> str:
     """An opaque token identifying exactly this refusal.
 

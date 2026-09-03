@@ -957,11 +957,34 @@ def remote_calculate_zonal_mean(
     if _sel:
         result = result.isel(**_sel)
 
+    # Same bin-coverage measurement as the local path, inlined because the
+    # worker cannot import uxarray_mcp. Bins the caller chose need not touch
+    # the mesh, and an all-NaN profile is shaped exactly like an answer.
+    _np = __import__("numpy")
+    _profile = _np.asarray(result.values.tolist(), dtype=float)
+    _src = _np.asarray(var.values, dtype=float)
+    _n_bins = int(_profile.size)
+    _n_filled = int(_np.isfinite(_profile).sum())
+    _src_missing = bool(_src.size) and bool((~_np.isfinite(_src)).any())
+    if _n_filled == _n_bins:
+        _cause = "none"
+    elif not _src_missing:
+        _cause = "bins_miss_mesh"
+    else:
+        _cause = "ambiguous"
+    _profile_coverage = {
+        "n_bins": _n_bins,
+        "n_bins_filled": _n_filled,
+        "source_has_missing": _src_missing,
+        "cause": _cause,
+    }
+
     return {
         "variable_name": variable_name,
         "latitudes": latitudes,
         "zonal_mean_values": result.values.tolist(),
         "conservative": conservative,
+        "profile_coverage": _profile_coverage,
         "reduced_dims": _reduced,
         "grid_info": {
             "n_face": int(uxds.uxgrid.n_face),
@@ -1881,6 +1904,28 @@ def remote_calculate_azimuthal_mean(
         result = result.isel(**_sel)
     values = result.values.tolist()
 
+    # Same bin-coverage measurement as the local path, inlined because the
+    # worker cannot import uxarray_mcp. Bins the caller chose need not touch
+    # the mesh, and an all-NaN profile is shaped exactly like an answer.
+    _np = __import__("numpy")
+    _profile = _np.asarray(values, dtype=float)
+    _src = _np.asarray(var.values, dtype=float)
+    _n_bins = int(_profile.size)
+    _n_filled = int(_np.isfinite(_profile).sum())
+    _src_missing = bool(_src.size) and bool((~_np.isfinite(_src)).any())
+    if _n_filled == _n_bins:
+        _cause = "none"
+    elif not _src_missing:
+        _cause = "bins_miss_mesh"
+    else:
+        _cause = "ambiguous"
+    _profile_coverage = {
+        "n_bins": _n_bins,
+        "n_bins_filled": _n_filled,
+        "source_has_missing": _src_missing,
+        "cause": _cause,
+    }
+
     return {
         "variable_name": variable_name,
         "center": {"lon": center_lon, "lat": center_lat},
@@ -1890,6 +1935,7 @@ def remote_calculate_azimuthal_mean(
         "azimuthal_mean_values": values,
         "reduced_dims": _reduced,
         "n_face": int(uxds.uxgrid.n_face),
+        "profile_coverage": _profile_coverage,
         "_worker_runtime": {
             "hostname": __import__("socket").gethostname(),
             "python_version": __import__("platform").python_version(),

@@ -6,6 +6,7 @@ import warnings as _warnings_module
 from typing import Any, Callable, TypeVar
 
 from uxarray_mcp.domain.dims import face_slice_selection
+from uxarray_mcp.domain.profile_coverage import compute_profile_coverage
 from uxarray_mcp.domain.zonal import extract_profile
 
 _T = TypeVar("_T")
@@ -594,4 +595,7 @@ def compute_azimuthal_mean(
         "azimuthal_mean_values": values,
         "reduced_dims": reduced_dims,
         "n_face": int(uxds.uxgrid.n_face),
+        # A centre the mesh does not reach still produces a profile of the
+        # requested length, every ring of it NaN.
+        "profile_coverage": compute_profile_coverage(values, source=var),
     }
