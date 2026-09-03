@@ -6,6 +6,22 @@ uses Semantic Versioning for public releases.
 ## Unreleased
 
 ### Fixed
+- `ensemble_mean` and `ensemble_spread` now check what the members declare
+  before averaging them. A member in K and a member in degC returned `145.0`
+  with `outcome: complete`, `preconditions: not_evaluated` and no warning
+  codes — a number in neither scale, presented as an answer. Averaging across
+  members is the same arithmetic as differencing two fields and fails the same
+  way, so a declared unit disagreement now refuses through the same front-door
+  gate, with `acknowledge` available as it is elsewhere. Undeclared units stay
+  a warning (`ENSEMBLE_UNITS_UNDECLARED`), since a gap in metadata is not a
+  contradiction. The mesh check is separate and deliberately weaker: members
+  are opened as plain datasets with no grid path, so identity rests on
+  whatever coordinates the files carry, and when they carry none the result
+  says `ENSEMBLE_GRID_UNVERIFIED` rather than claiming agreement — two
+  unrelated meshes with the same face count would otherwise pass. Both
+  operations return a `member_evidence` block reporting the per-member units,
+  the two three-valued verdicts, and whether the mesh was compared on
+  coordinates or on dimensions alone.
 - `remap_variable` and `regrid_dataset` now measure how much of the target
   mesh the source mesh actually reaches, as `remap_to_rectilinear` already
   did. Nearest-neighbour returns a value at every target point whether or not

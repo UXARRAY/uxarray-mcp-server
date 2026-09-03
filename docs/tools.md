@@ -174,6 +174,26 @@ for the two grid-to-grid operations. Partial coverage and a non-conservative
 method stay warnings, because a partially covered result still contains real
 values.
 
+`ensemble_mean` and `ensemble_spread` combine several files cell-by-cell, and
+nothing in the shapes says the files measure the same thing on the same mesh.
+Both report a **`member_evidence`** block naming the per-member `units`, the
+verdicts `units_consistent` and `grids_consistent`, and whether the mesh was
+compared on coordinates or on dimensions alone. Averaging a member in K with
+one in degC is the same arithmetic as differencing two fields on different
+scales, so a declared disagreement fails `ensemble_units_consistent` and
+refuses; undeclared units warn with `ENSEMBLE_UNITS_UNDECLARED` for the same
+reason `UNITS_UNDECLARED` warns above.
+
+The mesh check is weaker on purpose. Members are opened as plain datasets — the
+operation is handed no `grid_path` — so identity rests on whatever coordinates
+the member files carry, hashed together with the dimensions. When they carry
+none there is nothing left to compare beyond dimension lengths, which two
+unrelated meshes with the same face count would satisfy, so the result warns
+`ENSEMBLE_GRID_UNVERIFIED` rather than reporting the meshes as agreeing.
+Coordinates that are present and disagree fail `ensemble_grids_consistent` and
+refuse, because combining values cell-by-cell across different meshes averages
+unrelated locations.
+
 ## Postconditions and `verdict_policy`
 
 Analysis results carry a **`postconditions`** block alongside
