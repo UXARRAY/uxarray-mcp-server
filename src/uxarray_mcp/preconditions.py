@@ -213,7 +213,10 @@ def evaluate_validation_preconditions(result: dict[str, Any]) -> list[dict[str, 
     ]
 
 
-def evaluate_remap_preconditions(coverage: dict[str, Any]) -> list[dict[str, Any]]:
+def evaluate_remap_preconditions(
+    coverage: dict[str, Any],
+    operation: str = "remap_to_rectilinear",
+) -> list[dict[str, Any]]:
     """Declare that a remap target must overlap its source mesh.
 
     #85 shipped ``REMAP_COVERAGE_ZERO`` as a warning printed beside the
@@ -236,15 +239,31 @@ def evaluate_remap_preconditions(coverage: dict[str, Any]) -> list[dict[str, Any
         )
     else:
         extent = "unknown (source bounding box not reported)"
+    # A repair has to name something the caller can actually change. The
+    # rectilinear operation is handed coordinate ranges; the other two are
+    # handed a target grid file, and telling their caller to adjust
+    # target_lon/target_lat would name arguments they never passed.
+    if operation == "remap_to_rectilinear":
+        repair = (
+            "Choose target_lon/target_lat ranges that overlap the source "
+            "mesh extent reported above, so at least some target points "
+            "are interpolated rather than extrapolated."
+        )
+    else:
+        repair = (
+            "Pass a target_grid_path whose mesh overlaps the source extent "
+            "reported above, so at least some target points are interpolated "
+            "rather than extrapolated. If the two grids are meant to overlap, "
+            "check that both use the same longitude convention "
+            "(-180..180 against 0..360)."
+        )
     return [
         _check(
             "remap_coverage_nonzero",
             "REMAP_COVERAGE_ZERO" not in codes,
             f"{n_in} of {n_total} target points fall inside the source mesh; "
             f"the source covers {extent}.",
-            "Choose target_lon/target_lat ranges that overlap the source "
-            "mesh extent reported above, so at least some target points "
-            "are interpolated rather than extrapolated.",
+            repair,
         )
     ]
 

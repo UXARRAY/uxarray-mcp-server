@@ -67,7 +67,9 @@ def compute_target_coverage(
         Source mesh the data lives on.
     target_lon, target_lat : sequence of float
         1-D target coordinate arrays in degrees; the target is their
-        cartesian product, as for a rectilinear grid.
+        cartesian product, as for a rectilinear grid. For a target that is
+        itself an unstructured mesh, whose coordinates pair off rather than
+        multiply out, use :func:`compute_scattered_coverage`.
     method : str, optional
         Remap method name, used only to report its conservation property.
 
@@ -81,7 +83,47 @@ def compute_target_coverage(
     lon = _wrap_lon(np.asarray(list(target_lon), dtype=float))
     lat = np.asarray(list(target_lat), dtype=float)
     mesh_lon, mesh_lat = np.meshgrid(lon, lat)
-    points = np.column_stack([mesh_lon.ravel(), mesh_lat.ravel()])
+    return _coverage_of_points(
+        grid, mesh_lon.ravel(), mesh_lat.ravel(), method=method, wrap=False
+    )
+
+
+def compute_scattered_coverage(
+    grid: Any,
+    target_lon: Sequence[float],
+    target_lat: Sequence[float],
+    *,
+    method: str | None = None,
+) -> dict[str, Any]:
+    """Coverage for a target whose coordinates are paired, not a product.
+
+    An unstructured target grid supplies one longitude and one latitude per
+    point, so taking their cartesian product would invent points the target
+    does not have and report coverage for a mesh nobody asked about. Same
+    measurement, same keys as :func:`compute_target_coverage`.
+    """
+    return _coverage_of_points(grid, target_lon, target_lat, method=method)
+
+
+def _coverage_of_points(
+    grid: Any,
+    target_lon: Sequence[float],
+    target_lat: Sequence[float],
+    *,
+    method: str | None = None,
+    wrap: bool = True,
+) -> dict[str, Any]:
+    """Count how many of the given points lie inside the source mesh."""
+    lon = np.asarray(list(target_lon), dtype=float)
+    if wrap:
+        lon = _wrap_lon(lon)
+    lat = np.asarray(list(target_lat), dtype=float)
+    if lon.shape != lat.shape:
+        raise ValueError(
+            "target_lon and target_lat must have the same shape when the "
+            f"points are paired; got {lon.shape} and {lat.shape}."
+        )
+    points = np.column_stack([lon, lat])
     n_points = int(points.shape[0])
 
     bbox = source_bbox(grid)
