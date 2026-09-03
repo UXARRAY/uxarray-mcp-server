@@ -82,6 +82,10 @@ dev = [
     # into a green no-op.
     "jsonschema>=4.20.0",
     "mypy>=1.10.0",
+    # Same reason as jsonschema: the suite-integrity check reads the declared
+    # uxarray floor out of the packaging metadata so it cannot drift from this
+    # file, and it needs a specifier parser to do that.
+    "packaging>=23.0",
     "pre-commit>=4.3.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.0.0",

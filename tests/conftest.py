@@ -1,18 +1,38 @@
+import importlib.util
 import sys
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-# Mock uxarray if it's not installed, so we can run logic tests without heavy dependencies
-try:
-    import uxarray as ux
-    import xarray as xr
-except ImportError:
+#: True when the suite is running against stand-ins rather than the real
+#: libraries. Asserted on below so a mocked run can never report green.
+UXARRAY_IS_MOCKED = False
+
+
+def _install_stubs() -> None:
+    """Swap in MagicMocks so the pure-logic tests can still run."""
+    global UXARRAY_IS_MOCKED, ux, xr
     ux = MagicMock()
     xr = MagicMock()
     sys.modules["uxarray"] = ux
     sys.modules["xarray"] = xr
+    UXARRAY_IS_MOCKED = True
+
+
+# Mock uxarray if it is not installed, so the logic tests can run without the
+# heavy dependencies. "Not installed" and "installed but broken" are different
+# situations and only the first one may be mocked: an ImportError raised from
+# *inside* uxarray -- a moved optional import, a binary built against the wrong
+# NumPy -- would otherwise be answered by substituting a MagicMock that returns
+# a MagicMock for every call, and the whole suite would pass while exercising
+# nothing. find_spec separates the two, and the guard test below refuses to let
+# a mocked run be mistaken for a real one either way.
+if importlib.util.find_spec("uxarray") is None:
+    _install_stubs()
+else:
+    import uxarray as ux
+    import xarray as xr
 
 
 @pytest.fixture
