@@ -276,10 +276,131 @@ class TestDeclaredShapeMatchesRealOutput:
             {
                 "result_type": "complete",
                 "scientific_status": {"physically_interpretable": None},
+                "preconditions": {"status": "not_evaluated"},
+                "postconditions": {"status": "not_evaluated"},
                 "_provenance": {},
             },
             output_schema_for("run_analysis"),
         )
+
+
+class TestEveryResultValidatesAgainstItsPublishedSchema:
+    """Run the real operations and hold each answer to its own promise.
+
+    The hand-built dict above proves the schema is well formed; it cannot
+    prove we honour it, because the fixture and the schema were written to
+    match. These drive the actual front door and validate whatever comes
+    back. That is the only version of this check that catches drift -- and
+    drift is not hypothetical: every contract-derived schema required
+    ``operation`` for a release while nothing emitted it, so results that
+    were scientifically correct failed their own published envelope.
+    """
+
+    def _validate(self, result, operation="run_analysis"):
+        import jsonschema
+
+        schema = output_schema_for(operation)
+        assert schema is not None, f"{operation} publishes no outputSchema"
+        jsonschema.validate(result, schema)
+        return result
+
+    @pytest.fixture(autouse=True)
+    def _needs_jsonschema(self):
+        pytest.importorskip("jsonschema")
+
+    def test_a_completed_analysis_carries_its_own_interpretation(
+        self, synthetic_mesh_with_data
+    ):
+        from uxarray_mcp.tools.frontdoor import run_analysis
+
+        grid_file, data_file = synthetic_mesh_with_data
+        result = run_analysis(
+            "calculate_area", grid_path=grid_file, data_path=data_file
+        )
+
+        self._validate(result)
+        assert result["result_type"] == "complete"
+        # The branch condition is the point: a number never travels without
+        # the judgment of whether it means anything.
+        assert "physically_interpretable" in result["scientific_status"]
+
+    def test_a_refusal_carries_the_repair_that_would_lift_it(
+        self, synthetic_mesh_with_data
+    ):
+        from uxarray_mcp.tools.frontdoor import run_analysis
+
+        grid_file, data_file = synthetic_mesh_with_data
+        result = run_analysis(
+            "curl",
+            grid_path=grid_file,
+            data_path=data_file,
+            u_variable="temperature",
+            v_variable="pressure",
+            scale_by_radius=False,
+        )
+
+        self._validate(result)
+        assert result["result_type"] == "input_required"
+        assert result["refusal"]["repairs"]
+
+    @pytest.mark.parametrize(
+        "operation, kwargs",
+        [
+            ("inspect_mesh", {}),
+            ("validate_dataset", {}),
+            ("calculate_area", {}),
+            ("inspect_variable", {"variable_name": "temperature"}),
+        ],
+    )
+    def test_each_operation_keeps_the_envelope_it_publishes(
+        self, synthetic_mesh_with_data, operation, kwargs
+    ):
+        from uxarray_mcp.tools.frontdoor import run_analysis
+
+        grid_file, data_file = synthetic_mesh_with_data
+        result = run_analysis(
+            operation, grid_path=grid_file, data_path=data_file, **kwargs
+        )
+
+        self._validate(result)
+
+    def test_a_comparison_keeps_the_envelope_too(self, comparison_mesh_with_data):
+        from uxarray_mcp.tools.frontdoor import run_analysis
+
+        grid_file, data_a, data_b = comparison_mesh_with_data
+        result = run_analysis(
+            "bias",
+            grid_path=grid_file,
+            data_path_a=data_a,
+            data_path_b=data_b,
+            variable_name="temperature",
+        )
+
+        self._validate(result)
+
+    def test_a_complete_result_missing_its_status_is_rejected(self):
+        """The schema must actually fail the shape it exists to forbid.
+
+        A conformance suite that only feeds it valid results proves nothing
+        about what it rejects, and a branch condition that accidentally
+        matched no result would pass every test above.
+        """
+        import jsonschema
+
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(
+                {"result_type": "complete", "_provenance": {}},
+                output_schema_for("run_analysis"),
+            )
+
+    def test_a_refusal_without_a_repair_path_is_rejected(self):
+        import jsonschema
+
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(
+                {"result_type": "input_required"},
+                output_schema_for("run_analysis"),
+            )
 
 
 class TestPlotContentBlocks:

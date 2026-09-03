@@ -199,9 +199,82 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
             ),
             "additionalProperties": True,
         },
+        "refusal": {
+            "type": "object",
+            "description": (
+                "Why the operation declined to produce a number, and what "
+                "would make it willing to. Present only when result_type is "
+                "'input_required'."
+            ),
+            "properties": {
+                "summary": {"type": "string"},
+                "failed_checks": {"type": "array", "items": {"type": "object"}},
+                "repairs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "The bounded set of next steps that would satisfy the "
+                        "failed checks. Prefer one of these to retrying "
+                        "unchanged."
+                    ),
+                },
+                "override": {"type": "object"},
+                "hint": {"type": "string"},
+            },
+            "additionalProperties": True,
+        },
+        "input_requests": {
+            "type": "object",
+            "description": (
+                "MCP elicitation requests that would unblock the call, keyed "
+                "by name. Present only when result_type is 'input_required'."
+            ),
+            "additionalProperties": True,
+        },
+        "request_state": {
+            "type": "string",
+            "description": (
+                "Opaque token identifying this exact refusal, echoed back "
+                "verbatim on retry. Treat as server-owned: it is derived from "
+                "the operation and the failed checks, so it cannot be replayed "
+                "against a different refusal."
+            ),
+        },
         "_provenance": _PROVENANCE_SCHEMA,
     },
+    # Only `result_type` is unconditionally required, because it is what
+    # tells a reader which of the two shapes it is holding. Everything else
+    # is required *per branch* below.
+    #
+    # A flat required list would have to be the intersection of the two
+    # shapes, which is the empty set beyond `result_type` -- so the schema
+    # would promise nothing at all about either. The branch conditions are
+    # what make the promise real: a result carrying a number must also carry
+    # the judgment of whether that number means anything, and a refusal must
+    # carry the repair that would lift it.
     "required": ["result_type"],
+    "allOf": [
+        {
+            "if": {
+                "properties": {"result_type": {"const": "complete"}},
+                "required": ["result_type"],
+            },
+            "then": {
+                "required": [
+                    "scientific_status",
+                    "preconditions",
+                    "postconditions",
+                ]
+            },
+        },
+        {
+            "if": {
+                "properties": {"result_type": {"const": "input_required"}},
+                "required": ["result_type"],
+            },
+            "then": {"required": ["refusal", "input_requests", "request_state"]},
+        },
+    ],
     "additionalProperties": True,
 }
 
