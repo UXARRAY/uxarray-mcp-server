@@ -355,6 +355,10 @@ def test_front_door_preserves_domain_warning_codes():
     assign a fresh ``scientific_status`` dict, which dropped the code and
     reset the verdict to an unqualified ``complete`` -- presenting a result
     the domain had already marked uninterpretable as a clean one.
+
+    Unapplied radius scaling now refuses outright, so the merge is exercised
+    on the override path: that is the one route by which such a number still
+    reaches a caller, and it is precisely where the code must not be lost.
     """
     result = _finalize_analysis_result(
         "curl",
@@ -374,12 +378,13 @@ def test_front_door_preserves_domain_warning_codes():
                 "physical_scaling_applied": False,
             },
         },
+        acknowledge=OVERRIDE_TOKEN,
     )
 
     status = result["scientific_status"]
     assert "SPHERE_RADIUS_UNAVAILABLE" in status["warning_codes"]
     assert status["physically_interpretable"] is False
-    assert status["status"] == "warning"
+    assert status["status"] == "unverified"
     # Domain-only detail keys survive the merge rather than being dropped.
     assert status["physical_scaling_applied"] is False
 
