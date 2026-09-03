@@ -23,6 +23,7 @@ import pytest
 import xarray as xr
 
 from uxarray_mcp.domain.mesh import load_dataset
+from uxarray_mcp.preconditions import OVERRIDE_TOKEN
 
 
 def _write_polygon_shapefile(path):
@@ -76,14 +77,52 @@ class TestLoadDatasetHealpix:
             }
         ).to_netcdf(data_path)
 
+        # A HEALPix grid carries no ``sphere_radius``, so the gradient is a
+        # per-radian quantity and the front door refuses it. Override to get
+        # the number back: what this test guards is that the healpix path
+        # loads and differentiates at all, which a ValueError would break and
+        # a refusal would not.
+        result = run_analysis(
+            operation="gradient",
+            grid_path="healpix:2",
+            data_path=str(data_path),
+            variable_name="phi",
+            acknowledge=OVERRIDE_TOKEN,
+        )
+        assert result["n_face"] == grid.n_face
+        assert "_provenance" in result
+        assert result["scientific_status"]["physically_interpretable"] is False
+
+    def test_gradient_without_a_sphere_radius_refuses(self, tmp_path):
+        """The per-radian result is withheld rather than handed over.
+
+        UXarray honours ``scale_by_radius=True`` as far as it can on a grid
+        with no radius: it warns and returns the unit-sphere derivative. The
+        gate used to read only the requested flag, so the request alone
+        satisfied it and a gradient in K/radian came back labelled K/m.
+        """
+        import uxarray as ux
+
+        from uxarray_mcp.tools import run_analysis
+
+        grid = ux.Grid.from_healpix(zoom=2)
+        data_path = tmp_path / "data.nc"
+        rng = np.random.default_rng(0)
+        xr.Dataset(
+            {"phi": (["n_face"], rng.standard_normal(grid.n_face), {"units": "K"})}
+        ).to_netcdf(data_path)
+
         result = run_analysis(
             operation="gradient",
             grid_path="healpix:2",
             data_path=str(data_path),
             variable_name="phi",
         )
-        assert result["n_face"] == grid.n_face
-        assert "_provenance" in result
+
+        assert result["result_type"] == "input_required"
+        failed = {c["id"] for c in result["refusal"]["failed_checks"]}
+        assert failed == {"radius_scaling"}
+        assert "sphere_radius" in result["refusal"]["repairs"][0]
 
 
 class TestLoadDatasetGIS:

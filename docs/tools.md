@@ -77,14 +77,23 @@ their result and provenance, and all three accept `scale_by_radius`
 `uxgrid.sphere_radius` for physical units; the grid must define
 `sphere_radius`. Pass `False` explicitly to keep unit-sphere results.
 
-`curl` and `divergence` declare **refusable preconditions** (#86) rather than
-warning and computing anyway. Each operation states, as data, what must hold
-for its answer to be physical: the two components must be distinct fields,
-both must carry velocity-like `units`, their direction identity must be
-resolvable from `standard_name` or `long_name`, and `curl` additionally
-requires `scale_by_radius`. Every result carries a `preconditions` block with
-`status` (`satisfied`, `overridden`, `failed`, or `not_evaluated`), the
-individual `checks`, and `failed_checks`.
+`gradient`, `curl` and `divergence` declare **refusable preconditions** (#86)
+rather than warning and computing anyway. Each operation states, as data, what
+must hold for its answer to be physical. For the two-component operators the
+components must be distinct fields, both must carry velocity-like `units`, and
+their direction identity must be resolvable from `standard_name` or
+`long_name`. All three additionally require radius scaling, without which the
+answer is a per-radian quantity rather than a vorticity in s^-1 or a gradient
+per metre. Every result carries a `preconditions` block with `status`
+(`satisfied`, `overridden`, `failed`, or `not_evaluated`), the individual
+`checks`, and `failed_checks`.
+
+The radius-scaling check reads whether scaling was **applied**, not whether it
+was requested. UXarray honours `scale_by_radius=True` as far as it can on a
+grid that declares no `sphere_radius`: it warns that the result is left on the
+unit sphere and returns it. Asking only about the request therefore let the
+gate pass on any such grid, so the repair names the missing attribute rather
+than telling a caller to set a flag they already set.
 
 When a check fails, the call **does not run** and no number is returned.
 The result instead carries `result_type: "input_required"`, shaped after the

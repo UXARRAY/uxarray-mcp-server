@@ -85,22 +85,40 @@ def evaluate_vector_preconditions(
     v_variable: str,
     evidence: dict[str, Any],
     scale_by_radius: bool | None,
+    scaling_applied: bool | None = None,
 ) -> list[dict[str, Any]]:
-    """Declare what must hold for ``curl``/``divergence`` to be physical.
+    """Declare what must hold for a vector-calculus result to be physical.
 
-    Three conditions, each independently checkable from metadata the
-    server already reads:
+    Three conditions apply to the two-component operations, each
+    independently checkable from metadata the server already reads:
 
     1. The two components are distinct fields.
     2. Both carry velocity-like units.
     3. Their direction identity (eastward/northward) is resolvable from
        ``standard_name`` or ``long_name``.
 
-    ``curl`` additionally requires radius scaling, without which the
-    result is a unit-sphere quantity rather than a vorticity in s^-1.
+    Every differential operator additionally requires radius scaling,
+    without which the result is a unit-sphere quantity -- a vorticity per
+    radian rather than in s^-1, a gradient per radian rather than per
+    metre.
+
+    ``scaling_applied`` is what that last check actually reads. Asking
+    only whether scaling was *requested* let the gate pass on any grid
+    without a ``sphere_radius`` attribute: UXarray honours the request as
+    far as it can, warns that the result is left on the unit sphere, and
+    returns it. The number came back marked uninterpretable but came back
+    all the same, which is the warning-beside-a-number state #86 exists to
+    end. Pass ``None`` when the caller cannot tell applied from requested
+    and the requested flag is used as before.
     """
     u_ev = evidence.get("u", {}) or {}
     v_ev = evidence.get("v", {}) or {}
+    if operation == "gradient":
+        # A gradient is taken of one field, so the component checks below --
+        # distinctness, velocity units, eastward/northward identity -- have
+        # nothing to read. Radius scaling is the one condition that carries
+        # over, and it is the one that decides the units of the answer.
+        return [_radius_scaling_check(scale_by_radius, scaling_applied)]
     checks = [
         _check(
             # Unnamed components cannot be compared, so this check abstains
@@ -133,16 +151,46 @@ def evaluate_vector_preconditions(
         ),
     ]
     if operation in {"curl", "divergence"}:
-        checks.append(
-            _check(
-                "radius_scaling",
-                bool(scale_by_radius),
-                f"scale_by_radius={bool(scale_by_radius)}.",
-                "Set scale_by_radius=True so the result carries physical "
-                "units instead of unit-sphere units.",
-            )
-        )
+        checks.append(_radius_scaling_check(scale_by_radius, scaling_applied))
     return checks
+
+
+def _radius_scaling_check(
+    scale_by_radius: bool | None,
+    scaling_applied: bool | None,
+) -> dict[str, Any]:
+    """The condition that decides whether a derivative has physical units."""
+    requested = bool(scale_by_radius)
+    if not requested:
+        return _check(
+            "radius_scaling",
+            False,
+            "scale_by_radius=False.",
+            "Set scale_by_radius=True so the result carries physical units "
+            "instead of unit-sphere units.",
+        )
+    if scaling_applied is False:
+        # Requested and refused by the data, not by the caller. Naming the
+        # missing attribute is the repair; telling them to set the flag they
+        # already set would send them in a circle.
+        return _check(
+            "radius_scaling",
+            False,
+            "scale_by_radius=True was requested but the grid carries no "
+            "'sphere_radius' attribute, so UXarray left the result on the "
+            "unit sphere.",
+            "Set uxgrid.sphere_radius on the source grid (6371000.0 m for "
+            "Earth) so the scaling can be applied, or pass "
+            "scale_by_radius=False and read the result as a per-radian "
+            "quantity.",
+        )
+    return _check(
+        "radius_scaling",
+        True,
+        f"scale_by_radius={requested}, applied={scaling_applied}.",
+        "Set scale_by_radius=True so the result carries physical units "
+        "instead of unit-sphere units.",
+    )
 
 
 def evaluate_validation_preconditions(result: dict[str, Any]) -> list[dict[str, Any]]:

@@ -180,13 +180,23 @@ def _finalize_analysis_result(
             status = "invalid"
             warning_codes.append("DATASET_VALIDATION_FAILED")
         preconditions = evaluate_validation_preconditions(result)
-    elif operation in {"curl", "divergence"}:
+    elif operation in {"curl", "divergence", "gradient"}:
         evidence = result.get("component_evidence", {})
         metadata_supported = bool(
             evidence.get("units_supported")
             and evidence.get("component_identity_supported")
         )
-        scaling_supported = bool(result.get("scale_by_radius"))
+        # What the caller asked for and what the data allowed are separate
+        # facts. The domain layer reports both; only the second one decides
+        # the units of the answer, so only the second one gates it.
+        domain_status = result.get("scientific_status") or {}
+        scaling_applied = domain_status.get("physical_scaling_applied")
+        scaling_supported = bool(result.get("scale_by_radius")) and (
+            scaling_applied is not False
+        )
+        if operation == "gradient":
+            # One field, so there is no component metadata to support.
+            metadata_supported = True
         physically_interpretable = bool(
             metadata_supported
             and scaling_supported
@@ -198,6 +208,7 @@ def _finalize_analysis_result(
             str(result.get("v_variable", "")),
             evidence,
             result.get("scale_by_radius"),
+            scaling_applied,
         )
         if not physically_interpretable:
             status = "warning"

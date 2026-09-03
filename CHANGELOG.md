@@ -5,6 +5,24 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+### Fixed
+- The radius-scaling precondition on `curl` and `divergence` read whether
+  scaling was *requested*, not whether it was *applied*. UXarray honours
+  `scale_by_radius=True` as far as it can on a grid that declares no
+  `sphere_radius`: it warns that the result is left on the unit sphere and
+  returns it anyway. The request alone therefore satisfied the gate, so a
+  vorticity per radian came back labelled s^-1 — carrying
+  `SPHERE_RADIUS_UNAVAILABLE` and `physically_interpretable: false` beside the
+  number, which is the warning-that-changes-nothing state #86 exists to end.
+  The check now reads the applied flag, and its repair names the missing
+  attribute instead of telling a caller to set a flag they already set.
+- `gradient` was left out of the precondition gate entirely, though it takes
+  the same derivative on the same sphere and the domain layer already recorded
+  the same `SPHERE_RADIUS_UNAVAILABLE`. It is now gated on radius scaling like
+  the other two. The component checks do not apply to it: a gradient is taken
+  of one field, so distinctness, velocity units, and eastward/northward
+  identity have nothing to read.
+
 ### Changed
 - The `run_analysis` `outputSchema` now requires the scientific contract
   fields per result branch instead of promising almost nothing. A result with
