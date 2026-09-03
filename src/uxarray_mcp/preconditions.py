@@ -353,6 +353,52 @@ def evaluate_comparison_preconditions(
     ]
 
 
+def evaluate_ensemble_preconditions(
+    operation: str,
+    variable_name: str,
+    evidence: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Conditions an ensemble statistic needs across its members.
+
+    Averaging members is the same arithmetic as differencing two fields and
+    fails the same way: a member in K averaged with one in degC returns a
+    number that is in neither scale and looks exactly like a valid mean.
+    Undeclared units stay a warning for the reason they do in comparisons --
+    a gap in metadata is not a contradiction.
+
+    The mesh check is separate and weaker on purpose. Members are opened as
+    plain datasets, so identity rests on whatever coordinates the files
+    carry. When they carry none, matching dimension lengths is all there is,
+    and two unrelated meshes with the same face count would satisfy that --
+    so the result says the mesh is unverified rather than claiming it agrees.
+    """
+    units = evidence.get("member_units") or []
+    spelled = ", ".join(repr(u) if u else "unset" for u in units)
+    checks = [
+        _check(
+            "ensemble_units_consistent",
+            evidence.get("units_consistent") is not False,
+            f"{variable_name}: member units are {spelled}.",
+            "Convert the members onto one scale before combining them. The "
+            "server does not parse unit algebra, so equivalent units spelled "
+            "differently also have to be aligned -- or acknowledge to proceed.",
+        )
+    ]
+    if evidence.get("grids_consistent") is False:
+        checks.append(
+            _check(
+                "ensemble_grids_consistent",
+                False,
+                f"{operation}: the members carry coordinates that do not "
+                "match, so their values are not on a common mesh.",
+                "Supply members written on the same mesh, or remap them onto "
+                "a common grid first. Combining values cell-by-cell across "
+                "different meshes averages unrelated locations.",
+            )
+        )
+    return checks
+
+
 def _request_state(operation: str, failed: list[dict[str, Any]]) -> str:
     """An opaque token identifying exactly this refusal.
 

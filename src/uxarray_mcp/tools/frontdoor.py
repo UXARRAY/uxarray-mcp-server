@@ -20,6 +20,7 @@ from uxarray_mcp.preconditions import (
     PreconditionRefusal,
     enforce,
     evaluate_comparison_preconditions,
+    evaluate_ensemble_preconditions,
     evaluate_remap_preconditions,
     evaluate_validation_preconditions,
     evaluate_vector_preconditions,
@@ -65,6 +66,11 @@ COMPARISON_OPERATIONS: frozenset[str] = frozenset(
 REMAP_OPERATIONS: frozenset[str] = frozenset(
     {"remap_variable", "regrid_dataset", "remap_to_rectilinear"}
 )
+
+#: Operations that combine several files cell-by-cell. Combining only means
+#: something when the members are on one scale and one mesh, and neither is
+#: implied by the members having the same shape.
+ENSEMBLE_OPERATIONS: frozenset[str] = frozenset({"ensemble_mean", "ensemble_spread"})
 
 #: Vocabulary an agent is likely to reach for, mapped to the operation that
 #: actually serves that intent. These are not aliases -- the call still fails --
@@ -250,6 +256,23 @@ def _finalize_analysis_result(
         # should refuse rather than advise.
         preconditions = evaluate_remap_preconditions(
             result["source_coverage"], operation
+        )
+    elif operation in ENSEMBLE_OPERATIONS and "member_evidence" in result:
+        # A mean across members is arithmetic across files, and nothing in
+        # the shapes says the files measure the same thing on the same mesh.
+        evidence = result["member_evidence"]
+        if evidence.get("units_consistent") is None:
+            warning_codes.append("ENSEMBLE_UNITS_UNDECLARED")
+        if evidence.get("grids_consistent") is None:
+            # Reported, not enforced: the operation is handed no grid path,
+            # so with no coordinates in the member files there is nothing
+            # left to compare beyond dimension lengths.
+            warning_codes.append("ENSEMBLE_GRID_UNVERIFIED")
+        physically_interpretable = not warning_codes
+        if warning_codes:
+            status = "warning"
+        preconditions = evaluate_ensemble_preconditions(
+            operation, str(result.get("variable_name", "")), evidence
         )
 
     # Refuses by default when a declared precondition fails: raises

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Sequence
@@ -1410,18 +1411,92 @@ def calculate_anomaly(
     return result
 
 
-def _load_ensemble(variable_name: str, data_paths: Sequence[str]) -> xr.DataArray:
+#: Coordinate names a member file may carry that pin down which mesh its
+#: values live on. Ensemble members are opened as plain datasets -- the
+#: operation is given no grid path -- so this is the only evidence available
+#: for deciding whether two members are on the same mesh at all.
+_MESH_COORD_NAMES: tuple[str, ...] = (
+    "node_lon",
+    "node_lat",
+    "face_lon",
+    "face_lat",
+    "lon",
+    "lat",
+    "longitude",
+    "latitude",
+)
+
+
+def _member_grid_fingerprint(ds: xr.Dataset, member: xr.DataArray) -> str | None:
+    """Hash whatever a member file says about the mesh its values sit on.
+
+    Returns ``None`` when the file carries no recognisable coordinates, which
+    is the honest answer: matching dimension names and lengths do not make two
+    meshes the same mesh, and two unrelated grids with the same face count
+    would otherwise pass for identical.
+    """
+    digest = hashlib.sha256()
+    digest.update(repr(tuple(zip(member.dims, member.shape))).encode())
+    found = False
+    for name in _MESH_COORD_NAMES:
+        source = ds.coords.get(name)
+        if source is None:
+            source = ds.variables.get(name)
+        if source is None:
+            continue
+        found = True
+        digest.update(name.encode())
+        digest.update(np.ascontiguousarray(np.asarray(source)).tobytes())
+    return digest.hexdigest() if found else None
+
+
+def _load_ensemble(
+    variable_name: str, data_paths: Sequence[str]
+) -> tuple[xr.DataArray, dict[str, Any]]:
+    """Concatenate the members and report what could be checked about them.
+
+    The second return value is evidence, not a verdict: the front door decides
+    what a units disagreement or an unverifiable mesh costs.
+    """
     datasets = []
+    units: list[str | None] = []
+    fingerprints: list[str | None] = []
     for data_path in data_paths:
         ds = xr.open_dataset(data_path)
         if variable_name not in ds:
             raise ValueError(f"Variable '{variable_name}' not found in {data_path}.")
-        datasets.append(ds[variable_name])
+        member = ds[variable_name]
+        datasets.append(member)
+        units.append(str((member.attrs or {}).get("units", "")).strip() or None)
+        fingerprints.append(_member_grid_fingerprint(ds, member))
     reference = datasets[0]
     for dataset in datasets[1:]:
         if dataset.shape != reference.shape or dataset.dims != reference.dims:
             raise ValueError("All ensemble members must share dims and shape in v1.")
-    return xr.concat(datasets, dim="ensemble_member")
+
+    normalized = [normalize_units(u) for u in units]
+    if any(u is None for u in normalized):
+        # A member that declares nothing is a metadata gap, not a
+        # contradiction, so it is reported as unknown rather than as a clash.
+        units_consistent: bool | None = None
+    else:
+        units_consistent = len(set(normalized)) == 1
+
+    if any(f is None for f in fingerprints):
+        grids_consistent: bool | None = None
+    else:
+        grids_consistent = len(set(fingerprints)) == 1
+
+    evidence = {
+        "member_count": len(datasets),
+        "member_units": units,
+        "units_consistent": units_consistent,
+        "grids_consistent": grids_consistent,
+        "grid_evidence": (
+            "coordinates" if grids_consistent is not None else "dims_and_shape_only"
+        ),
+    }
+    return xr.concat(datasets, dim="ensemble_member"), evidence
 
 
 def calculate_ensemble_mean(
@@ -1432,7 +1507,7 @@ def calculate_ensemble_mean(
 ) -> dict[str, Any]:
     """Average a variable across multiple ensemble members (one file per member) — the ensemble mean / multi-model mean."""
     tracker = OperationTracker("calculate_ensemble_mean", session_id=session_id)
-    ensemble = _load_ensemble(variable_name, data_paths)
+    ensemble, member_evidence = _load_ensemble(variable_name, data_paths)
     result_data = ensemble.mean(dim="ensemble_member")
     result_handle = _persist_dataarray_result(
         data=result_data,
@@ -1448,6 +1523,7 @@ def calculate_ensemble_mean(
         "member_count": len(data_paths),
         "summary": summarize_array(result_data),
         "result_handle": result_handle,
+        "member_evidence": member_evidence,
     }
     result = attach_provenance(
         result,
@@ -1470,7 +1546,7 @@ def calculate_ensemble_spread(
 ) -> dict[str, Any]:
     """Calculate ensemble spread as standard deviation across members."""
     tracker = OperationTracker("calculate_ensemble_spread", session_id=session_id)
-    ensemble = _load_ensemble(variable_name, data_paths)
+    ensemble, member_evidence = _load_ensemble(variable_name, data_paths)
     result_data = ensemble.std(dim="ensemble_member")
     result_handle = _persist_dataarray_result(
         data=result_data,
@@ -1486,6 +1562,7 @@ def calculate_ensemble_spread(
         "member_count": len(data_paths),
         "summary": summarize_array(result_data),
         "result_handle": result_handle,
+        "member_evidence": member_evidence,
     }
     result = attach_provenance(
         result,
