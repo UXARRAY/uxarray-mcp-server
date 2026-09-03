@@ -22,6 +22,35 @@ uses Semantic Versioning for public releases.
   the other two. The component checks do not apply to it: a gradient is taken
   of one field, so distinctness, velocity units, and eastward/northward
   identity have nothing to read.
+- The test suite can no longer report green against stand-ins. `conftest`
+  substitutes `MagicMock` for uxarray so the pure-logic tests run on a bare
+  checkout, but it did so on any `ImportError` — including one raised from
+  *inside* a uxarray that is installed and broken, such as a moved optional
+  import or a binary built against the wrong NumPy. A MagicMock returns a
+  MagicMock for every attribute and call, so that run passes nearly everything
+  it asserts and is indistinguishable from a real one. `importlib.util.
+  find_spec` now separates "not installed" from "installed but broken", and
+  `tests/test_suite_integrity.py` fails outright on a mocked run and on an
+  installed uxarray below the floor declared in `pyproject.toml`.
+- `scripts/chrysalis_endpoint.sh` prints the real uxarray import failure and
+  refuses to start instead of sending stderr to `/dev/null` and echoing
+  "check import". That message was the same whether uxarray was missing, built
+  against the wrong NumPy, or shadowed by a stale `~/uxarray` checkout, and the
+  endpoint started anyway — so the failure surfaced on the first submitted task
+  rather than at the point it could be read and fixed.
+- `compare_fields`, `calculate_bias`, `calculate_rmse` and
+  `calculate_pattern_correlation` area-weight their metrics. They previously
+  called `.mean()` over the face dimension, which answers "average over
+  cells", not "average over the sphere" — the two differ whenever cell areas
+  do. On a 10° lat-lon mesh (648 faces, largest cell 11.5× the smallest) with
+  a +2 K tropical / −2 K polar difference, the old code reported a bias of
+  −0.667 K where the area-weighted answer is +0.004 K: wrong magnitude and
+  wrong sign. Results now carry an `area_weighting` block naming the face
+  dimension and the max/min area ratio. When weighting is impossible — no
+  grid supplied, a non-face-centered field, or unavailable face areas — the
+  result says so through `scientific_status` with the
+  `AREA_WEIGHTING_UNAVAILABLE` code rather than presenting a cell-count mean
+  as a spatial one.
 
 ### Changed
 - The `run_analysis` `outputSchema` now requires the scientific contract
@@ -82,21 +111,6 @@ uses Semantic Versioning for public releases.
   `normalize_units` resolves a fixed synonym table (`K`/`kelvin`, `m/s`/
   `m s-1`) but does no unit algebra, so equivalent-but-unaliased spellings
   such as `mm day-1` against `kg m-2 s-1` refuse and say so in the repair.
-
-### Fixed
-- `compare_fields`, `calculate_bias`, `calculate_rmse` and
-  `calculate_pattern_correlation` area-weight their metrics. They previously
-  called `.mean()` over the face dimension, which answers "average over
-  cells", not "average over the sphere" — the two differ whenever cell areas
-  do. On a 10° lat-lon mesh (648 faces, largest cell 11.5× the smallest) with
-  a +2 K tropical / −2 K polar difference, the old code reported a bias of
-  −0.667 K where the area-weighted answer is +0.004 K: wrong magnitude and
-  wrong sign. Results now carry an `area_weighting` block naming the face
-  dimension and the max/min area ratio. When weighting is impossible — no
-  grid supplied, a non-face-centered field, or unavailable face areas — the
-  result says so through `scientific_status` with the
-  `AREA_WEIGHTING_UNAVAILABLE` code rather than presenting a cell-count mean
-  as a spatial one.
 
 ## 0.3.0 — 2026-08-29
 

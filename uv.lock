@@ -4133,6 +4133,7 @@ openapi = [
 dev = [
     { name = "jsonschema" },
     { name = "mypy" },
+    { name = "packaging" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -4161,6 +4162,7 @@ provides-extras = ["openapi", "hpc", "docs"]
 dev = [
     { name = "jsonschema", specifier = ">=4.20.0" },
     { name = "mypy", specifier = ">=1.10.0" },
+    { name = "packaging", specifier = ">=23.0" },
     { name = "pre-commit", specifier = ">=4.3.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },

@@ -204,7 +204,19 @@ _do_start() {
   _activate_env
   _export_yac_runtime
   echo "==> Python: $(python --version)"
-  echo "==> uxarray: $(python -c 'import uxarray; print(uxarray.__version__)' 2>/dev/null || echo 'check import')"
+  # Print the real failure rather than swallowing it. This line used to send
+  # stderr to /dev/null and print "check import", which is the same output
+  # whether uxarray is missing, built against the wrong NumPy, or shadowed by
+  # a stale ~/uxarray checkout -- and the endpoint then started anyway and
+  # failed on the first task instead of here.
+  if _ux_version=$(python -c 'import uxarray; print(uxarray.__version__)' 2>&1); then
+    echo "==> uxarray: $_ux_version"
+  else
+    echo "==> uxarray: FAILED TO IMPORT" >&2
+    echo "$_ux_version" | sed 's/^/    /' >&2
+    echo "==> Refusing to start: workers would accept tasks and fail on each one." >&2
+    return 1
+  fi
   echo "==> Starting endpoint: $ENDPOINT_NAME"
   globus-compute-endpoint start "$ENDPOINT_NAME"
 }
