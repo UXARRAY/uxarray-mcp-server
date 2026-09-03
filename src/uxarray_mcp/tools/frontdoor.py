@@ -16,7 +16,7 @@ from uxarray_mcp.postconditions import (
     resolve_verdict_policy,
 )
 from uxarray_mcp.preconditions import (
-    RESULT_TYPE_COMPLETE,
+    OUTCOME_COMPLETE,
     PreconditionRefusal,
     enforce,
     evaluate_comparison_preconditions,
@@ -287,7 +287,7 @@ def _finalize_analysis_result(
             if code not in warning_codes:
                 warning_codes.append(code)
 
-    result["result_type"] = RESULT_TYPE_COMPLETE
+    result["outcome"] = OUTCOME_COMPLETE
     result["preconditions"] = precondition_block
     # Merge rather than overwrite. The domain layer already attached a status
     # via attach_scientific_status() carrying codes the front door cannot
@@ -485,7 +485,7 @@ def run_analysis(
 
     ``curl`` and ``divergence`` declare preconditions and refuse rather than
     return an unphysical number: if the components are not verifiably a
-    vector field, the call returns ``result_type='input_required'`` with the
+    vector field, the call returns ``outcome='input_required'`` with the
     failed checks and the repairs that would fix them. Pass ``acknowledge``
     with the token named in that response to run it anyway; the result is
     then marked ``unverified``.
