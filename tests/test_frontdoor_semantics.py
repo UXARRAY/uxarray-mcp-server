@@ -454,3 +454,68 @@ def test_front_door_status_merge_keeps_the_stricter_verdict():
     assert "SPHERE_RADIUS_UNAVAILABLE" in codes
     assert any(c.startswith("PRECONDITION_FAILED_") for c in codes)
     assert both["scientific_status"]["status"] == "unverified"
+
+
+def _comparison_result(units_a, units_b, **overrides):
+    result = {
+        "variable_name": "tas",
+        "metrics": {"bias": 273.15, "rmse": 273.15, "pattern_correlation": 1.0},
+        "area_weighting": {"weighted": True, "equal_area": True},
+        "units": {"a": units_a, "b": units_b, "comparable": None},
+    }
+    left = units_a and units_a.strip()
+    right = units_b and units_b.strip()
+    if left and right:
+        result["units"]["comparable"] = left.lower() == right.lower()
+    result.update(overrides)
+    return result
+
+
+@pytest.mark.parametrize("operation", ["compare_fields", "bias", "rmse"])
+def test_mismatched_units_refuse_before_the_difference_is_reported(operation):
+    """K minus degC is 273.15, which reads as a huge model error rather than
+    as the unit offset it actually is. That is the case worth refusing."""
+    with pytest.raises(PreconditionRefusal) as excinfo:
+        _finalize_analysis_result(operation, _comparison_result("K", "degC"))
+
+    payload = excinfo.value.payload
+    assert "units_comparable" in [c["id"] for c in payload["refusal"]["failed_checks"]]
+    assert "stats" not in payload and "metrics" not in payload
+
+
+def test_matching_units_are_not_refused():
+    result = _finalize_analysis_result("compare_fields", _comparison_result("K", "K"))
+
+    assert result["preconditions"]["status"] == "satisfied"
+    assert result["scientific_status"]["status"] == "complete"
+
+
+def test_undeclared_units_warn_rather_than_refuse():
+    """Comparing two unlabeled fields is ordinary; refusing would make it
+    impossible. The result has to say the scale is unconfirmed, though."""
+    result = _finalize_analysis_result(
+        "compare_fields",
+        _comparison_result(
+            None,
+            "K",
+            scientific_status={
+                "status": "warning",
+                "physically_interpretable": False,
+                "warning_codes": ["UNITS_UNDECLARED"],
+                "warnings": ["units unconfirmed"],
+            },
+        ),
+    )
+
+    assert result["preconditions"]["status"] == "satisfied"
+    assert result["scientific_status"]["status"] == "warning"
+    assert "UNITS_UNDECLARED" in result["scientific_status"]["warning_codes"]
+
+
+def test_the_override_token_still_returns_the_mismatched_comparison():
+    result = _finalize_analysis_result(
+        "compare_fields", _comparison_result("K", "degC"), OVERRIDE_TOKEN
+    )
+
+    assert result["preconditions"]["override_used"] is True
+    assert result["metrics"]["bias"] == 273.15

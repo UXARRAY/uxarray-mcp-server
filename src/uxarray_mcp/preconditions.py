@@ -201,6 +201,82 @@ def evaluate_remap_preconditions(coverage: dict[str, Any]) -> list[dict[str, Any
     ]
 
 
+#: Spellings of the same unit that CF-conforming files disagree about. Only
+#: pairs that are exactly interchangeable belong here -- this table decides
+#: whether two fields may be subtracted, so a wrong entry produces a wrong
+#: number rather than a refusal.
+_UNIT_SYNONYMS = {
+    "kelvin": "k",
+    "degrees_kelvin": "k",
+    "degk": "k",
+    "celsius": "degc",
+    "degrees_celsius": "degc",
+    "degree_celsius": "degc",
+    "c": "degc",
+    "m/s": "m s-1",
+    "m s^-1": "m s-1",
+    "meter/second": "m s-1",
+    "metre/second": "m s-1",
+    "percent": "%",
+    "1": "",
+    "dimensionless": "",
+    "none": "",
+    "unitless": "",
+}
+
+
+def normalize_units(units: str | None) -> str | None:
+    """Fold a units string to a comparable form, or ``None`` if undeclared.
+
+    Deliberately shallow: it collapses whitespace and case and resolves a
+    fixed synonym table. It does not parse unit algebra, so it will call
+    ``mm day-1`` and ``kg m-2 s-1`` different even though they measure the
+    same thing. That direction of error costs a caller one explicit
+    acknowledgement; the other direction silently subtracts incompatible
+    fields.
+    """
+    if units is None:
+        return None
+    folded = " ".join(str(units).strip().lower().split())
+    if not folded:
+        return None
+    return _UNIT_SYNONYMS.get(folded, folded)
+
+
+def evaluate_comparison_preconditions(
+    variable_name: str,
+    units_a: str | None,
+    units_b: str | None,
+) -> list[dict[str, Any]]:
+    """Declare that two fields must be in the same units to be differenced.
+
+    ``bias``, ``rmse`` and the difference field are all built from ``a - b``,
+    which is only a physical quantity when both sides measure the same thing
+    in the same scale. Subtracting a field in K from one in degC returns
+    273.15 with no hint that the offset is the unit difference and not the
+    model error -- a number that looks like an answer and is not one.
+
+    An undeclared unit is a gap in the metadata rather than a contradiction,
+    so it does not refuse here; ``compare_fields`` reports it through
+    ``scientific_status`` instead. Only a declared, unresolvable disagreement
+    is refusable.
+    """
+    left, right = normalize_units(units_a), normalize_units(units_b)
+    both_declared = left is not None and right is not None
+    return [
+        _check(
+            "units_comparable",
+            not both_declared or left == right,
+            f"{variable_name}: units_a={units_a or 'unset'!r}, "
+            f"units_b={units_b or 'unset'!r}.",
+            "Convert one field so both carry the same units before "
+            "differencing them. If the units are already equivalent and only "
+            "spelled differently, the server does not parse unit algebra -- "
+            "align the strings or acknowledge to proceed.",
+        )
+    ]
+
+
 def _request_state(operation: str, failed: list[dict[str, Any]]) -> str:
     """An opaque token identifying exactly this refusal.
 
