@@ -174,6 +174,27 @@ for the two grid-to-grid operations. Partial coverage and a non-conservative
 method stay warnings, because a partially covered result still contains real
 values.
 
+`calculate_zonal_mean` and `azimuthal_mean` reduce a field onto bins the caller
+chooses — latitude bands, or rings of great-circle distance from a centre — and
+nothing forces those bins to intersect the mesh. Both return a
+**`profile_coverage`** block giving `n_bins`, `n_bins_filled`,
+`source_has_missing` and `cause`. A profile with no filled bin at all
+**refuses**: every entry is NaN, so nothing in the returned array was measured,
+which is the same state `remap_coverage_nonzero` refuses over. The repair names
+the argument that caller controls — `lat_spec` for the zonal mean,
+`center_lon`/`center_lat` and `outer_radius` for the radial one. A partly
+filled profile warns with `PROFILE_COVERAGE_PARTIAL` and completes, because a
+regional mesh averaged over global bands legitimately fills only the bands it
+spans.
+
+The count comes from the returned profile, not from re-deriving which face
+lands in which bin: that would duplicate UXarray's own binning and could
+disagree with it. An empty bin is NaN, but so is a bin whose faces all held
+missing data, so the source field is checked as well. `cause` is
+`bins_miss_mesh` only when the field is known to be complete, and `ambiguous`
+when it carries missing values or was not available to check — in which case
+the repair says so rather than asserting one explanation.
+
 `ensemble_mean` and `ensemble_spread` combine several files cell-by-cell, and
 nothing in the shapes says the files measure the same thing on the same mesh.
 Both report a **`member_evidence`** block naming the per-member `units`, the

@@ -10,6 +10,7 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any
 
+from uxarray_mcp.domain.profile_coverage import profile_coverage_warning_codes
 from uxarray_mcp.postconditions import (
     evaluate_area_postconditions,
     postcondition_block,
@@ -21,6 +22,7 @@ from uxarray_mcp.preconditions import (
     enforce,
     evaluate_comparison_preconditions,
     evaluate_ensemble_preconditions,
+    evaluate_profile_preconditions,
     evaluate_remap_preconditions,
     evaluate_validation_preconditions,
     evaluate_vector_preconditions,
@@ -71,6 +73,13 @@ REMAP_OPERATIONS: frozenset[str] = frozenset(
 #: something when the members are on one scale and one mesh, and neither is
 #: implied by the members having the same shape.
 ENSEMBLE_OPERATIONS: frozenset[str] = frozenset({"ensemble_mean", "ensemble_spread"})
+
+#: Operations that reduce a field onto bins the caller chooses. Nothing forces
+#: those bins to intersect the mesh, and a profile of the requested length made
+#: entirely of NaN is shaped exactly like an answer.
+PROFILE_OPERATIONS: frozenset[str] = frozenset(
+    {"calculate_zonal_mean", "azimuthal_mean"}
+)
 
 #: Vocabulary an agent is likely to reach for, mapped to the operation that
 #: actually serves that intent. These are not aliases -- the call still fails --
@@ -274,6 +283,16 @@ def _finalize_analysis_result(
         preconditions = evaluate_ensemble_preconditions(
             operation, str(result.get("variable_name", "")), evidence
         )
+    elif operation in PROFILE_OPERATIONS and "profile_coverage" in result:
+        # Absent coverage stays unknown rather than becoming a claim of
+        # interpretability: a remote worker on an older build may not send it.
+        coverage = result["profile_coverage"]
+        codes = profile_coverage_warning_codes(coverage)
+        physically_interpretable = not codes
+        if codes:
+            status = "warning"
+            warning_codes.extend(codes)
+        preconditions = evaluate_profile_preconditions(operation, coverage)
 
     # Refuses by default when a declared precondition fails: raises
     # PreconditionRefusal unless the caller passed the override token.

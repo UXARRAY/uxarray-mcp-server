@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from uxarray_mcp.domain.dims import face_slice_selection
+from uxarray_mcp.domain.profile_coverage import compute_profile_coverage
 
 
 def compute_zonal_mean_stats(
@@ -72,6 +73,10 @@ def compute_zonal_mean_stats(
         "conservative": conservative,
         "reduced_dims": reduced_dims,
         "grid_info": grid_info,
+        # Bands the caller asked for need not touch the mesh. A regional mesh
+        # asked for bands it does not span returns a profile of the right
+        # length made of NaN, which reads as an answer unless it is counted.
+        "profile_coverage": compute_profile_coverage(zonal_mean_values, source=var),
     }
 
 

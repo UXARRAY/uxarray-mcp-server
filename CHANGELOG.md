@@ -6,6 +6,22 @@ uses Semantic Versioning for public releases.
 ## Unreleased
 
 ### Fixed
+- `calculate_zonal_mean` and `azimuthal_mean` now count how many of their bins
+  the mesh actually filled. A mesh spanning 0–40N asked for bands at −70 and
+  −60 returned `[nan, nan]` as `outcome: complete`, `status: complete`, with no
+  warning codes — a profile of the requested length is shaped exactly like an
+  answer. A radial profile centred off the mesh did the same, and even an
+  on-mesh centre left 4 of 6 rings empty without saying so. An entirely unfilled
+  profile now refuses through the front door with a repair naming the argument
+  that caller controls (`lat_spec`, or `center_lon`/`center_lat` and
+  `outer_radius`); a partly filled one warns with `PROFILE_COVERAGE_PARTIAL`,
+  since a regional mesh legitimately fills only the bands it spans. The count
+  is taken from the returned profile rather than by re-deriving bin membership,
+  which would duplicate UXarray's binning and could disagree with it — so the
+  source field is checked too, and an empty bin is attributed to the bins
+  missing the mesh only when the field itself is known to be complete. The
+  `calculate_zonal_mean` payload budget rises from 2050 to 2250 bytes to carry
+  the block and its repair text.
 - `ensemble_mean` and `ensemble_spread` now check what the members declare
   before averaging them. A member in K and a member in degC returned `145.0`
   with `outcome: complete`, `preconditions: not_evaluated` and no warning
