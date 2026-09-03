@@ -6,6 +6,21 @@ uses Semantic Versioning for public releases.
 ## Unreleased
 
 ### Fixed
+- `remap_variable` and `regrid_dataset` now measure how much of the target
+  mesh the source mesh actually reaches, as `remap_to_rectilinear` already
+  did. Nearest-neighbour returns a value at every target point whether or not
+  the source is anywhere near it, so a 1x1 degree source remapped onto a
+  target ten degrees away came back `result_type: complete`, `preconditions:
+  not_evaluated`, no coverage reported, and a full array of plausible numbers
+  that were all extrapolation. Both operations now report `source_coverage`
+  and refuse at zero coverage through the same front-door gate. The repair
+  text is operation-aware: the two grid-to-grid operations are told to pass an
+  overlapping `target_grid_path` and to check the longitude convention, rather
+  than to adjust `target_lon`/`target_lat`, which their callers never pass.
+  Coverage for an unstructured target pairs its coordinates instead of
+  multiplying them out, because the cartesian product would invent points the
+  target does not have. A grid that does not expose the coordinates leaves
+  coverage unknown, which is reported as absent rather than as full.
 - The monthly release job relocks `uv.lock` and closes the `Unreleased`
   changelog section under the new version. It bumped `pyproject.toml`,
   `__init__.py` and the conda recipe and committed only those, so every tag

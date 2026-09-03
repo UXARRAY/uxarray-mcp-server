@@ -142,7 +142,8 @@ metadata supplies vector-like units or standard names.
 `UxDataArray.zonal_anomaly` and `UxDataArray.remap.to_rectilinear`, available in
 the pinned UXarray (`>=2026.6.0`).
 
-`remap_to_rectilinear` returns a **`source_coverage`** block reporting
+All three remap operations — `remap_to_rectilinear`, `remap_variable`, and
+`regrid_dataset` — return a **`source_coverage`** block reporting
 `points_in_source` out of `n_target_points`, the resulting
 `coverage_fraction`, the source mesh bounding box, whether the test was
 `point_in_cell` or a `bounding_box` screen, and whether the remap method
@@ -152,12 +153,22 @@ codes `REMAP_COVERAGE_ZERO` or `REMAP_COVERAGE_PARTIAL`, and a
 non-conservative method raises `REMAP_METHOD_NOT_CONSERVATIVE`; all three
 appear in `scientific_status.warning_codes` and `_provenance.warnings`.
 
+For `remap_variable` and `regrid_dataset` the target points are the target
+mesh's own coordinates — face centres or nodes, whichever `remap_to` writes
+to — and they are paired rather than multiplied out, since an unstructured
+mesh supplies one longitude and one latitude per point. A target grid that
+does not expose those coordinates leaves coverage unknown, in which case
+`source_coverage` is absent rather than reported as full.
+
 Zero coverage is the one coverage case that **refuses** rather than warns.
 When no target point falls inside the source mesh, every returned value is an
-extrapolation, so `remap_to_rectilinear` returns the same
+extrapolation, so the operation returns the same
 `result_type: "input_required"` payload described above with the source bounding
-box in the detail text. Partial coverage and a non-conservative method stay
-warnings, because a partially covered result still contains real values.
+box in the detail text. The repair names the argument that caller controls:
+`target_lon`/`target_lat` for `remap_to_rectilinear`, and `target_grid_path`
+for the two grid-to-grid operations. Partial coverage and a non-conservative
+method stay warnings, because a partially covered result still contains real
+values.
 
 ## Postconditions and `verdict_policy`
 

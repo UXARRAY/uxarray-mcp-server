@@ -14,7 +14,10 @@ from matplotlib.path import Path as MplPath
 
 from uxarray_mcp.domain.dims import FACE_DIMS
 from uxarray_mcp.domain.mesh import load_dataset, load_grid
-from uxarray_mcp.domain.remap_coverage import compute_target_coverage
+from uxarray_mcp.domain.remap_coverage import (
+    compute_scattered_coverage,
+    compute_target_coverage,
+)
 from uxarray_mcp.next_steps import call, needed
 from uxarray_mcp.preconditions import normalize_units
 from uxarray_mcp.provenance import attach_provenance
@@ -33,6 +36,36 @@ from uxarray_mcp.state import (
     write_grid_artifact,
     write_json_artifact,
 )
+
+
+def _grid_coverage(
+    source_grid: Any,
+    target_grid: Any,
+    *,
+    remap_to: str,
+    method: str,
+) -> dict[str, Any] | None:
+    """Coverage of a target *mesh* by the source mesh, or None if unreadable.
+
+    A remap onto another unstructured grid has the same failure as a remap
+    onto a rectilinear one: nearest-neighbour returns a value at every target
+    point, including points nowhere near the source, and a full array of
+    plausible numbers looks the same either way. The target's own coordinates
+    are the points to test -- face centres or nodes, whichever the remap
+    writes to. A grid that does not expose them leaves coverage unknown, which
+    is not the same as full and must not be reported as either.
+    """
+    lon_attr, lat_attr = (
+        ("node_lon", "node_lat") if remap_to == "nodes" else ("face_lon", "face_lat")
+    )
+    try:
+        lon = np.asarray(getattr(target_grid, lon_attr), dtype=float)
+        lat = np.asarray(getattr(target_grid, lat_attr), dtype=float)
+    except (AttributeError, ValueError, TypeError):
+        return None
+    if lon.size == 0 or lon.shape != lat.shape:
+        return None
+    return compute_scattered_coverage(source_grid, lon, lat, method=method)
 
 
 def _coverage_warnings(coverage: dict[str, Any]) -> list[str]:
@@ -887,6 +920,12 @@ def remap_variable(
             f"Unsupported remap method {method!r}. Choose from "
             "'nearest_neighbor', 'inverse_distance_weighted', or 'bilinear'."
         )
+    # Measured before the remap, because the remap itself fills every target
+    # point regardless and so cannot tell an interpolated value from an
+    # extrapolated one afterwards.
+    coverage = _grid_coverage(
+        uxda.uxgrid, target_grid, remap_to=remap_to, method=method
+    )
     tracker.stage("remapping", f"Running {method} remap.")
     remapped = getattr(uxda.remap, method)(target_grid, remap_to=remap_to)
     result_handle = _persist_dataarray_result(
@@ -912,9 +951,12 @@ def remap_variable(
         "target_grid": summarize_grid(target_grid),
         "result_handle": result_handle,
     }
+    if coverage is not None:
+        result["source_coverage"] = coverage
     result = attach_provenance(
         result,
         tool="remap_variable",
+        warnings=_coverage_warnings(coverage) if coverage else [],
         inputs={
             "target_grid_path": target_grid_path,
             "variable_name": variable_name,
@@ -1013,6 +1055,11 @@ def regrid_dataset(
     ]
     if not variables:
         raise ValueError("No face-centered variables available for remapping.")
+    # One source mesh and one target mesh for every variable in the dataset,
+    # so coverage is a property of the pair and is measured once.
+    coverage = _grid_coverage(
+        uxds.uxgrid, target_grid, remap_to=remap_to, method=method
+    )
     dataset_parts = []
     for name in variables:
         tracker.stage("remapping", f"Remapping variable {name}")
@@ -1039,9 +1086,12 @@ def regrid_dataset(
         "target_grid": summarize_grid(target_grid),
         "result_handle": result_handle,
     }
+    if coverage is not None:
+        result["source_coverage"] = coverage
     result = attach_provenance(
         result,
         tool="regrid_dataset",
+        warnings=_coverage_warnings(coverage) if coverage else [],
         inputs={
             "target_grid_path": target_grid_path,
             "grid_path": grid_path,
