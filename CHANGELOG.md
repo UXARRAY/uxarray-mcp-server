@@ -29,6 +29,33 @@ uses Semantic Versioning for public releases.
   on a grid that wraps the globe, so an open sphere and a closed one looked
   the same from here. `V - E + F == 2` is the cheap invariant that separates
   them.
+- Comparisons declare a `units_comparable` precondition. `bias`, `rmse` and
+  the difference field are all `a - b`, which is a physical quantity only
+  when both sides are on the same scale; comparing a field in K against one
+  in degC previously returned 273.15 with nothing to distinguish the unit
+  offset from model error. Through `run_analysis` a declared, unresolvable
+  disagreement now refuses with a repair, and the `acknowledge` token still
+  returns the number for a caller who means it. Undeclared units are a gap in
+  the metadata rather than a contradiction, so they warn (`UNITS_UNDECLARED`)
+  instead of refusing — comparing two unlabeled anomaly fields is ordinary.
+  `normalize_units` resolves a fixed synonym table (`K`/`kelvin`, `m/s`/
+  `m s-1`) but does no unit algebra, so equivalent-but-unaliased spellings
+  such as `mm day-1` against `kg m-2 s-1` refuse and say so in the repair.
+
+### Fixed
+- `compare_fields`, `calculate_bias`, `calculate_rmse` and
+  `calculate_pattern_correlation` area-weight their metrics. They previously
+  called `.mean()` over the face dimension, which answers "average over
+  cells", not "average over the sphere" — the two differ whenever cell areas
+  do. On a 10° lat-lon mesh (648 faces, largest cell 11.5× the smallest) with
+  a +2 K tropical / −2 K polar difference, the old code reported a bias of
+  −0.667 K where the area-weighted answer is +0.004 K: wrong magnitude and
+  wrong sign. Results now carry an `area_weighting` block naming the face
+  dimension and the max/min area ratio. When weighting is impossible — no
+  grid supplied, a non-face-centered field, or unavailable face areas — the
+  result says so through `scientific_status` with the
+  `AREA_WEIGHTING_UNAVAILABLE` code rather than presenting a cell-count mean
+  as a spatial one.
 
 ## 0.3.0 — 2026-08-29
 

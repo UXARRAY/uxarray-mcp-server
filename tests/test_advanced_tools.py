@@ -332,3 +332,160 @@ def test_remap_remote_raises_when_endpoint_down_and_path_remote(monkeypatch):
             use_remote=True,
             endpoint="chrysalis",
         )
+
+
+# ---------------------------------------------------------------------------
+# Area weighting: a mean over cells is not a mean over the sphere
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def latitude_banded_comparison(tmp_path):
+    """Two fields differing by +2 K in the tropics and -2 K at the poles.
+
+    On a lat-lon mesh the polar cells are far smaller than the tropical ones
+    (here 11.5x), so cell-counting and area-weighting disagree on both the
+    magnitude and the *sign* of the mean difference. That makes this the
+    minimal case that separates the two estimators.
+    """
+    import uxarray as ux
+    import xarray as xr
+
+    lon = np.arange(0, 360, 10.0)
+    lat = np.arange(-85, 86, 10.0)
+    grid = ux.Grid.from_structured(lon=lon, lat=lat)
+    grid_file = tmp_path / "banded_grid.nc"
+    grid.to_xarray().to_netcdf(grid_file)
+
+    face_lat = np.asarray(grid.face_lat)
+    perturbed = np.where(np.abs(face_lat) < 30, 2.0, -2.0)
+    a = tmp_path / "banded_a.nc"
+    b = tmp_path / "banded_b.nc"
+    xr.Dataset({"t": (["n_face"], perturbed)}).to_netcdf(a)
+    xr.Dataset({"t": (["n_face"], np.zeros(grid.n_face))}).to_netcdf(b)
+    return str(grid_file), str(a), str(b)
+
+
+def test_bias_is_area_weighted_not_cell_counted(latitude_banded_comparison):
+    """The unweighted answer is -0.667 K; the area-weighted one is ~0.
+
+    Cell-counting over-represents the small polar cells, which carry the
+    negative band, so the unweighted mean reports net cooling for a field
+    that is very nearly neutral over the sphere.
+    """
+    grid_file, a, b = latitude_banded_comparison
+    result = compare_fields(
+        variable_name="t", data_path_a=a, data_path_b=b, grid_path=grid_file
+    )
+
+    assert result["area_weighting"]["weighted"] is True
+    assert result["area_weighting"]["equal_area"] is False
+    assert result["area_weighting"]["area_ratio_max_over_min"] > 10
+
+    bias = result["metrics"]["bias"]
+    assert abs(bias) < 0.05, f"expected a near-neutral weighted bias, got {bias}"
+    assert bias > 0, "the weighted bias must not inherit the cell-count sign"
+
+
+def test_unweighted_comparison_discloses_that_it_is_unweighted(tmp_path):
+    """Without a grid we cannot weight, so the result must say so rather than
+    present a cell-count mean as if it were a spatial mean."""
+    import xarray as xr
+
+    a = tmp_path / "plain_a.nc"
+    b = tmp_path / "plain_b.nc"
+    xr.Dataset({"t": (["n_face"], np.array([1.0, 2.0, 3.0]))}).to_netcdf(a)
+    xr.Dataset({"t": (["n_face"], np.zeros(3))}).to_netcdf(b)
+
+    result = compare_fields(
+        variable_name="t", data_path_a=str(a), data_path_b=str(b), grid_path=None
+    )
+
+    assert result["area_weighting"]["weighted"] is False
+    status = result["scientific_status"]
+    assert "AREA_WEIGHTING_UNAVAILABLE" in status["warning_codes"]
+    assert status["physically_interpretable"] is False
+
+
+def test_pattern_correlation_is_area_weighted(latitude_banded_comparison):
+    """A weighted Pearson must not reduce to the unweighted one on a mesh
+    whose cells differ by an order of magnitude in area."""
+    from uxarray_mcp.tools.advanced import (
+        _area_weights,
+        _load_comparison_arrays,
+        _pattern_correlation,
+    )
+
+    grid_file, a, b = latitude_banded_comparison
+    first, second, uxgrid = _load_comparison_arrays(
+        grid_path=grid_file, data_path_a=a, data_path_b=b, variable_name="t"
+    )
+    weights, weighting = _area_weights(first, uxgrid)
+    assert weighting["weighted"] is True
+
+    # Correlate against |latitude|. Plain latitude is antisymmetric while the
+    # field is symmetric, so both estimators would return 0 and the test would
+    # pass on a degenerate case rather than on the weighting.
+    import uxarray as ux
+
+    lat_field = first.copy(data=np.abs(np.asarray(ux.open_grid(grid_file).face_lat)))
+    weighted = _pattern_correlation(first, lat_field, weights)
+    unweighted = _pattern_correlation(first, lat_field, None)
+    assert abs(unweighted) > 0.5, "the fixture must correlate, or nothing is tested"
+    assert weighted != pytest.approx(unweighted, abs=1e-3)
+
+
+def test_single_metric_tools_carry_the_weighting_disclosure(tmp_path):
+    """A bare ``bias`` number cannot be interpreted without knowing whether it
+    was area-weighted, so the single-metric wrappers must not drop what
+    ``compare_fields`` discloses."""
+    import xarray as xr
+
+    a = tmp_path / "wrap_a.nc"
+    b = tmp_path / "wrap_b.nc"
+    xr.Dataset({"t": (["n_face"], np.array([1.0, 2.0, 3.0]))}).to_netcdf(a)
+    xr.Dataset({"t": (["n_face"], np.zeros(3))}).to_netcdf(b)
+
+    for tool in (calculate_bias, calculate_rmse, calculate_pattern_correlation):
+        result = tool(variable_name="t", data_path_a=str(a), data_path_b=str(b))
+        assert result["area_weighting"]["weighted"] is False, tool.__name__
+        assert (
+            "AREA_WEIGHTING_UNAVAILABLE" in result["scientific_status"]["warning_codes"]
+        ), tool.__name__
+        assert result["units"] == {"a": None, "b": None, "comparable": None}
+
+
+def test_compare_fields_reports_mismatched_units(tmp_path):
+    """The tool itself is not the refusal point -- the front door is -- but it
+    has to report the evidence the refusal is made from."""
+    import xarray as xr
+
+    a = tmp_path / "units_a.nc"
+    b = tmp_path / "units_b.nc"
+    xr.Dataset(
+        {"t": (["n_face"], np.array([300.0, 301.0, 302.0]), {"units": "K"})}
+    ).to_netcdf(a)
+    xr.Dataset(
+        {"t": (["n_face"], np.array([27.0, 28.0, 29.0]), {"units": "degC"})}
+    ).to_netcdf(b)
+
+    result = compare_fields(variable_name="t", data_path_a=str(a), data_path_b=str(b))
+
+    assert result["units"] == {"a": "K", "b": "degC", "comparable": False}
+    assert "UNITS_MISMATCHED" in result["scientific_status"]["warning_codes"]
+
+
+def test_compare_fields_accepts_synonymous_unit_spellings(tmp_path):
+    import xarray as xr
+
+    a = tmp_path / "syn_a.nc"
+    b = tmp_path / "syn_b.nc"
+    xr.Dataset(
+        {"t": (["n_face"], np.array([1.0, 2.0, 3.0]), {"units": "m/s"})}
+    ).to_netcdf(a)
+    xr.Dataset({"t": (["n_face"], np.zeros(3), {"units": "m s-1"})}).to_netcdf(b)
+
+    result = compare_fields(variable_name="t", data_path_a=str(a), data_path_b=str(b))
+
+    assert result["units"]["comparable"] is True
+    assert "UNITS_MISMATCHED" not in result["scientific_status"]["warning_codes"]
