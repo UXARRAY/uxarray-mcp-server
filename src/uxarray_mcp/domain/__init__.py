@@ -6,7 +6,11 @@ Functions here contain the pure domain logic used by both local tools
 
 from .area import compute_area_stats
 from .mesh import is_healpix_spec, load_dataset, load_grid, parse_healpix_zoom
-from .remap_coverage import compute_target_coverage, method_is_conservative
+from .remap_coverage import (
+    compute_scattered_coverage,
+    compute_target_coverage,
+    method_is_conservative,
+)
 from .variable import compute_variable_info
 from .vector_calc import (
     compute_azimuthal_mean,
@@ -23,6 +27,7 @@ __all__ = [
     "parse_healpix_zoom",
     "compute_area_stats",
     "compute_target_coverage",
+    "compute_scattered_coverage",
     "method_is_conservative",
     "compute_variable_info",
     "compute_zonal_mean_stats",

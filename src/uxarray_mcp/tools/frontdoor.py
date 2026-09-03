@@ -59,6 +59,13 @@ COMPARISON_OPERATIONS: frozenset[str] = frozenset(
     {"compare_fields", "bias", "rmse", "pattern_correlation"}
 )
 
+#: Operations that carry a field from one mesh onto another. All three fill
+#: every target point whether or not the source mesh reaches it, so all three
+#: have to say how much of the target the source actually covered.
+REMAP_OPERATIONS: frozenset[str] = frozenset(
+    {"remap_variable", "regrid_dataset", "remap_to_rectilinear"}
+)
+
 #: Vocabulary an agent is likely to reach for, mapped to the operation that
 #: actually serves that intent. These are not aliases -- the call still fails --
 #: but naming the right operation turns a dead end into a one-step repair.
@@ -229,7 +236,7 @@ def _finalize_analysis_result(
         preconditions = evaluate_comparison_preconditions(
             str(result.get("variable_name", "")), units.get("a"), units.get("b")
         )
-    elif operation == "remap_to_rectilinear" and "source_coverage" in result:
+    elif operation in REMAP_OPERATIONS and "source_coverage" in result:
         # Absent coverage stays unknown rather than becoming a claim of
         # interpretability: a remote worker on an older build may not send it.
         codes = list(result["source_coverage"].get("warning_codes", []))
@@ -241,7 +248,9 @@ def _finalize_analysis_result(
         # beside a number changes nothing. Zero coverage means every
         # returned value is extrapolated, which is exactly the case that
         # should refuse rather than advise.
-        preconditions = evaluate_remap_preconditions(result["source_coverage"])
+        preconditions = evaluate_remap_preconditions(
+            result["source_coverage"], operation
+        )
 
     # Refuses by default when a declared precondition fails: raises
     # PreconditionRefusal unless the caller passed the override token.
