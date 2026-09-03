@@ -34,6 +34,11 @@ The workflow updates:
 - `pyproject.toml`
 - `src/uxarray_mcp/__init__.py`
 - `conda/recipe/meta.yaml`
+- `CHANGELOG.md` — the `## Unreleased` section is closed under a heading for
+  the new version and an empty `## Unreleased` is left for the next cycle
+- `uv.lock` — the lockfile records the project's own version, so it is
+  relocked. Nothing in CI passes `--locked`, which means a stale lock is
+  invisible here and only fails for someone checking out the tag
 
 Then it runs the release checks, builds the package, commits the version bump,
 tags it, pushes to `main`, and creates the GitHub Release.

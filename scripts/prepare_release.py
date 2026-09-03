@@ -10,12 +10,15 @@ import argparse
 import os
 import re
 import subprocess
+from datetime import date as date_cls
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
 INIT = ROOT / "src" / "uxarray_mcp" / "__init__.py"
 CONDA_RECIPE = ROOT / "conda" / "recipe" / "meta.yaml"
+CHANGELOG = ROOT / "CHANGELOG.md"
+LOCKFILE = ROOT / "uv.lock"
 
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
@@ -66,6 +69,68 @@ def _write_version(version: str) -> None:
     )
 
 
+def stamp_changelog(text: str, version: str, today: str) -> str:
+    """Close the `Unreleased` section under a heading for this release.
+
+    Everything that was accumulating under `## Unreleased` becomes the notes
+    for `version`, and an empty `## Unreleased` is left behind for the next
+    cycle. Without this a tag ships with its own changes still filed as
+    unreleased, so the published release has no notes and the next one
+    inherits them.
+
+    Idempotent: a changelog that already carries this version is returned
+    unchanged, so a re-run of the release job cannot stack two headings.
+    """
+    if re.search(rf"^## {re.escape(version)} ", text, flags=re.MULTILINE):
+        return text
+    if not re.search(r"^## Unreleased\s*$", text, flags=re.MULTILINE):
+        raise RuntimeError(
+            "CHANGELOG.md has no '## Unreleased' heading to close; refusing to "
+            "guess where the notes for this release begin."
+        )
+    return re.sub(
+        r"^## Unreleased\s*$",
+        f"## Unreleased\n\n## {version} — {today}",
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+
+
+def _stamp_changelog_file(version: str) -> None:
+    today = date_cls.today().isoformat()
+    CHANGELOG.write_text(stamp_changelog(CHANGELOG.read_text(), version, today))
+
+
+def _relock(version: str) -> None:
+    """Bring `uv.lock` onto the new version, or say why it could not.
+
+    The lockfile records the project's own version, so a bump leaves it
+    describing the previous release. Nothing in CI passes `--locked`, so the
+    mismatch is invisible here and surfaces for whoever checks out the tag and
+    runs `uv sync --locked`. `uv` is not guaranteed to be on PATH at this
+    point -- the script is meant to run before the environment exists -- so a
+    missing binary is reported rather than fatal, and the workflow relocks in
+    its own step once uv is installed.
+    """
+    if not LOCKFILE.exists():
+        return
+    try:
+        subprocess.run(
+            ["uv", "lock", "--offline"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        print("uv not on PATH; the workflow relocks uv.lock in a later step.")
+    except subprocess.CalledProcessError as exc:
+        print(f"uv lock failed, leaving uv.lock at its old version: {exc.stderr}")
+    else:
+        print(f"Relocked uv.lock at {version}.")
+
+
 def _github_output(**values: str | int | bool | None) -> None:
     output = os.environ.get("GITHUB_OUTPUT")
     lines = [f"{key}={value}" for key, value in values.items()]
@@ -109,6 +174,8 @@ def main() -> int:
         raise ValueError(f"Invalid release version {version!r}; expected X.Y.Z")
 
     _write_version(version)
+    _stamp_changelog_file(version)
+    _relock(version)
     _github_output(
         release_needed="true",
         previous_tag=latest_tag or "",
