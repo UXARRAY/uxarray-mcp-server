@@ -65,7 +65,7 @@ def _call(files, **kwargs):
 def test_unlabeled_components_refuse_end_to_end(state_dir, unlabeled_wind_files):
     result = _call(unlabeled_wind_files)
 
-    assert result["result_type"] == "input_required"
+    assert result["outcome"] == "input_required"
     assert {c["id"] for c in result["refusal"]["failed_checks"]} == {
         "velocity_units",
         "component_identity",
@@ -80,7 +80,7 @@ def test_override_returns_an_explicitly_unverified_number(
 ):
     result = _call(unlabeled_wind_files, acknowledge=OVERRIDE_TOKEN)
 
-    assert result["result_type"] == "complete"
+    assert result["outcome"] == "complete"
     assert result["preconditions"]["status"] == "overridden"
     assert result["scientific_status"]["physically_interpretable"] is False
     assert result["scientific_status"]["status"] == "unverified"
@@ -90,7 +90,7 @@ def test_override_returns_an_explicitly_unverified_number(
 def test_labeled_components_pass_every_precondition(state_dir, labeled_wind_files):
     result = _call(labeled_wind_files)
 
-    assert result["result_type"] == "complete"
+    assert result["outcome"] == "complete"
     assert result["preconditions"]["status"] == "satisfied"
     assert result["preconditions"]["failed_checks"] == []
     assert result["scientific_status"]["physically_interpretable"] is True
@@ -99,8 +99,26 @@ def test_labeled_components_pass_every_precondition(state_dir, labeled_wind_file
 def test_unscaled_curl_refuses_even_with_good_metadata(state_dir, labeled_wind_files):
     result = _call(labeled_wind_files, scale_by_radius=False)
 
-    assert result["result_type"] == "input_required"
+    assert result["outcome"] == "input_required"
     assert [c["id"] for c in result["refusal"]["failed_checks"]] == ["radius_scaling"]
+
+
+@pytest.mark.parametrize("acknowledge", [None, OVERRIDE_TOKEN])
+def test_no_result_reuses_the_protocols_field_name(
+    state_dir, unlabeled_wind_files, acknowledge
+):
+    """`result_type` must not come back under either shape.
+
+    The SDK puts its own `resultType` on the result object and always sets it
+    to "complete", since the call did return. Our field says something else --
+    which payload shape this is -- and a refusal carrying both would put two
+    same-named fields with contradicting values on one wire.
+    """
+    kwargs = {"acknowledge": acknowledge} if acknowledge else {}
+    result = _call(unlabeled_wind_files, **kwargs)
+
+    assert "result_type" not in result
+    assert result["outcome"] in {"complete", "input_required"}
 
 
 def test_refusal_is_not_raised_through_the_tool_boundary(

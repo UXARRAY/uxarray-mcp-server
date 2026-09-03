@@ -7,8 +7,8 @@ import json
 import pytest
 
 from uxarray_mcp.preconditions import (
+    OUTCOME_INPUT_REQUIRED,
     OVERRIDE_TOKEN,
-    RESULT_TYPE_INPUT_REQUIRED,
     PreconditionRefusal,
     enforce,
     evaluate_comparison_preconditions,
@@ -159,7 +159,7 @@ class TestRefusalPayloadShape:
         return excinfo.value.payload
 
     def test_tagged_as_input_required(self, payload):
-        assert payload["result_type"] == RESULT_TYPE_INPUT_REQUIRED
+        assert payload["outcome"] == OUTCOME_INPUT_REQUIRED
 
     def test_carries_an_elicitation_input_request(self, payload):
         request = payload["input_requests"]["acknowledge_unverified"]

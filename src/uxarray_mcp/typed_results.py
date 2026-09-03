@@ -124,22 +124,25 @@ def declared_output_schemas() -> dict[str, dict[str, Any]]:
 #: The envelope ``analyze_dataset`` wraps every successful analysis in.
 #: This is the paper's result contract expressed as a schema rather than as
 #: prose: an agent reading ``tools/list`` learns that a result may refuse
-#: (``result_type`` is ``input_required``), may abstain (a postcondition with
+#: (``outcome`` is ``input_required``), may abstain (a postcondition with
 #: verdict ``not_evaluated``), and always says where it ran.
 _ANALYSIS_ENVELOPE: dict[str, Any] = {
     "type": "object",
     "title": "analysis result",
     "description": (
         "Result of one analysis operation. Two shapes share this schema: a "
-        "completed analysis (result_type='complete') carrying the operation's "
-        "own fields, and a refusal (result_type='input_required') carrying the "
+        "completed analysis (outcome='complete') carrying the operation's "
+        "own fields, and a refusal (outcome='input_required') carrying the "
         "failed checks and the repair that would satisfy them, with no number."
     ),
     "properties": {
-        "result_type": {
+        "outcome": {
             "type": "string",
             "enum": ["complete", "input_required"],
             "description": (
+                "Which of the two payload shapes this is. Distinct from the "
+                "protocol's own 'resultType', which reports that the call "
+                "returned and is always 'complete'. "
                 "'complete' means a number was produced. 'input_required' "
                 "means a physical precondition failed and the value was "
                 "deliberately withheld -- read 'preconditions.failed_checks' "
@@ -203,7 +206,7 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
             "type": "object",
             "description": (
                 "Why the operation declined to produce a number, and what "
-                "would make it willing to. Present only when result_type is "
+                "would make it willing to. Present only when outcome is "
                 "'input_required'."
             ),
             "properties": {
@@ -227,7 +230,7 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
             "type": "object",
             "description": (
                 "MCP elicitation requests that would unblock the call, keyed "
-                "by name. Present only when result_type is 'input_required'."
+                "by name. Present only when outcome is 'input_required'."
             ),
             "additionalProperties": True,
         },
@@ -242,22 +245,22 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
         },
         "_provenance": _PROVENANCE_SCHEMA,
     },
-    # Only `result_type` is unconditionally required, because it is what
+    # Only `outcome` is unconditionally required, because it is what
     # tells a reader which of the two shapes it is holding. Everything else
     # is required *per branch* below.
     #
     # A flat required list would have to be the intersection of the two
-    # shapes, which is the empty set beyond `result_type` -- so the schema
+    # shapes, which is the empty set beyond `outcome` -- so the schema
     # would promise nothing at all about either. The branch conditions are
     # what make the promise real: a result carrying a number must also carry
     # the judgment of whether that number means anything, and a refusal must
     # carry the repair that would lift it.
-    "required": ["result_type"],
+    "required": ["outcome"],
     "allOf": [
         {
             "if": {
-                "properties": {"result_type": {"const": "complete"}},
-                "required": ["result_type"],
+                "properties": {"outcome": {"const": "complete"}},
+                "required": ["outcome"],
             },
             "then": {
                 "required": [
@@ -269,8 +272,8 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
         },
         {
             "if": {
-                "properties": {"result_type": {"const": "input_required"}},
-                "required": ["result_type"],
+                "properties": {"outcome": {"const": "input_required"}},
+                "required": ["outcome"],
             },
             "then": {"required": ["refusal", "input_requests", "request_state"]},
         },
@@ -284,7 +287,7 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
 #:
 #: Only ``run_analysis`` is listed.  It is the front door that runs a single
 #: operation through the precondition gate, so it is the one that actually
-#: returns ``result_type`` and the refusal fields this envelope promises.
+#: returns ``outcome`` and the refusal fields this envelope promises.
 #: ``analyze_dataset`` is a multi-stage summary with a different shape --
 #: declaring the envelope for it advertised a contract it does not honour,
 #: and an SDK that validates ``structuredContent`` rejects the reply.

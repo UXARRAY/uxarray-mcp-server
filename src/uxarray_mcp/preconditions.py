@@ -17,7 +17,7 @@ request (MRTR) flow. ``InputRequiredResult`` lets a server answer a
 ``request_state`` the client echoes back on retry. We mirror that shape
 in the tool result:
 
-- ``result_type`` is ``"input_required"`` rather than ``"complete"``
+- ``outcome`` is ``"input_required"`` rather than ``"complete"``
 - ``input_requests`` carries an ``elicitation/create`` form request
   describing the acknowledgment we need
 - ``request_state`` is an opaque token the caller passes back verbatim
@@ -29,6 +29,15 @@ content-block types in :mod:`uxarray_mcp.content_blocks`, and an
 than reaching the transport as an elicitation. Building the payload in
 the spec's shape now means the day the adapter grows MRTR support this
 becomes a passthrough rather than a redesign.
+
+The mirrored field is named ``outcome`` and not ``result_type``, which
+is what it was called first. The SDK stamps its own ``resultType`` onto
+every JSON-RPC result object, always ``"complete"`` because from the
+protocol's point of view the call did return. A refusal therefore put
+two fields with the same name and contradicting values on one wire,
+separated only by camelCase. ``outcome`` is ours and says which of the
+two payload shapes this is; ``resultType`` is the protocol's and says
+the call completed. Both are true at once now.
 
 Note that ``not_evaluated`` (#84) and a failed precondition are
 different states and stay distinct: one is "we did not check," the other
@@ -47,8 +56,8 @@ from typing import Any
 OVERRIDE_TOKEN = "i-understand-this-result-may-not-be-physical"
 
 #: Marks a result the caller must act on before the computation will run.
-RESULT_TYPE_INPUT_REQUIRED = "input_required"
-RESULT_TYPE_COMPLETE = "complete"
+OUTCOME_INPUT_REQUIRED = "input_required"
+OUTCOME_COMPLETE = "complete"
 
 
 class PreconditionRefusal(Exception):
@@ -431,7 +440,7 @@ def enforce(
             )
         raise PreconditionRefusal(
             {
-                "result_type": RESULT_TYPE_INPUT_REQUIRED,
+                "outcome": OUTCOME_INPUT_REQUIRED,
                 "operation": operation,
                 "refusal": {
                     "summary": (

@@ -141,7 +141,7 @@ class TestRemapToRectilinearCoverage:
                 target_lon=list(np.arange(-180, 180, 72.0)),
                 target_lat=list(np.arange(-60, 61, 30.0)),
             )
-        assert result["result_type"] == "input_required"
+        assert result["outcome"] == "input_required"
         assert [c["id"] for c in result["refusal"]["failed_checks"]] == [
             "remap_coverage_nonzero"
         ]
@@ -209,7 +209,7 @@ class TestGridToGridCoverage:
 
     ``remap_target_grid`` sits at lon 10-11 and the regional source at lon
     40-47, so these calls used to return a full array of plausible numbers
-    with ``result_type: complete`` and no coverage reported at all.
+    with ``outcome: complete`` and no coverage reported at all.
     """
 
     @pytest.mark.parametrize("operation", ["remap_variable", "regrid_dataset"])
@@ -226,7 +226,7 @@ class TestGridToGridCoverage:
                 variable_name="temperature",
                 target_grid_path=remap_target_grid,
             )
-        assert result["result_type"] == "input_required"
+        assert result["outcome"] == "input_required"
         check = result["refusal"]["failed_checks"][0]
         assert check["id"] == "remap_coverage_nonzero"
         # The repair has to name an argument this caller actually passes;
@@ -267,6 +267,6 @@ class TestGridToGridCoverage:
                 variable_name="temperature",
                 target_grid_path=overlapping_target_grid,
             )
-        assert result["result_type"] == "complete"
+        assert result["outcome"] == "complete"
         assert result["source_coverage"]["coverage_fraction"] == 1.0
         assert result["preconditions"]["status"] == "satisfied"

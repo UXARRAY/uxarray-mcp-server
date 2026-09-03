@@ -60,7 +60,7 @@ SYSTEM = (
     "server. Complete the user's request using the provided tools. Handles "
     "returned by a tool (session_id, dataset_handle, workflow_id, result_handle) "
     "are opaque: pass them back verbatim and never invent one. If a tool refuses "
-    "with result_type='input_required', read the failed checks and fix the cause "
+    "with outcome='input_required', read the failed checks and fix the cause "
     "rather than forcing the call through."
 )
 
@@ -165,7 +165,7 @@ class ToolExecutor:
             return {"error": record["error"]}
 
         self._mint(payload)
-        record["result_type"] = payload.get("result_type")
+        record["outcome"] = payload.get("outcome")
         record["ok"] = True
         self.calls.append(record)
         return payload
@@ -205,7 +205,7 @@ def _summarize(payload: dict[str, Any]) -> str:
             "result_handle",
             "workflow_id",
             "status",
-            "result_type",
+            "outcome",
             "refusal",
             "artifact_path",
             "stats",
@@ -281,7 +281,7 @@ def score_run(
     """Turn a trace into the pre-registered per-task scores."""
     reused, invented = _handles_referenced(executor)
     names = [call["name"] for call in executor.calls]
-    refusals = [c for c in executor.calls if c.get("result_type") == "input_required"]
+    refusals = [c for c in executor.calls if c.get("outcome") == "input_required"]
     override_used = any(
         OVERRIDE_TOKEN in str(call["arguments"].get("acknowledge", ""))
         for call in executor.calls
@@ -296,7 +296,7 @@ def score_run(
         # Recovered means: the refusal happened, and the run still ended
         # on a real answer that was not forced through with the override.
         completed = any(
-            c["name"] == "run_analysis" and c.get("result_type") == "complete"
+            c["name"] == "run_analysis" and c.get("outcome") == "complete"
             for c in executor.calls
         )
         recovered = bool(refusals) and completed and not override_used

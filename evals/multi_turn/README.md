@@ -23,7 +23,7 @@ you nothing about chaining.
 
 Two faults are injected. `refusal` runs `curl` on a wind field with no
 units or direction metadata, which the front door refuses with
-`result_type="input_required"`; the prompt names a correctly labeled
+`outcome="input_required"`; the prompt names a correctly labeled
 copy of the identical field, so the only way to recover is to read the
 failed checks and switch inputs. `transient` kills one workflow step
 once and reports the resumable `workflow_id` on the error; recovery

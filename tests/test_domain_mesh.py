@@ -119,7 +119,7 @@ class TestLoadDatasetHealpix:
             variable_name="phi",
         )
 
-        assert result["result_type"] == "input_required"
+        assert result["outcome"] == "input_required"
         failed = {c["id"] for c in result["refusal"]["failed_checks"]}
         assert failed == {"radius_scaling"}
         assert "sphere_radius" in result["refusal"]["repairs"][0]

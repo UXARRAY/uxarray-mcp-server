@@ -90,16 +90,16 @@ class TestAnalysisEnvelope:
     """The front-door envelope is the paper's result contract as a schema.
 
     The envelope belongs to ``run_analysis``: that is the tool that
-    returns a ``result_type`` and can refuse with ``input_required``.
+    returns a ``outcome`` and can refuse with ``input_required``.
     ``analyze_dataset`` runs a multi-stage summary and has no such field,
     so it must not advertise this shape.
     """
 
     def test_refusal_is_advertised_as_a_reachable_shape(self):
         schema = output_schema_for("run_analysis")
-        result_type = schema["properties"]["result_type"]
-        assert set(result_type["enum"]) == {"complete", "input_required"}
-        assert schema["required"] == ["result_type"]
+        outcome = schema["properties"]["outcome"]
+        assert set(outcome["enum"]) == {"complete", "input_required"}
+        assert schema["required"] == ["outcome"]
 
     def test_contract_blocks_are_all_declared(self):
         props = output_schema_for("run_analysis")["properties"]
@@ -142,7 +142,7 @@ class TestRegistryPublishesSchemas:
 
     @pytest.mark.parametrize("profile", ["core", "deferred-full"])
     def test_multi_stage_summary_does_not_claim_the_envelope(self, profile):
-        # analyze_dataset returns a stage summary, not a result_type
+        # analyze_dataset returns a stage summary, not a outcome
         # envelope. Declaring one made the server reject its own output as
         # invalid structured content the moment a client called it.
         registry = make_registry(profile=profile)
@@ -167,7 +167,7 @@ class TestRegistryPublishesSchemas:
         table = RouteTable(make_registry(profile="core"))
         route = table.get_route("run_analysis")
         assert route.output_schema is not None
-        assert "result_type" in route.output_schema["properties"]
+        assert "outcome" in route.output_schema["properties"]
 
     @needs_schema_adapter
     def test_tools_without_a_declared_shape_stay_silent(self):
@@ -274,7 +274,7 @@ class TestDeclaredShapeMatchesRealOutput:
 
         jsonschema.validate(
             {
-                "result_type": "complete",
+                "outcome": "complete",
                 "scientific_status": {"physically_interpretable": None},
                 "preconditions": {"status": "not_evaluated"},
                 "postconditions": {"status": "not_evaluated"},
@@ -319,7 +319,7 @@ class TestEveryResultValidatesAgainstItsPublishedSchema:
         )
 
         self._validate(result)
-        assert result["result_type"] == "complete"
+        assert result["outcome"] == "complete"
         # The branch condition is the point: a number never travels without
         # the judgment of whether it means anything.
         assert "physically_interpretable" in result["scientific_status"]
@@ -340,7 +340,7 @@ class TestEveryResultValidatesAgainstItsPublishedSchema:
         )
 
         self._validate(result)
-        assert result["result_type"] == "input_required"
+        assert result["outcome"] == "input_required"
         assert result["refusal"]["repairs"]
 
     @pytest.mark.parametrize(
@@ -389,7 +389,7 @@ class TestEveryResultValidatesAgainstItsPublishedSchema:
 
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(
-                {"result_type": "complete", "_provenance": {}},
+                {"outcome": "complete", "_provenance": {}},
                 output_schema_for("run_analysis"),
             )
 
@@ -398,7 +398,7 @@ class TestEveryResultValidatesAgainstItsPublishedSchema:
 
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(
-                {"result_type": "input_required"},
+                {"outcome": "input_required"},
                 output_schema_for("run_analysis"),
             )
 
