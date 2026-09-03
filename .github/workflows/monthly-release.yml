@@ -65,6 +65,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Relock uv.lock at the new version
+        if: steps.prep.outputs.release_needed == 'true'
+        run: |
+          # uv.lock records the project's own version, so the bump above left
+          # it describing the previous release. Nothing in CI passes --locked,
+          # so the mismatch is invisible here and surfaces for whoever checks
+          # out the tag and runs `uv sync --locked`.
+          uv lock
+          uv sync --locked --dev
+
       - name: Run release checks
         if: steps.prep.outputs.release_needed == 'true'
         run: |
@@ -96,7 +106,8 @@ jobs:
         env:
           RELEASE_VERSION: ${{ steps.prep.outputs.version }}
         run: |
-          git add pyproject.toml src/uxarray_mcp/__init__.py conda/recipe/meta.yaml
+          git add pyproject.toml src/uxarray_mcp/__init__.py \
+            conda/recipe/meta.yaml CHANGELOG.md uv.lock
           if git diff --cached --quiet; then
             echo "Version files already match ${RELEASE_VERSION}; no release commit needed."
           else
