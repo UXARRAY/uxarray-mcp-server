@@ -271,6 +271,14 @@ def compute_gradient(
         result,
         warnings=uxarray_warnings,
         warning_codes=["SPHERE_RADIUS_UNAVAILABLE"] if uxarray_warnings else [],
+        extra={
+            # Requested and applied are different facts, and only the second
+            # one decides whether the derivative is per metre or per radian.
+            # ``curl``/``divergence`` already report both; reporting them here
+            # too is what lets the front door gate all three the same way.
+            "physical_scaling_requested": bool(scale_by_radius),
+            "physical_scaling_applied": bool(scale_by_radius and not uxarray_warnings),
+        },
     )
 
 
