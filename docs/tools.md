@@ -96,11 +96,15 @@ gate pass on any such grid, so the repair names the missing attribute rather
 than telling a caller to set a flag they already set.
 
 When a check fails, the call **does not run** and no number is returned.
-The result instead carries `result_type: "input_required"`, shaped after the
+The result instead carries `outcome: "input_required"`, shaped after the
 MCP `2026-07-28` multi-round-trip request (MRTR) flow: a `refusal` block with
 the failed checks and the specific repair for each, an `input_requests` entry
 holding an `elicitation/create` form, and an opaque `request_state` derived
-from the operation and the failed check ids. A caller who wants the number
+from the operation and the failed check ids. `outcome` is the server's own
+field and is deliberately not called `result_type`: the SDK stamps a
+protocol-level `resultType` on every result object, always `"complete"`
+because the call did return, so a refusal would otherwise carry two
+same-named fields with contradicting values. A caller who wants the number
 anyway passes `acknowledge` with the token named in the refusal; the result
 then comes back with `preconditions.status: "overridden"`,
 `scientific_status.status: "unverified"`, `physically_interpretable: false`,
@@ -163,7 +167,7 @@ does not expose those coordinates leaves coverage unknown, in which case
 Zero coverage is the one coverage case that **refuses** rather than warns.
 When no target point falls inside the source mesh, every returned value is an
 extrapolation, so the operation returns the same
-`result_type: "input_required"` payload described above with the source bounding
+`outcome: "input_required"` payload described above with the source bounding
 box in the detail text. The repair names the argument that caller controls:
 `target_lon`/`target_lat` for `remap_to_rectilinear`, and `target_grid_path`
 for the two grid-to-grid operations. Partial coverage and a non-conservative

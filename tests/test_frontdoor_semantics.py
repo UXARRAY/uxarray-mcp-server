@@ -50,7 +50,7 @@ def test_vector_warning_now_refuses_instead_of_warning():
         )
 
     payload = excinfo.value.payload
-    assert payload["result_type"] == "input_required"
+    assert payload["outcome"] == "input_required"
     assert {c["id"] for c in payload["refusal"]["failed_checks"]} == {
         "velocity_units",
         "component_identity",
@@ -131,7 +131,7 @@ def test_supported_vector_is_physically_interpretable():
         "warning_codes": [],
     }
     assert result["preconditions"]["status"] == "satisfied"
-    assert result["result_type"] == "complete"
+    assert result["outcome"] == "complete"
 
 
 def test_unscaled_curl_refuses_on_the_radius_scaling_precondition():
@@ -298,7 +298,7 @@ def test_remap_zero_coverage_refuses():
         _finalize_analysis_result("remap_to_rectilinear", dict(ZERO_COVERAGE_RESULT))
 
     payload = excinfo.value.payload
-    assert payload["result_type"] == "input_required"
+    assert payload["outcome"] == "input_required"
     assert [c["id"] for c in payload["refusal"]["failed_checks"]] == [
         "remap_coverage_nonzero"
     ]

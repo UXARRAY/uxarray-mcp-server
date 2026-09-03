@@ -10,7 +10,7 @@ uses Semantic Versioning for public releases.
   mesh the source mesh actually reaches, as `remap_to_rectilinear` already
   did. Nearest-neighbour returns a value at every target point whether or not
   the source is anywhere near it, so a 1x1 degree source remapped onto a
-  target ten degrees away came back `result_type: complete`, `preconditions:
+  target ten degrees away came back `outcome: complete`, `preconditions:
   not_evaluated`, no coverage reported, and a full array of plausible numbers
   that were all extrapolation. Both operations now report `source_coverage`
   and refuse at zero coverage through the same front-door gate. The repair
@@ -77,13 +77,24 @@ uses Semantic Versioning for public releases.
   as a spatial one.
 
 ### Changed
+- **Breaking:** the payload field `result_type` is now `outcome`. Its values
+  are unchanged (`complete`, `input_required`). The SDK stamps a
+  protocol-level `resultType` on every JSON-RPC result object, always
+  `"complete"` because the call did return, so a refusal put two fields with
+  the same name and contradicting values on one wire, separated only by
+  camelCase. A client reading either one could reasonably conclude the other
+  was wrong. The two are now distinguishable: `resultType` reports that the
+  call returned, `outcome` reports which of the two payload shapes came back.
+  The constants moved with it: `RESULT_TYPE_COMPLETE` and
+  `RESULT_TYPE_INPUT_REQUIRED` are now `OUTCOME_COMPLETE` and
+  `OUTCOME_INPUT_REQUIRED`.
 - The `run_analysis` `outputSchema` now requires the scientific contract
   fields per result branch instead of promising almost nothing. A result with
-  `result_type: "complete"` must carry `scientific_status`, `preconditions`
-  and `postconditions`; a result with `result_type: "input_required"` must
+  `outcome: "complete"` must carry `scientific_status`, `preconditions`
+  and `postconditions`; a result with `outcome: "input_required"` must
   carry `refusal`, `input_requests` and `request_state`. Both shapes share one
   schema, so a flat `required` list could only hold their intersection --
-  `result_type` alone -- which left a validating client unable to rely on
+  `outcome` alone -- which left a validating client unable to rely on
   anything else being there. The front door has always emitted these; the
   schema now says so, which is what makes a number and the judgment of whether
   it means anything travel together. The refusal fields are also declared as
