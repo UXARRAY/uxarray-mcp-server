@@ -5,6 +5,7 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 
+## 0.3.1 — 2026-09-05
 ### Fixed
 - `calculate_zonal_mean` and `azimuthal_mean` now count how many of their bins
   the mesh actually filled. A mesh spanning 0–40N asked for bands at −70 and
