@@ -5,6 +5,23 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- `subset_bbox`, `subset_polygon` and `cross_section` now refuse a selection
+  that kept no faces. A bounding box at 160-170W / 70-80S applied to a mesh
+  covering 0-40E / 0-40N returned `outcome: complete`, `status: complete`, no
+  warning codes, a `subset_grid` of `n_face: 0`, a `variable_summary` of
+  `shape: [0]`, a persisted artifact and a recommended-next-steps list telling
+  the caller to plot it. `subset_polygon` did the same with
+  `selected_face_count: 0`.
+- All three report a `subset_coverage` block with `n_face_source`,
+  `n_face_retained` and `source_extent`. There is no partial warning: keeping
+  fewer faces is what a subset is for, and a code that fires on every
+  successful call teaches callers to ignore it. The refusal names the argument
+  the caller controls and quotes the longitude and latitude the mesh spans,
+  because "nothing selected" does not say where to put the box.
+- `cross_section` no longer surfaces UXarray's `No intersections found at
+  lat=...` as a raw error. That message says the line found nothing without
+  saying where a line would find something, so it becomes the same refusal
+  with the mesh extent attached. Any other `ValueError` still propagates.
 - `zonal_anomaly` now says how much of the anomaly field the band means
   actually defined, and refuses when they defined none of it. The anomaly is
   a per-face field rather than a binned profile, so the bin coverage added for

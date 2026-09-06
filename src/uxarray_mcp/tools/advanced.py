@@ -19,6 +19,7 @@ from uxarray_mcp.domain.remap_coverage import (
     compute_scattered_coverage,
     compute_target_coverage,
 )
+from uxarray_mcp.domain.subset_coverage import compute_subset_coverage, mesh_extent
 from uxarray_mcp.next_steps import call, needed
 from uxarray_mcp.preconditions import normalize_units
 from uxarray_mcp.provenance import attach_provenance
@@ -259,6 +260,9 @@ def subset_bbox(
         "lat_bounds": lat_bounds,
         "original_grid": summarize_grid(grid),
         "subset_grid": summarize_grid(subset_grid),
+        "subset_coverage": compute_subset_coverage(
+            grid.n_face, subset_grid.n_face, extent=mesh_extent(grid)
+        ),
         "variable_summary": variable_summary,
         "result_handle": result_handle,
     }
@@ -365,6 +369,9 @@ def subset_polygon(
         "selection_type": "polygon",
         "selected_face_count": int(selected_indices.size),
         "selected_face_indices_preview": selected_indices[:25].tolist(),
+        "subset_coverage": compute_subset_coverage(
+            grid.n_face, int(selected_indices.size), extent=mesh_extent(grid)
+        ),
         "variable_summary": variable_summary,
         "result_handle": result_handle,
     }
@@ -419,12 +426,50 @@ def extract_cross_section(
         data_path=data_path,
     )
     grid = load_grid(resolved_grid)
-    if latitude is not None:
-        subset_grid = grid.subset.constant_latitude(latitude)
-        selection_type = "constant_latitude"
-    else:
-        subset_grid = grid.subset.constant_longitude(longitude)
-        selection_type = "constant_longitude"
+    selection_type = (
+        "constant_latitude" if latitude is not None else "constant_longitude"
+    )
+    try:
+        if latitude is not None:
+            subset_grid = grid.subset.constant_latitude(latitude)
+        else:
+            subset_grid = grid.subset.constant_longitude(longitude)
+    except ValueError as exc:
+        # UXarray signals "the line misses the mesh" by raising with this
+        # text. Turning it into the empty-selection result lets the front
+        # door refuse with the mesh extent in the repair, which the raw
+        # message does not carry -- it says the line found nothing, not
+        # where a line would find something. Any other ValueError is a
+        # different problem and still propagates.
+        if "No intersections found" not in str(exc):
+            raise
+        tracker.succeed("Cross-section selected no faces.")
+        empty: dict[str, Any] = {
+            "selection_type": selection_type,
+            "latitude": latitude,
+            "longitude": longitude,
+            "subset_grid": None,
+            "variable_summary": None,
+            "result_handle": None,
+            "subset_coverage": compute_subset_coverage(
+                grid.n_face, 0, extent=mesh_extent(grid)
+            ),
+        }
+        empty = attach_provenance(
+            empty,
+            tool="extract_cross_section",
+            inputs={
+                "latitude": latitude,
+                "longitude": longitude,
+                "grid_path": grid_path,
+                "data_path": data_path,
+                "variable_name": variable_name,
+                "session_id": session_id,
+                "dataset_handle": dataset_handle,
+            },
+        )
+        empty["_provenance"]["operation_id"] = tracker.operation_id
+        return empty
 
     result_handle = None
     variable_summary = None
@@ -463,6 +508,11 @@ def extract_cross_section(
         "latitude": latitude,
         "longitude": longitude,
         "subset_grid": summarize_grid(subset_grid),
+        "subset_coverage": compute_subset_coverage(
+            grid.n_face,
+            subset_grid.n_face if subset_grid is not None else 0,
+            extent=mesh_extent(grid),
+        ),
         "variable_summary": variable_summary,
         "result_handle": result_handle,
     }
