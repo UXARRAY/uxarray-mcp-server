@@ -68,6 +68,27 @@ _PROVENANCE_SCHEMA: dict[str, Any] = {
 }
 
 
+#: Envelope fields whose full description lives in ``_ANALYSIS_ENVELOPE``.
+_ENVELOPE_FIELD_NAMES: tuple[str, ...] = (
+    "outcome",
+    "scientific_status",
+    "preconditions",
+    "postconditions",
+)
+
+
+def _envelope_properties() -> dict[str, Any]:
+    """The envelope property nodes, read from the front door's schema.
+
+    A function rather than a constant because ``_ANALYSIS_ENVELOPE`` is
+    defined further down this module; copying the nodes up here would give
+    two declarations to keep in step, which is the drift this exists to
+    prevent.
+    """
+    declared = _ANALYSIS_ENVELOPE["properties"]
+    return {name: declared[name] for name in _ENVELOPE_FIELD_NAMES}
+
+
 def _json_schema_for_field(field: dict[str, Any]) -> dict[str, Any]:
     """Translate one declared field into a JSON Schema property."""
     node: dict[str, Any] = {"description": field["description"]}
@@ -100,6 +121,14 @@ def output_schema_for(operation: str) -> dict[str, Any] | None:
 
     fields = list(contract["fields"]) + _COMMON_FIELDS
     properties = {f["name"]: _json_schema_for_field(f) for f in fields}
+    # The envelope blocks are described in full on the front door. Letting
+    # the one-line contract declaration win here would publish a weaker
+    # promise about the same field depending on which schema a client
+    # happened to read -- `scientific_status` as a bare object in one place
+    # and as a judgment with a documented null in the other.
+    for name_, node in _envelope_properties().items():
+        if name_ in properties:
+            properties[name_] = node
     properties["_provenance"] = _PROVENANCE_SCHEMA
 
     return {
