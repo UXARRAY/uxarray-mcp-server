@@ -57,12 +57,62 @@ def _field(
 
 
 #: Fields every operation's response carries, whatever it computed.
+#:
+#: These were measured against real results rather than assumed. The
+#: contract used to declare a top-level ``physically_interpretable``
+#: boolean that nothing emits: every producer nests that judgment inside
+#: ``scientific_status``, so a caller following the contract looked for it
+#: at the top level and found nothing, while the block it is actually in
+#: was reported back as an *extra* field on every call.
+#:
+#: All of these are optional because a refusal is a different shape from a
+#: completed result -- it carries ``refusal``/``input_requests`` and no
+#: ``scientific_status`` -- and because the ``verification`` contract is
+#: drafted by the caller, which has no envelope to attach.
 _COMMON_FIELDS: list[dict[str, Any]] = [
     _field("operation", "string", "The operation that was run."),
     _field(
-        "physically_interpretable",
-        "boolean",
-        "Whether the server considers the number physically meaningful.",
+        "outcome",
+        "string",
+        "`complete` when a value was produced, `input_required` when a "
+        "precondition failed and the value was deliberately withheld.",
+        required=False,
+    ),
+    _field(
+        "scientific_status",
+        "object",
+        "Whether the server considers the number physically meaningful, "
+        "and why not when it does not: `status`, "
+        "`physically_interpretable` (null means unjudged, which is not "
+        "the same as true), `warning_codes` and `warnings`. There is no "
+        "top-level `physically_interpretable`; this block is where that "
+        "verdict lives.",
+        required=False,
+    ),
+    _field(
+        "preconditions",
+        "object",
+        "Physical conditions checked before computing. `not_evaluated` "
+        "means no check ran, which is distinct from passing.",
+        required=False,
+    ),
+    _field(
+        "postconditions",
+        "object",
+        "Checks on the value after computing, including explicit abstentions.",
+        required=False,
+    ),
+    _field(
+        "recommended_next_steps",
+        "array",
+        "Operations that follow sensibly from this result. Advisory.",
+        required=False,
+    ),
+    _field(
+        "_provenance",
+        "object",
+        "Worker-observed execution record: where the call ran, what it "
+        "read, and what it produced.",
         required=False,
     ),
 ]
@@ -83,6 +133,15 @@ _CONTRACTS: dict[str, dict[str, Any]] = {
                 required=False,
             ),
             _field("n_face", "integer", "Number of faces summed."),
+            _field(
+                "area_basis",
+                "object",
+                "The sphere the areas were measured on: `sphere_radius`, "
+                "where that radius came from, and whether it was applied. "
+                "An unscaled result is in steradians, not in any unit of "
+                "area.",
+                required=False,
+            ),
         ],
     },
     "inspect_mesh": {
@@ -101,7 +160,16 @@ _CONTRACTS: dict[str, dict[str, Any]] = {
             _field(
                 "zonal_mean_values",
                 "array",
-                "One mean per latitude band, same length as `latitudes`.",
+                "One mean per latitude band, same length as `latitudes`. A "
+                "band no face fell into is `null`, not dropped.",
+            ),
+            _field(
+                "profile_coverage",
+                "object",
+                "How much of the profile the bands actually defined: filled "
+                "and empty band counts, and the fraction of faces that "
+                "contributed.",
+                required=False,
             ),
         ],
     },
