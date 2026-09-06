@@ -333,8 +333,7 @@ def calculate_area(
         - max_area: Maximum face area
         - area_units: Units (m^2, km^2, etc.), or None when nothing declared them
         - n_face: Number of faces
-        - area_basis: the radius used, where it came from, and whether it was
-          applied
+        - area_basis: radius used, its source, and whether it was applied
 
     Examples
     --------
