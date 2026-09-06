@@ -23,6 +23,7 @@ from toolregistry_server.app import App
 
 from . import __version__
 from .registry import Profile
+from .resources import attach_artifact_resources
 
 if TYPE_CHECKING:
     from toolregistry import ToolRegistry
@@ -101,12 +102,16 @@ class UXarrayApp(App):
         name = kwargs.pop("name", identity.name)
         kwargs.pop("profile", None)
 
-        MCPAdapter(
+        adapter = MCPAdapter(
             route_table,
             name=name,
             list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
             list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
-        ).run(**kwargs)
+        )
+        # Large figures go back as ``resource_link``, which is only honest if
+        # something answers ``resources/read`` for the URI (#14).
+        attach_artifact_resources(adapter.server)
+        adapter.run(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -122,16 +127,19 @@ def make_registry(*, profile: Profile = "core") -> ToolRegistry:
 def make_mcp_server(*, profile: Profile = "core"):
     """Build a configured MCP server ready for any transport.
 
-    Carries the same ``tools/list`` cache hints as :meth:`UXarrayApp.serve_mcp`
-    so tests and scripts exercise the surface the CLI actually serves.
+    Carries the same ``tools/list`` cache hints and the same artifact
+    resource handlers as :meth:`UXarrayApp.serve_mcp`, so tests and scripts
+    exercise the surface the CLI actually serves.
     """
     from toolregistry_server.adapters.mcp import route_table_to_mcp_server
     from toolregistry_server.route_table import RouteTable
 
     registry = make_registry(profile=profile)
-    return route_table_to_mcp_server(
-        RouteTable(registry),
-        "UXarray MCP",
-        list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
-        list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
+    return attach_artifact_resources(
+        route_table_to_mcp_server(
+            RouteTable(registry),
+            "UXarray MCP",
+            list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
+            list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
+        )
     )

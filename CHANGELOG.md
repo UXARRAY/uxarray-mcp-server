@@ -5,6 +5,35 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- The `file://` links returned for large figures are now fetchable. A figure at
+  or above the inline payload limit is written to the artifact store and handed
+  back as an MCP `resource_link`, which is the right trade — base64 inflates the
+  bytes by a third and a multi-hundred-kilobyte PNG costs far more of the
+  caller's context than the picture is worth. But the link went out over a
+  server advertising no `resources` capability and serving neither
+  `resources/list` nor `resources/read`: measured on the core profile, the
+  capability was `None` and the handler table held no resource method at all.
+  A client that followed the link the way the spec says to got
+  `METHOD_NOT_FOUND`; one that did not follow up lost the figure. Over `sse` or
+  `http` the path was never openable in the first place, since the client does
+  not share a filesystem with the server. Both methods are now registered on
+  both server construction paths, so the surface the tests exercise is the
+  surface the CLI serves.
+- Reading is confined to the artifact directory and the confinement is checked
+  after `resolve()`, which collapses `..` and follows symlinks. A URI outside
+  the store, a non-`file://` scheme, or a `file://` URI naming another host is
+  refused rather than clamped: a caller asking for `/etc/passwd` is not making
+  a repairable mistake.
+- `resources/list` is paginated at 100 artifacts per page. The store is
+  append-only in practice and unbounded in principle — 1258 files and 212 KB of
+  listing JSON on one developer machine — so an unpaged listing would be the
+  same swallow-the-context mistake the inline payload limit exists to prevent,
+  arriving through the protocol instead of through a tool result. Paging
+  resumes by artifact name rather than by offset, because tools write into the
+  store and cleanup deletes from it while a client is paging, and an offset into
+  a list that shrank silently steps over entries. A cursor the server did not
+  issue is rejected rather than treated as "start over", which would look to the
+  client like forward progress.
 - The declared floor for PyYAML rises from 6.0 to 6.0.1. PyYAML 6.0 publishes
   no wheel for CPython 3.12 and its sdist fails to build against a modern
   Cython with `'build_ext' object has no attribute 'cython_sources'`, so the

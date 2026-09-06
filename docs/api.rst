@@ -99,6 +99,13 @@ State
    :members:
    :undoc-members:
 
+Artifact resources
+------------------
+
+.. automodule:: uxarray_mcp.resources
+   :members:
+   :undoc-members:
+
 Server
 ------
 
