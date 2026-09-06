@@ -20,6 +20,10 @@ These modules contain the pure computation logic, separate from MCP and I/O.
    :members:
    :undoc-members:
 
+.. automodule:: uxarray_mcp.domain.export_fidelity
+   :members:
+   :undoc-members:
+
 .. automodule:: uxarray_mcp.domain.variable
    :members:
    :undoc-members:

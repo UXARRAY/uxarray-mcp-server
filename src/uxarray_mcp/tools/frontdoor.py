@@ -11,6 +11,7 @@ from functools import wraps
 from typing import Any
 
 from uxarray_mcp.domain.anomaly_coverage import anomaly_coverage_warning_codes
+from uxarray_mcp.domain.export_fidelity import export_fidelity_warning_codes
 from uxarray_mcp.domain.mesh_coverage import mesh_coverage_warning_codes
 from uxarray_mcp.domain.profile_coverage import profile_coverage_warning_codes
 from uxarray_mcp.domain.subset_coverage import subset_coverage_warning_codes
@@ -352,6 +353,23 @@ def _finalize_analysis_result(
             if operation == "anomaly"
             else evaluate_temporal_preconditions(operation, coverage)
         )
+    elif operation == "export" and "export_fidelity" in result:
+        # Keyed off the block being present for the same reason as the
+        # coverage gates. Before this, export was the one operation that
+        # returned `status: complete` with no check of any kind behind it.
+        #
+        # A lossy export is not a failed one -- the caller asked for CSV
+        # and CSV is what it got -- so the file still gets written and the
+        # reply still carries its path. What changes is that the loss is
+        # named. `physically_interpretable` goes False rather than staying
+        # unjudged when a unit or a CRS did not make it: numbers in a file
+        # that no longer says what they measure are not interpretable, and
+        # the export is the last point at which anyone can see that.
+        codes = export_fidelity_warning_codes(result["export_fidelity"])
+        if codes:
+            status = "warning"
+            physically_interpretable = False
+            warning_codes.extend(codes)
     elif operation == "calculate_area" and "area_basis" in result:
         # Keyed off the block being present for the same reason as the
         # coverage gates: a remote worker on an older build sends none, and
