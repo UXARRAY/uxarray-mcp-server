@@ -338,23 +338,17 @@ def calculate_area(
 
     Examples
     --------
-    >>> calculate_area("mesh.nc", sphere_radius=6371000.0)
-    {
-        "total_area": 5.10064e14,
-        "area_units": "m^2",
-        "area_basis": {"sphere_radius": 6371000.0, "radius_source": "argument",
-                       "scaled": True},
-        ...
-    }
+    >>> r = calculate_area("mesh.nc", sphere_radius=6371000.0)
+    >>> r["total_area"], r["area_units"], r["area_basis"]["radius_source"]
+    (510064487992182.1, 'm^2', 'argument')
 
-    >>> calculate_area("mesh.nc")
-    {
-        "total_area": 12.566371,
-        "area_units": None,
-        "area_basis": {"sphere_radius": 1.0, "radius_source": "unit_sphere",
-                       "scaled": False},
-        ...
-    }
+    A grid that declares no radius is measured on the unit sphere, so the
+    numbers are steradians. The front door refuses that rather than returning
+    them as areas; this function still reports them, with the basis saying so.
+
+    >>> r = calculate_area("mesh.nc")
+    >>> r["total_area"], r["area_basis"]["scaled"]
+    (12.566371010578342, False)
     """
     from .inspection import _calculate_area_local
 
