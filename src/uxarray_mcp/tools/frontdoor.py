@@ -24,6 +24,7 @@ from uxarray_mcp.preconditions import (
     PreconditionRefusal,
     enforce,
     evaluate_anomaly_preconditions,
+    evaluate_area_preconditions,
     evaluate_comparison_preconditions,
     evaluate_ensemble_preconditions,
     evaluate_profile_preconditions,
@@ -349,6 +350,23 @@ def _finalize_analysis_result(
             if operation == "anomaly"
             else evaluate_temporal_preconditions(operation, coverage)
         )
+    elif operation == "calculate_area" and "area_basis" in result:
+        # Keyed off the block being present for the same reason as the
+        # coverage gates: a remote worker on an older build sends none, and
+        # absent measurement stays unknown rather than becoming a claim.
+        basis = result["area_basis"]
+        preconditions = evaluate_area_preconditions(operation, basis)
+        physically_interpretable = bool(basis.get("scaled"))
+        if physically_interpretable and result.get("area_units") is None:
+            # A grid that declares `sphere_radius: 6371000.0` and no units has
+            # not said what that radius is measured in, so the areas are in
+            # the square of an unnamed length. Scaling was still the right
+            # thing to do -- the number is now proportional to a real area
+            # rather than to a solid angle -- but naming it m^2 would be the
+            # invention this server refuses to make.
+            status = "warning"
+            warning_codes.append("AREA_UNITS_UNDECLARED")
+            physically_interpretable = False
 
     # Refuses by default when a declared precondition fails: raises
     # PreconditionRefusal unless the caller passed the override token.
@@ -544,6 +562,7 @@ def run_analysis(
     dataset_handle: str | None = None,
     result_name: str | None = None,
     scale_by_radius: bool = True,
+    sphere_radius: float | None = None,
     time_index: int = 0,
     level_index: int = 0,
     lat_spec: tuple | float | list[Any] | None = None,
@@ -579,7 +598,10 @@ def run_analysis(
     other's slice.
     ``zonal_anomaly`` accepts ``lat_spec`` and
     ``conservative``. ``remap_to_rectilinear`` accepts ``target_lon`` and
-    ``target_lat`` (1-D coordinate arrays).
+    ``target_lat`` (1-D coordinate arrays). ``calculate_area`` accepts
+    ``sphere_radius`` in metres, and refuses without one unless the grid
+    declares its own: UXarray integrates on the unit sphere, so the
+    unscaled numbers are steradians rather than areas.
 
     ``curl`` and ``divergence`` declare preconditions and refuse rather than
     return an unphysical number: if the components are not verifiably a
@@ -663,6 +685,7 @@ def run_analysis(
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
+            sphere_radius=sphere_radius,
         )
     if op == "calculate_zonal_mean":
         return calculate_zonal_mean(

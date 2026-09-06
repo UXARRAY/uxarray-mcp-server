@@ -24,7 +24,7 @@ from uxarray_mcp.tools.frontdoor import run_analysis
 #: each one needs beyond ``grid_path``.
 _OPERATIONS = {
     "inspect_mesh": {},
-    "calculate_area": {},
+    "calculate_area": {"sphere_radius": 6371000.0},
     "inspect_variable": {"variable_name": "temperature"},
     "calculate_zonal_mean": {"variable_name": "temperature"},
     "validate_dataset": {},

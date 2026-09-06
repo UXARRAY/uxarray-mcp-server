@@ -5,6 +5,24 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- `calculate_area` returned steradians for every grid, including grids that
+  declare an Earth radius. `Grid.sphere_radius` is a property reading
+  `_ds.attrs.get("sphere_radius", 1.0)` and nothing in UXarray's area path
+  consults it, so a 648-face global mesh summed to `12.566371` — `4*pi` — with
+  `area_units: null` and no warning, and a file declaring
+  `sphere_radius: 6371000.0` round-tripped and still summed to `12.566371`.
+  The tool's own docstring promised `5.10064e14`, which it never returned.
+  Areas are now scaled by `R^2` from an explicit `sphere_radius` argument or
+  from the grid's declaration, and an `area_basis` block reports the radius,
+  its source and whether it was applied. With neither source the call refuses
+  instead of returning a number that is not an area. Measured after the fix:
+  `510064487992182.1` against a `4*pi*R^2` reference of `510064471909788.25`,
+  a relative residual of 3.15e-8.
+- A grid-declared radius no longer implies metres. The file supplied a number,
+  not a unit, so that path keeps `area_units: null`, warns
+  `AREA_UNITS_UNDECLARED` and is not marked physically interpretable; only a
+  caller-supplied `sphere_radius`, which is documented as metres, sets
+  `area_units: "m^2"`.
 - Spatial selections now say which rule chose the faces. The three operations
   do not agree: `subset_polygon` selects by face centre, `cross_section` by
   intersection, and `subset_bbox` keeps a face only when its whole spherical

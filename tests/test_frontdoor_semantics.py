@@ -227,11 +227,15 @@ class TestDatasetHandleDereference:
             data_path=data_file,
         )
 
+        # calculate_area needs a radius or it refuses before it ever
+        # dereferences the handle, which is not what this test is about.
+        extra = {"calculate_area": {"sphere_radius": 6371000.0}}
         for operation in ("inspect_mesh", "calculate_area", "validate_dataset"):
             result = run_analysis(
                 operation=operation,
                 session_id=session["session_id"],
                 dataset_handle=registered["dataset_handle"],
+                **extra.get(operation, {}),
             )
             assert result["scientific_status"]["status"] != "invalid"
 
