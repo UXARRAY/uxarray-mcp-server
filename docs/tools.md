@@ -195,6 +195,32 @@ missing data, so the source field is checked as well. `cause` is
 when it carries missing values or was not available to check — in which case
 the repair says so rather than asserting one explanation.
 
+`zonal_anomaly` subtracts a band mean from every face, so its answer is a
+per-face field rather than a profile and there are no bins in it to count.
+The loss happens one level down and is invisible in the result's shape: a band
+mean is undefined as soon as one face in the band is missing, and every face in
+that band then comes back NaN, *including faces that carried a value*. The
+result therefore reports an **`anomaly_coverage`** block giving `n_face`,
+`n_face_with_data`, `n_face_with_anomaly`, `n_face_data_lost` and `cause`.
+
+The two kinds of empty face are counted separately on purpose. A face that
+never had data has no anomaly for an ordinary reason — a land-masked field
+would otherwise warn on every call — so `ANOMALY_COVERAGE_PARTIAL` fires on
+`n_face_data_lost`, not on the plain count of NaN. That a face lost its anomaly
+is a deduction rather than a guess: the anomaly is `value - band_mean`, so a
+finite value with a non-finite anomaly means the band mean was non-finite.
+`cause` is `band_mean_undefined` in that case, `missing_input` when every
+absent anomaly is explained by absent data, and `ambiguous` when the source
+field was unavailable or does not line up with the result.
+
+An anomaly field with no anomaly in it **refuses**, for the same reason a
+wholly empty profile does. The repair depends on which way it emptied: when
+nothing was measurable to begin with it names the variable and the time/level
+slice, and when faces did carry data it names the missing values rather than
+`lat_spec`, because no choice of bands can avoid a gap that is in every band.
+Measured on a 90-face regional mesh, one missing value per latitude band was
+enough to empty all 90 faces while 85 of them carried data.
+
 `ensemble_mean` and `ensemble_spread` combine several files cell-by-cell, and
 nothing in the shapes says the files measure the same thing on the same mesh.
 Both report a **`member_evidence`** block naming the per-member `units`, the

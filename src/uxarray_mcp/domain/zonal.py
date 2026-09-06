@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from uxarray_mcp.domain.anomaly_coverage import compute_anomaly_coverage
 from uxarray_mcp.domain.dims import face_slice_selection
 from uxarray_mcp.domain.profile_coverage import compute_profile_coverage
 
@@ -174,6 +175,7 @@ def compute_zonal_anomaly_stats(
         "conservative": conservative,
         "n_face": int(uxds.uxgrid.n_face),
         "stats": stats,
+        "anomaly_coverage": compute_anomaly_coverage(vals, source=var),
         "interpretation": "per-face deviation from the zonal mean of its latitude band",
         "grid_info": {
             "n_face": int(uxds.uxgrid.n_face),
