@@ -88,7 +88,14 @@ jobs:
         run: uv pip list | grep -E '^(toolregistry|toolregistry-server|mcp|uxarray) '
 
       - name: Run test suite
-        run: uv run pytest tests/ --ignore=tests/test_remote_agent.py -v --tb=long
+        # --no-sync, or this step silently undoes the upgrade above it. A bare
+        # `uv run` re-syncs the environment to `uv.lock` first, and the lock
+        # pins what we already test everywhere else. Measured: after
+        # `uv pip install --upgrade pyyaml==6.0.1`, a bare `uv run` reported
+        # 6.0.3 (the locked version) while `uv run --no-sync` reported 6.0.1.
+        # Every green run of this workflow before this change proved only that
+        # the lockfile passes its own test suite.
+        run: uv run --no-sync pytest tests/ --ignore=tests/test_remote_agent.py -v --tb=long
 
       - name: Report failure
         if: failure()
@@ -126,7 +133,10 @@ jobs:
         run: uv sync --dev --resolution lowest-direct
 
       - name: Show resolved versions
-        run: uv pip list | grep -E '^(toolregistry|toolregistry-server|mcp|uxarray) '
+        run: uv pip list | grep -E '^(pyyaml|toolregistry|toolregistry-server|mcp|uxarray) '
 
       - name: Run test suite
-        run: uv run pytest tests/ --ignore=tests/test_remote_agent.py -v --tb=long
+        # --no-sync for the same reason as the job above: a bare `uv run`
+        # re-syncs to `uv.lock` and would install the newest compatible
+        # versions over the floor this job just resolved.
+        run: uv run --no-sync pytest tests/ --ignore=tests/test_remote_agent.py -v --tb=long

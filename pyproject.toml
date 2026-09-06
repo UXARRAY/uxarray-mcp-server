@@ -48,7 +48,13 @@ dependencies = [
     "mcp>=1.24,<3",
     "holoviews>=1.19.0",
     "matplotlib>=3.9.0",
-    "pyyaml>=6.0",
+    # 6.0.1, not 6.0: PyYAML 6.0 ships no wheel for CPython 3.12 and its sdist
+    # cannot build against a modern Cython, failing with `'build_ext' object has
+    # no attribute 'cython_sources'`. Nothing hit it in normal CI because that
+    # resolves to the newest PyYAML; the weekly `lowest-direct` job installs the
+    # floor we actually declare, and had failed on it every run since
+    # 2026-08-10.
+    "pyyaml>=6.0.1",
     "uxarray>=2026.8.1",
 ]
 
