@@ -117,6 +117,20 @@ _COMMON_FIELDS: list[dict[str, Any]] = [
     ),
 ]
 
+#: Shared by ``calculate_area`` and ``inspect_mesh``, which report the same
+#: block. Declared once so the two cannot drift into describing it
+#: differently.
+_MESH_COVERAGE_DESCRIPTION = (
+    "How much of the sphere the mesh spans and what shape it is: "
+    "`sphere_fraction` (geometric), `closed` and "
+    "`euler_characteristic` (topological, null when the mesh was too large "
+    "to check -- see `topology_skipped`), and `lon_extent`/`lat_extent` in "
+    "the grid's own convention. Face counts alone do not distinguish a "
+    "global mesh from a regional patch; `sphere_fraction` does. The two "
+    "halves can honestly disagree: a mesh with small polar holes reads "
+    "`sphere_fraction` 0.999962 and `closed` false."
+)
+
 #: Per-family declarations. Keyed by operation name so a caller can ask
 #: about exactly the call it is about to make.
 _CONTRACTS: dict[str, dict[str, Any]] = {
@@ -142,6 +156,9 @@ _CONTRACTS: dict[str, dict[str, Any]] = {
                 "area.",
                 required=False,
             ),
+            _field(
+                "mesh_coverage", "object", _MESH_COVERAGE_DESCRIPTION, required=False
+            ),
         ],
     },
     "inspect_mesh": {
@@ -150,6 +167,9 @@ _CONTRACTS: dict[str, dict[str, Any]] = {
             _field("n_face", "integer", "Number of faces."),
             _field("n_node", "integer", "Number of nodes."),
             _field("n_edge", "integer", "Number of edges."),
+            _field(
+                "mesh_coverage", "object", _MESH_COVERAGE_DESCRIPTION, required=False
+            ),
         ],
     },
     "calculate_zonal_mean": {

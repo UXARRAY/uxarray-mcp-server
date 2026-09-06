@@ -5,6 +5,31 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- Nothing in an area result said how much of the sphere it was summed over. A
+  5-degree mesh spanning 0-40E/0-40N with `sphere_radius: 6371000.0` returned
+  `total_area: 22936016715559.137 m^2` — 4.4967% of `4*pi*R^2` — with
+  `scientific_status: complete`, `physically_interpretable: true`, no warning
+  code, and a bare `postconditions: {status: not_evaluated, checks: []}`; the
+  identical call on a global mesh returned 1.0000 of the sphere with the same
+  status shape. `calculate_area` and `inspect_mesh` now both carry a
+  `mesh_coverage` block: `sphere_fraction`, `closed`, `euler_characteristic`,
+  `lon_extent`, `lat_extent`. A patch raises `MESH_NOT_GLOBAL` and drops to
+  `warning` but stays interpretable, because its total is a real physical
+  quantity and only the missing disclosure was wrong. The geometric and
+  topological halves are reported separately and are allowed to disagree: a
+  1-degree structured global grid stops half a cell short of each pole, so it
+  reads `sphere_fraction: 0.999963` with `closed: false` and 720 boundary
+  edges, which is honest on both counts and not a regional patch. Counting
+  edge incidences is a Python loop — 1.43 s at 196,608 faces, 5.99 s at
+  786,432 — so above 250,000 faces the topological half is skipped and
+  `closed` comes back `null` with `topology_skipped` giving the reason,
+  never `false`.
+- An abstained postcondition now says why it abstained. The area identity
+  holds only on a closed mesh, so a regional result came back
+  `{status: not_evaluated, checks: []}` and the payload never distinguished
+  that from a deployment running `verdict_policy: off`. The block now carries
+  `not_evaluated_because` when the server can name a reason, read off
+  `mesh_coverage` so naming it costs no second traversal of the mesh.
 - The response contract described a payload the server does not send. It
   declared a top-level `physically_interpretable` boolean that no code path
   emits — every producer nests that verdict inside `scientific_status` — and

@@ -11,10 +11,12 @@ from functools import wraps
 from typing import Any
 
 from uxarray_mcp.domain.anomaly_coverage import anomaly_coverage_warning_codes
+from uxarray_mcp.domain.mesh_coverage import mesh_coverage_warning_codes
 from uxarray_mcp.domain.profile_coverage import profile_coverage_warning_codes
 from uxarray_mcp.domain.subset_coverage import subset_coverage_warning_codes
 from uxarray_mcp.domain.temporal_coverage import temporal_coverage_warning_codes
 from uxarray_mcp.postconditions import (
+    area_identity_abstention,
     evaluate_area_postconditions,
     postcondition_block,
     resolve_verdict_policy,
@@ -367,6 +369,16 @@ def _finalize_analysis_result(
             status = "warning"
             warning_codes.append("AREA_UNITS_UNDECLARED")
             physically_interpretable = False
+        coverage_codes = mesh_coverage_warning_codes(result.get("mesh_coverage") or {})
+        if coverage_codes:
+            # Warned, not refused, and interpretability is left alone: the
+            # area of a patch is a real physical quantity. 22936016715559
+            # m^2 of Earth's surface between 0-40E and 0-40N is true, and
+            # calling it uninterpretable would be a second wrong answer.
+            # What was missing is that nothing said it was a patch, so a
+            # caller could read it as the planet.
+            status = "warning"
+            warning_codes.extend(coverage_codes)
 
     # Refuses by default when a declared precondition fails: raises
     # PreconditionRefusal unless the caller passed the override token.
@@ -438,11 +450,16 @@ def _finalize_analysis_result(
     # check does run, whether the verdict comes with it is a policy.
     policy = resolve_verdict_policy(verdict_policy)
     post_checks: list[dict[str, Any]] = []
+    abstention: str | None = None
     if operation == "calculate_area" and policy != "off":
         post_checks = evaluate_area_postconditions(
             result, _grid_loader(result), policy=policy
         )
-    result["postconditions"] = postcondition_block(post_checks, policy)
+        if not post_checks:
+            abstention = area_identity_abstention(result)
+    result["postconditions"] = postcondition_block(
+        post_checks, policy, not_evaluated_reason=abstention
+    )
     return result
 
 

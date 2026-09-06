@@ -43,8 +43,17 @@ NON_SIGNAL_KEYS = DISCOVERY_ONLY_KEYS | {
 #: length of the temporary file paths echoed back in ``_provenance.inputs``.
 #: Lowered across the board when #83 removed the caller paths that
 #: ``recommended_next_steps`` used to interpolate into every suggestion.
+#: Raised from 1150 and 1800 for the ``mesh_coverage`` block (#33): 151
+#: bytes on each. Before it, a 5-degree mesh spanning 0-40E/0-40N returned
+#: `total_area: 22936016715559.137 m^2` -- 4.4967% of `4*pi*R^2` -- with
+#: `physically_interpretable: True`, no warning code, and a bare
+#: `postconditions: not_evaluated`, and the identical call on a global mesh
+#: returned 1.0000 of the sphere. Nothing in either payload said which was
+#: which. The block was trimmed to earn those bytes: the raw steradian sum
+#: was dropped (it is `4*pi * sphere_fraction`) and the floats rounded to
+#: 1e-6, which is 510 km^2 of sphere and 0.1 m of arc.
 RESULT_BYTE_BUDGETS = {
-    "inspect_mesh": 1150,
+    "inspect_mesh": 1300,
     # Kept above inspect_mesh for the postcondition block (#84/#90): ~440
     # bytes that took correct verification answers from 11/20 to 20/20 in
     # the study, which is the one payload increase we have evidence for.
@@ -52,7 +61,7 @@ RESULT_BYTE_BUDGETS = {
     # bytes. Before it, a global mesh returned `total_area: 12.566371` --
     # 4*pi steradians -- with `area_units: null` and no warning code, and did
     # so even on a grid whose file declared `sphere_radius: 6371000.0`.
-    "calculate_area": 1800,
+    "calculate_area": 1950,
     "inspect_variable": 1700,
     # Raised from 2050 for the bin-coverage block and its precondition (#23),
     # most of it the repair text. Before it, a regional mesh asked for bands

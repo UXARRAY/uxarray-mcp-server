@@ -312,6 +312,34 @@ Today `calculate_area` is the operation with a closed-form reference: the
 face areas of a closed mesh must sum to `4*pi*R^2`, or `4*pi` on a unit
 sphere. The check abstains — status `not_evaluated` — whenever it cannot be
 trusted: an open or regional mesh, a missing total, or an unreadable grid.
+When the server can name the reason, the block carries it as
+**`not_evaluated_because`**; a bare `not_evaluated` was indistinguishable
+from a deployment running `verdict_policy: off`.
+
+## Mesh coverage
+
+`calculate_area` and `inspect_mesh` both report a **`mesh_coverage`** block:
+`sphere_fraction`, `closed`, `euler_characteristic`, `lon_extent` and
+`lat_extent`. A 5-degree mesh spanning 0-40E/0-40N returns `total_area:
+22936016715559.137 m^2`, which is 4.4967% of `4*pi*R^2`; the same call on a
+global mesh returns 1.0000 of the sphere, and before this block nothing in
+either payload said which was which. A patch is warned about
+(`MESH_NOT_GLOBAL`) rather than refused: its total is a real physical
+quantity, and only the missing disclosure was wrong.
+
+The geometric and topological halves answer different questions and can
+honestly disagree. A 1-degree structured global grid reads `sphere_fraction:
+0.999963` with `closed: false` and `euler_characteristic: 0` — it stops half
+a cell short of each pole, so it covers essentially the whole sphere and is
+genuinely open. It is not warned about, because 3.7e-5 of the sphere is not
+a regional patch, but the area identity still abstains and says why.
+
+Counting edge incidences is a Python loop over every face — 1.43 s on a
+196,608-face HEALPix mesh, 5.99 s at the next zoom level — so above 250,000
+faces the topological half does not run. `closed` and
+`euler_characteristic` come back `null` with `topology_skipped` giving the
+reason, rather than a verdict nobody computed. `sphere_fraction` is
+vectorized and is always reported.
 
 `calculate_area` also declares which sphere it measured on. UXarray computes
 face areas on the unit sphere and never applies `sphere_radius`, so a global
