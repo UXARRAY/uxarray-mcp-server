@@ -4,6 +4,27 @@ All notable changes are recorded here. Dates are ISO 8601 (UTC). The project
 uses Semantic Versioning for public releases.
 
 ## Unreleased
+### Fixed
+- The declared floor for PyYAML rises from 6.0 to 6.0.1. PyYAML 6.0 publishes
+  no wheel for CPython 3.12 and its sdist fails to build against a modern
+  Cython with `'build_ext' object has no attribute 'cython_sources'`, so the
+  weekly `lowest-direct` job in the upstream-compatibility workflow had failed
+  on install every run since 2026-08-10 — the floor we advertise as supported
+  could not be installed at all on the Python CI uses. Ordinary CI never saw
+  it, because it resolves to the newest PyYAML.
+- The upstream-compatibility workflow now runs its test suite with
+  `uv run --no-sync`. Both of its jobs install a specific set of versions —
+  `uv pip install --upgrade` for the latest of each dependency, or
+  `uv sync --resolution lowest-direct` for the declared floors — and then ran
+  pytest through a bare `uv run`, which re-syncs the environment to `uv.lock`
+  before executing and reverts the install. Measured: after
+  `uv pip install --upgrade pyyaml==6.0.1`, a bare `uv run` reports `6.0.3`
+  (the locked version) while `uv run --no-sync` reports `6.0.1`. Every green
+  run of this workflow so far showed only that the lockfile passes its own
+  suite, which is what the rest of CI already proves. The declared floors do
+  pass on their own: 764 passed, 14 skipped against mcp 1.24.0,
+  toolregistry-server 0.5.0, uxarray 2026.8.1, holoviews 1.19.0 and
+  matplotlib 3.9.0.
 
 ## 0.3.1 — 2026-09-05
 ### Fixed
