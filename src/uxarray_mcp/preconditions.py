@@ -665,3 +665,62 @@ def enforce(
         "failed_checks": [c["id"] for c in failed],
         "override_used": overridden,
     }
+
+
+def evaluate_temporal_preconditions(
+    operation: str,
+    coverage: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Declare that a temporal mean must average over something.
+
+    A variable that is missing at every step still reduces to a full-length
+    field, so an entirely NaN mean is shaped exactly like a climatology. That
+    is the only refusable state here: averaging over a single step returns the
+    value that was there, which is a real measurement wearing the wrong name,
+    and it stays a warning.
+    """
+    with_value = coverage.get("n_elements_with_value", 0)
+    n_elements = coverage.get("n_elements", 0)
+    n_time = coverage.get("n_time")
+    detail = f"{operation}: {with_value} of {n_elements} values are finite."
+    if n_time is not None:
+        detail += f" The variable has {n_time} time steps."
+    return [
+        _check(
+            "temporal_coverage_nonzero",
+            with_value > 0,
+            detail,
+            "The variable is missing at every time step, so the average has "
+            "nothing to average. Check the variable name and the region or "
+            "level being read, or pick a variable that is not entirely masked.",
+        )
+    ]
+
+
+def evaluate_temporal_anomaly_preconditions(
+    operation: str,
+    coverage: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Declare what a temporal anomaly needs beyond a non-empty field.
+
+    The baseline is the mean over time of the same variable, so with one time
+    step the baseline *is* the value and every anomaly is exactly zero.
+    Measured on a one-step file: ``min``, ``max`` and ``mean`` all came back
+    ``0.0`` with ``outcome: complete``. Nothing in that array was measured --
+    it would read the same for any data whatsoever -- which is the condition
+    this server refuses over rather than returning the number.
+    """
+    checks = evaluate_temporal_preconditions(operation, coverage)
+    n_time = coverage.get("n_time")
+    checks.append(
+        _check(
+            "anomaly_baseline_multisample",
+            n_time is None or n_time > 1,
+            f"{operation}: the baseline is a mean over {n_time} time steps.",
+            "A single time step makes the baseline equal to the value, so "
+            "every anomaly is zero by construction rather than by measurement. "
+            "Read a file covering more than one time step, or take the "
+            "difference against a separate baseline file with compare_fields.",
+        )
+    )
+    return checks

@@ -13,6 +13,7 @@ from typing import Any
 from uxarray_mcp.domain.anomaly_coverage import anomaly_coverage_warning_codes
 from uxarray_mcp.domain.profile_coverage import profile_coverage_warning_codes
 from uxarray_mcp.domain.subset_coverage import subset_coverage_warning_codes
+from uxarray_mcp.domain.temporal_coverage import temporal_coverage_warning_codes
 from uxarray_mcp.postconditions import (
     evaluate_area_postconditions,
     postcondition_block,
@@ -28,6 +29,8 @@ from uxarray_mcp.preconditions import (
     evaluate_profile_preconditions,
     evaluate_remap_preconditions,
     evaluate_subset_preconditions,
+    evaluate_temporal_anomaly_preconditions,
+    evaluate_temporal_preconditions,
     evaluate_validation_preconditions,
     evaluate_vector_preconditions,
 )
@@ -91,6 +94,11 @@ PROFILE_OPERATIONS: frozenset[str] = frozenset(
 SUBSET_OPERATIONS: frozenset[str] = frozenset(
     {"subset_bbox", "subset_polygon", "cross_section"}
 )
+
+#: Operations that reduce along ``time``. Both return a full-length array
+#: whatever went in, so how many steps each value averaged is invisible in
+#: the result and is measured separately.
+TEMPORAL_OPERATIONS: frozenset[str] = frozenset({"temporal_mean", "anomaly"})
 
 #: Vocabulary an agent is likely to reach for, mapped to the operation that
 #: actually serves that intent. These are not aliases -- the call still fails --
@@ -325,6 +333,22 @@ def _finalize_analysis_result(
             status = "warning"
             warning_codes.extend(codes)
         preconditions = evaluate_subset_preconditions(operation, coverage)
+
+    elif operation in TEMPORAL_OPERATIONS and "temporal_coverage" in result:
+        # Keyed off the block being present for the same reason as the other
+        # coverage gates: a remote worker on an older build sends none, and
+        # absent measurement stays unknown rather than becoming a claim.
+        coverage = result["temporal_coverage"]
+        codes = temporal_coverage_warning_codes(coverage)
+        physically_interpretable = not codes
+        if codes:
+            status = "warning"
+            warning_codes.extend(codes)
+        preconditions = (
+            evaluate_temporal_anomaly_preconditions(operation, coverage)
+            if operation == "anomaly"
+            else evaluate_temporal_preconditions(operation, coverage)
+        )
 
     # Refuses by default when a declared precondition fails: raises
     # PreconditionRefusal unless the caller passed the override token.
