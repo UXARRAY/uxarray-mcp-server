@@ -516,23 +516,42 @@ def evaluate_subset_preconditions(
     summary of ``shape: [0]``, a persisted handle and a next-steps list -- the
     full shape of an answer, describing nothing. Keeping *fewer* faces is not a
     defect and is not checked: that is what a subset is for.
+
+    A box that lands on the mesh and still keeps nothing gets a different
+    repair. ``subset_bbox`` keeps a face only when the whole face fits inside
+    the box, so a box narrower than one face selects nothing while sitting on
+    top of it -- measured at lon 6..11 / lat 6..11 on a mesh of 5-degree cells,
+    one face centre inside and zero faces returned. Telling that caller to move
+    the box would send them away from the fix.
     """
     retained = coverage.get("n_face_retained", 0)
     source = coverage.get("n_face_source", 0)
+    centers_inside = coverage.get("n_face_centers_in_bounds")
     argument = _SUBSET_ARGUMENTS.get(operation, "the selection")
-    repair = f"Move {argument} onto the mesh."
-    extent = coverage.get("source_extent")
-    if extent:
-        repair += (
-            " The mesh spans longitude {lon_min:g} to {lon_max:g} and latitude "
-            "{lat_min:g} to {lat_max:g}; check the longitude convention too "
-            "(-180..180 against 0..360)."
-        ).format(**extent)
+    detail = f"{operation}: {retained} of {source} faces selected."
+    if centers_inside is not None:
+        detail += f" {centers_inside} face centres lie inside the box."
+    if centers_inside:
+        repair = (
+            f"Widen {argument}. The box is on the mesh -- {centers_inside} face "
+            "centres fall inside it -- but a face is kept only when the whole "
+            "face fits, and none of them do. Give the box at least one full "
+            "cell of room, or use subset_polygon, which selects by face centre."
+        )
+    else:
+        repair = f"Move {argument} onto the mesh."
+        extent = coverage.get("source_extent")
+        if extent:
+            repair += (
+                " The mesh spans longitude {lon_min:g} to {lon_max:g} and latitude "
+                "{lat_min:g} to {lat_max:g}; check the longitude convention too "
+                "(-180..180 against 0..360)."
+            ).format(**extent)
     return [
         _check(
             "subset_retains_faces",
             retained > 0,
-            f"{operation}: {retained} of {source} faces selected.",
+            detail,
             repair,
         )
     ]
