@@ -20,6 +20,7 @@ from uxarray_mcp.domain.remap_coverage import (
     compute_target_coverage,
 )
 from uxarray_mcp.domain.subset_coverage import compute_subset_coverage, mesh_extent
+from uxarray_mcp.domain.temporal_coverage import compute_temporal_coverage
 from uxarray_mcp.next_steps import call, needed
 from uxarray_mcp.preconditions import normalize_units
 from uxarray_mcp.provenance import attach_provenance
@@ -1398,6 +1399,9 @@ def calculate_temporal_mean(
         "groupby": groupby,
         "summary": summarize_array(result_data),
         "result_handle": result_handle,
+        "temporal_coverage": compute_temporal_coverage(
+            data, result_data, groupby=groupby
+        ),
     }
     result = attach_provenance(
         result,
@@ -1446,6 +1450,10 @@ def calculate_anomaly(
         "baseline": baseline,
         "summary": summarize_array(anomaly),
         "result_handle": result_handle,
+        # The anomaly keeps its time dimension, so coverage is measured
+        # against the source it was differenced from rather than against its
+        # own shape: the loss is in the baseline, one reduction down.
+        "temporal_coverage": compute_temporal_coverage(data, anomaly),
     }
     result = attach_provenance(
         result,
