@@ -5,6 +5,19 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- The response contract described a payload the server does not send. It
+  declared a top-level `physically_interpretable` boolean that no code path
+  emits — every producer nests that verdict inside `scientific_status` — and
+  did not declare `scientific_status` at all. Measured across four operations,
+  0 of 4 results carried the declared field and 4 of 4 carried the block it
+  lives in, so `validate_response` reported the server's own envelope
+  (`outcome`, `scientific_status`, `preconditions`, `postconditions`,
+  `recommended_next_steps`, `_provenance`) back as *extra* on every call. All
+  six are now declared, optional because a refusal is a different shape, and
+  the per-operation `outputSchema` reuses the front door's own definitions
+  rather than restating them more weakly. `calculate_area` also declares
+  `area_basis` and `calculate_zonal_mean` declares `profile_coverage`, the two
+  blocks that say what the number rests on.
 - Non-finite floats no longer reach the wire. JSON has no `NaN` or
   `Infinity`; `json.dumps` writes them as bare tokens unless told otherwise,
   and `structuredContent` never passed through `json.dumps` at all — the live
