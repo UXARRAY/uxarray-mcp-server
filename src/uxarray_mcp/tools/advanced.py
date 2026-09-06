@@ -19,7 +19,11 @@ from uxarray_mcp.domain.remap_coverage import (
     compute_scattered_coverage,
     compute_target_coverage,
 )
-from uxarray_mcp.domain.subset_coverage import compute_subset_coverage, mesh_extent
+from uxarray_mcp.domain.subset_coverage import (
+    compute_subset_coverage,
+    count_face_centers_in_bounds,
+    mesh_extent,
+)
 from uxarray_mcp.domain.temporal_coverage import compute_temporal_coverage
 from uxarray_mcp.next_steps import call, needed
 from uxarray_mcp.preconditions import normalize_units
@@ -262,7 +266,13 @@ def subset_bbox(
         "original_grid": summarize_grid(grid),
         "subset_grid": summarize_grid(subset_grid),
         "subset_coverage": compute_subset_coverage(
-            grid.n_face, subset_grid.n_face, extent=mesh_extent(grid)
+            grid.n_face,
+            subset_grid.n_face,
+            extent=mesh_extent(grid),
+            selection_rule="face_bounds_within",
+            n_face_centers_in_bounds=count_face_centers_in_bounds(
+                grid, lon_bounds, lat_bounds
+            ),
         ),
         "variable_summary": variable_summary,
         "result_handle": result_handle,
@@ -371,7 +381,10 @@ def subset_polygon(
         "selected_face_count": int(selected_indices.size),
         "selected_face_indices_preview": selected_indices[:25].tolist(),
         "subset_coverage": compute_subset_coverage(
-            grid.n_face, int(selected_indices.size), extent=mesh_extent(grid)
+            grid.n_face,
+            int(selected_indices.size),
+            extent=mesh_extent(grid),
+            selection_rule="face_center_inside",
         ),
         "variable_summary": variable_summary,
         "result_handle": result_handle,
@@ -453,7 +466,10 @@ def extract_cross_section(
             "variable_summary": None,
             "result_handle": None,
             "subset_coverage": compute_subset_coverage(
-                grid.n_face, 0, extent=mesh_extent(grid)
+                grid.n_face,
+                0,
+                extent=mesh_extent(grid),
+                selection_rule="face_intersects_line",
             ),
         }
         empty = attach_provenance(
@@ -513,6 +529,7 @@ def extract_cross_section(
             grid.n_face,
             subset_grid.n_face if subset_grid is not None else 0,
             extent=mesh_extent(grid),
+            selection_rule="face_intersects_line",
         ),
         "variable_summary": variable_summary,
         "result_handle": result_handle,
