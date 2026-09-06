@@ -4148,7 +4148,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.9.0" },
     { name = "mcp", specifier = ">=1.24,<3" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=3.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0" },
     { name = "sphinx-book-theme", marker = "extra == 'docs'", specifier = ">=1.1.0" },
     { name = "toolregistry", specifier = ">=0.16.0" },

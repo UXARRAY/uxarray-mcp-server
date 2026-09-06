@@ -31,7 +31,7 @@ requirements:
     - mcp >=1.20,<2
     - holoviews >=1.19.0
     - matplotlib-base >=3.9.0
-    - pyyaml >=6.0
+    - pyyaml >=6.0.1
     - uxarray >=2026.8.1
 
 test:
