@@ -12,6 +12,7 @@ from typing import Any
 
 from uxarray_mcp.domain.anomaly_coverage import anomaly_coverage_warning_codes
 from uxarray_mcp.domain.profile_coverage import profile_coverage_warning_codes
+from uxarray_mcp.domain.subset_coverage import subset_coverage_warning_codes
 from uxarray_mcp.postconditions import (
     evaluate_area_postconditions,
     postcondition_block,
@@ -26,6 +27,7 @@ from uxarray_mcp.preconditions import (
     evaluate_ensemble_preconditions,
     evaluate_profile_preconditions,
     evaluate_remap_preconditions,
+    evaluate_subset_preconditions,
     evaluate_validation_preconditions,
     evaluate_vector_preconditions,
 )
@@ -81,6 +83,13 @@ ENSEMBLE_OPERATIONS: frozenset[str] = frozenset({"ensemble_mean", "ensemble_spre
 #: entirely of NaN is shaped exactly like an answer.
 PROFILE_OPERATIONS: frozenset[str] = frozenset(
     {"calculate_zonal_mean", "azimuthal_mean"}
+)
+
+#: Operations that narrow a mesh to the part a caller named. Keeping fewer
+#: faces is the point; keeping none returns a grid of ``n_face: 0`` and a
+#: variable summary of ``shape: [0]``, which is shaped exactly like an answer.
+SUBSET_OPERATIONS: frozenset[str] = frozenset(
+    {"subset_bbox", "subset_polygon", "cross_section"}
 )
 
 #: Vocabulary an agent is likely to reach for, mapped to the operation that
@@ -306,6 +315,16 @@ def _finalize_analysis_result(
             status = "warning"
             warning_codes.extend(codes)
         preconditions = evaluate_anomaly_preconditions(operation, coverage)
+    elif operation in SUBSET_OPERATIONS and "subset_coverage" in result:
+        coverage = result["subset_coverage"]
+        codes = subset_coverage_warning_codes(coverage)
+        # A selection is a choice of region, not a physical claim, so a
+        # non-empty one stays unjudged rather than being called interpretable.
+        if codes:
+            physically_interpretable = False
+            status = "warning"
+            warning_codes.extend(codes)
+        preconditions = evaluate_subset_preconditions(operation, coverage)
 
     # Refuses by default when a declared precondition fails: raises
     # PreconditionRefusal unless the caller passed the override token.

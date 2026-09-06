@@ -221,6 +221,23 @@ slice, and when faces did carry data it names the missing values rather than
 Measured on a 90-face regional mesh, one missing value per latitude band was
 enough to empty all 90 faces while 85 of them carried data.
 
+`subset_bbox`, `subset_polygon` and `cross_section` narrow a mesh to the part
+the caller named, and all three report a **`subset_coverage`** block giving
+`n_face_source`, `n_face_retained` and the source mesh's `source_extent`.
+Keeping fewer faces is the point of the operation, so there is no partial
+warning — it would fire on every successful call. Keeping none **refuses**: an
+empty box returns a `subset_grid` of `n_face: 0`, a `variable_summary` of
+`shape: [0]`, a persisted handle and a next-steps list suggesting the caller
+plot it, which is the full shape of an answer describing nothing.
+
+The repair names the argument the caller controls — `lon_bounds`/`lat_bounds`,
+`polygon_lon_lat`, or `latitude`/`longitude` — and quotes the longitude and
+latitude the mesh actually spans, since "nothing selected" does not say where
+to put the box and the `-180..180` against `0..360` mix-up is the most likely
+way to arrive here. `cross_section` is the one case UXarray already caught: it
+raises rather than returning empty, and that error is turned into the same
+refusal so the extent reaches the caller. Any other error still propagates.
+
 `ensemble_mean` and `ensemble_spread` combine several files cell-by-cell, and
 nothing in the shapes says the files measure the same thing on the same mesh.
 Both report a **`member_evidence`** block naming the per-member `units`, the
