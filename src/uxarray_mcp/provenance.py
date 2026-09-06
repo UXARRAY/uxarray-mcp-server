@@ -87,24 +87,37 @@ def attach_provenance(
     # against the schema rejects the reply outright. Set it here, at the
     # single point every contracted result already passes through, so the
     # promise and the payload cannot drift apart again.
-    if _has_contract(tool):
-        result.setdefault("operation", tool)
+    #
+    # The name written is the contract's, not the function's. A worker runs
+    # ``remote_calculate_area`` and the caller receives ``calculate_area``;
+    # the operation is the same one either way, and a venue name in a
+    # contract field would be a second thing for a client to special-case.
+    contract_name = _contract_name(tool)
+    if contract_name is not None:
+        result.setdefault("operation", contract_name)
     return result
 
 
-def _has_contract(tool: str) -> bool:
-    """Whether this operation declares a response contract.
+def _contract_name(tool: str) -> str | None:
+    """The declared operation this tool answers as, or ``None``.
 
     Only contracted families gain an ``operation`` field: the contract is
     what makes the field a promise, and adding it to results that never
-    promised it would be noise.
+    promised it would be noise. Aliases resolve here, so a ``remote_*``
+    worker function reports the operation the caller asked for.
     """
     try:
         from .response_contract import _CONTRACTS, _normalize
 
-        return _normalize(tool) in _CONTRACTS
+        name = _normalize(tool)
+        return name if name in _CONTRACTS else None
     except Exception:  # pragma: no cover - defensive
-        return False
+        return None
+
+
+def _has_contract(tool: str) -> bool:
+    """Whether this operation declares a response contract."""
+    return _contract_name(tool) is not None
 
 
 def attach_scientific_status(

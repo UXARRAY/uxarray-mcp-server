@@ -108,6 +108,66 @@ class TestDeclarationMatchesPayload:
             assert verdict["valid"] is True, operation
 
 
+class TestAWorkerResultIsTheSameOperation:
+    """A reply computed on HPC answers the contract the caller asked about.
+
+    ``_run_on_hpc`` stamps ``tool=func.__name__``, so every remote reply
+    carried ``remote_calculate_area``. Nothing declares a contract under
+    that name, so ``attach_provenance`` skipped ``operation`` and
+    ``validate_response("calculate_area", <remote reply>)`` answered
+    ``{'missing_fields': ['operation'], 'verdict': 'malformed_envelope'}``
+    for a result whose science was fine.
+    """
+
+    def _remote_area(self, grid_file):
+        from uxarray_mcp.provenance import attach_provenance
+        from uxarray_mcp.remote.compute_functions import remote_calculate_area
+
+        return attach_provenance(
+            remote_calculate_area(grid_file),
+            tool="remote_calculate_area",
+            inputs={"args": [grid_file]},
+            venue="hpc:test",
+        )
+
+    def test_a_remote_area_reply_validates_as_calculate_area(
+        self, earth_radius_mesh_files
+    ):
+        grid_file, _ = earth_radius_mesh_files
+        result = self._remote_area(grid_file)
+        assert result["operation"] == "calculate_area"
+
+        verdict = validate_response("calculate_area", result)
+        assert verdict["missing_fields"] == []
+        assert verdict["valid"] is True
+
+    def test_the_venue_stays_out_of_the_contract_field(self, earth_radius_mesh_files):
+        """``operation`` names what was computed, not where.
+
+        A caller matching on ``operation`` should not have to know that the
+        same question answered on a worker comes back under a different
+        name; the venue is already in ``_provenance``.
+        """
+        grid_file, _ = earth_radius_mesh_files
+        result = self._remote_area(grid_file)
+        assert result["_provenance"]["tool"] == "remote_calculate_area"
+        assert result["_provenance"]["execution_venue"] == "hpc:test"
+        assert "remote" not in result["operation"]
+
+    def test_an_uncontracted_tool_gains_no_operation_field(self):
+        """Silence, not a guess.
+
+        ``operation`` is a contract field. Stamping it on a family that
+        declares no shape would advertise a promise nothing checks.
+        """
+        from uxarray_mcp.provenance import attach_provenance
+
+        result = attach_provenance(
+            {"ok": True}, tool="not_a_contracted_tool", inputs={}
+        )
+        assert "operation" not in result
+
+
 class TestSchemaAgreesWithTheFrontDoor:
     def test_envelope_blocks_reuse_the_front_door_definition(self):
         """One description per field, whichever schema a client reads.

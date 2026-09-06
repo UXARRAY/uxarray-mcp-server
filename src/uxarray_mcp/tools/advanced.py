@@ -14,6 +14,12 @@ import xarray as xr
 from matplotlib.path import Path as MplPath
 
 from uxarray_mcp.domain.dims import FACE_DIMS
+from uxarray_mcp.domain.export_fidelity import (
+    count_dropped_attributes,
+    dangling_grid_mappings,
+    export_fidelity,
+    measure_written_csv,
+)
 from uxarray_mcp.domain.mesh import load_dataset, load_grid
 from uxarray_mcp.domain.remap_coverage import (
     compute_scattered_coverage,
@@ -1664,6 +1670,10 @@ def export_to_netcdf(
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
+    dropped: list[str] = []
+    dangling: list[str] = []
+    n_written: int | None = None
+
     if result_handle is not None:
         stored_result = get_result(result_handle)
         artifact_path = stored_result.get("artifact_path")
@@ -1685,19 +1695,41 @@ def export_to_netcdf(
             written = copy_artifact(dataset["data_path"], output_path)
             summary = {"copied_source": dataset["data_path"]}
         else:
-            ds = xr.open_dataset(dataset["data_path"])
-            if variable_name not in ds:
-                raise ValueError(
-                    f"Variable '{variable_name}' not found in {dataset['data_path']}."
-                )
-            ds[[variable_name]].to_netcdf(output_path)
+            with xr.open_dataset(dataset["data_path"]) as ds:
+                if variable_name not in ds:
+                    raise ValueError(
+                        f"Variable '{variable_name}' not found in "
+                        f"{dataset['data_path']}."
+                    )
+                subset = ds[[variable_name]]
+                subset.to_netcdf(output_path)
+                # Exporting one variable is a request, not a mistake; what
+                # was missing is the reply saying which siblings stayed
+                # behind. A CF grid_mapping container is the case that
+                # bites: the written variable keeps pointing at it.
+                kept = set(subset.variables)
+                dropped = sorted(set(ds.variables) - kept)
+                dangling = dangling_grid_mappings(ds, kept)
+                n_written = len(kept)
+                summary = summarize_dataset(subset)
             written = str(destination)
-            summary = summarize_dataset(ds[[variable_name]])
     else:
         raise ValueError("Provide either result_handle or dataset_handle.")
 
     tracker.succeed("NetCDF export complete.")
-    response: dict[str, Any] = {"output_path": written, "summary": summary}
+    response: dict[str, Any] = {
+        "output_path": written,
+        "summary": summary,
+        # NetCDF carries attributes and its own fill values, so the two
+        # losses CSV cannot avoid do not arise here.
+        "export_fidelity": export_fidelity(
+            format="netcdf",
+            destination=Path(written),
+            n_variables_written=n_written,
+            variables_dropped=dropped,
+            dangling_grid_mapping=dangling,
+        ),
+    }
     response = attach_provenance(
         response,
         tool="export_to_netcdf",
@@ -1725,6 +1757,12 @@ def export_to_csv(
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
+    rows_expected: int | None = None
+    attributes_dropped = 0
+    missing_values = 0
+    dropped: list[str] = []
+    n_written: int | None = None
+
     if result_handle is not None:
         stored_result = get_result(result_handle)
         artifact_path = stored_result.get("artifact_path")
@@ -1737,16 +1775,21 @@ def export_to_csv(
                 writer = csv.DictWriter(handle, fieldnames=sorted(payload))
                 writer.writeheader()
                 writer.writerow(payload)
-            summary = {"rows_written": 1}
+            rows_expected = 1
         else:
             try:
-                data = xr.open_dataarray(artifact)
-                frame = data.to_dataframe(name=data.name or "value").reset_index()
+                with xr.open_dataarray(artifact) as data:
+                    frame = data.to_dataframe(name=data.name or "value").reset_index()
+                    attributes_dropped = len(data.attrs or {})
+                    n_written = 1
             except ValueError:
-                dataset_artifact = xr.open_dataset(artifact)
-                frame = dataset_artifact.to_dataframe().reset_index()
+                with xr.open_dataset(artifact) as dataset_artifact:
+                    frame = dataset_artifact.to_dataframe().reset_index()
+                    attributes_dropped = count_dropped_attributes(dataset_artifact)
+                    n_written = len(dataset_artifact.data_vars)
             frame.to_csv(destination, index=False)
-            summary = {"rows_written": int(len(frame))}
+            rows_expected = int(len(frame))
+            missing_values = int(frame.isna().sum().sum())
     elif dataset_handle is not None:
         if session_id is None:
             raise ValueError("session_id is required when exporting a dataset_handle.")
@@ -1757,20 +1800,46 @@ def export_to_csv(
             )
         if dataset.get("data_path") is None:
             raise ValueError("Dataset handle does not include a data file to export.")
-        ds = xr.open_dataset(dataset["data_path"])
-        if variable_name is not None and variable_name not in ds:
-            raise ValueError(
-                f"Variable '{variable_name}' not found in {dataset['data_path']}."
-            )
-        export_ds = ds if variable_name is None else ds[[variable_name]]
-        frame = export_ds.to_dataframe().reset_index()
-        frame.to_csv(destination, index=False)
-        summary = {"rows_written": int(len(frame))}
+        with xr.open_dataset(dataset["data_path"]) as ds:
+            if variable_name is not None and variable_name not in ds:
+                raise ValueError(
+                    f"Variable '{variable_name}' not found in {dataset['data_path']}."
+                )
+            export_ds = ds if variable_name is None else ds[[variable_name]]
+            frame = export_ds.to_dataframe().reset_index()
+            frame.to_csv(destination, index=False)
+            rows_expected = int(len(frame))
+            missing_values = int(frame.isna().sum().sum())
+            attributes_dropped = count_dropped_attributes(export_ds)
+            n_written = len(export_ds.data_vars)
+            dropped = sorted(set(ds.variables) - set(export_ds.variables))
     else:
         raise ValueError("Provide either result_handle or dataset_handle.")
 
+    # Counted out of the file, not off the frame: the old summary reported
+    # len(frame), which is the number of rows we meant to write.
+    _, rows_written = measure_written_csv(destination)
+    summary = {"rows_written": rows_written}
+
     tracker.succeed("CSV export complete.")
-    response: dict[str, Any] = {"output_path": str(destination), "summary": summary}
+    response: dict[str, Any] = {
+        "output_path": str(destination),
+        "summary": summary,
+        # CSV has nowhere to put an attribute and no missing-value
+        # convention, so both losses are certain and only the disclosure
+        # was ever in question.
+        "export_fidelity": export_fidelity(
+            format="csv",
+            destination=destination,
+            rows_expected=rows_expected,
+            rows_written=rows_written,
+            n_variables_written=n_written,
+            variables_dropped=dropped,
+            attributes_dropped=attributes_dropped,
+            missing_values=missing_values,
+            missing_written_as="empty field",
+        ),
+    }
     response = attach_provenance(
         response,
         tool="export_to_csv",
