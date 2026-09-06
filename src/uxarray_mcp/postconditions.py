@@ -42,6 +42,8 @@ import math
 import os
 from typing import Any, Callable, Literal
 
+from uxarray_mcp.domain.mesh_coverage import mesh_is_closed
+
 #: Verdict policies, in order of decreasing generosity to the caller.
 VerdictPolicy = Literal["full", "reference_only", "off"]
 
@@ -155,6 +157,7 @@ def evaluate_area_postconditions(
     The check abstains entirely when the mesh is not closed, because on
     an open regional mesh ``4*pi*R^2`` is not the right number and a
     failing verdict there would be the server being wrong, not the mesh.
+    ``area_identity_abstention`` turns that silence into a stated reason.
     """
     total_area = result.get("total_area")
     if total_area is None or grid_loader is None:
@@ -165,7 +168,12 @@ def evaluate_area_postconditions(
     except Exception:  # pragma: no cover - a load failure is the caller's error
         return []
 
-    if not mesh_is_closed(grid):
+    # ``mesh_coverage`` already counted edge incidences, and on a large mesh
+    # that is seconds rather than milliseconds. Fall back to counting again
+    # only for a remote worker on an older build, which sends no block.
+    coverage = result.get("mesh_coverage") or {}
+    closed = coverage.get("closed") if "closed" in coverage else mesh_is_closed(grid)
+    if not closed:
         return []
 
     basis = result.get("area_basis") or {}
@@ -213,96 +221,78 @@ def evaluate_area_postconditions(
     ]
 
 
-#: Decimal places used when matching node coordinates. Six is ~0.1 m on
-#: Earth's surface, far below any mesh spacing we deal with, and coarse
-#: enough to absorb the round-trip through NetCDF float64 text.
-_COORD_DECIMALS = 6
+def area_identity_abstention(result: dict[str, Any]) -> str | None:
+    """Say why ``sum(face_areas) == 4*pi*R^2`` was not evaluated.
 
+    Read off the ``mesh_coverage`` block rather than the grid, so naming
+    the reason costs no second traversal of a mesh that may have taken
+    seconds to traverse once. Returns ``None`` when the abstention has no
+    explanation this function can give -- an unloadable grid, or a result
+    from a worker old enough to send no coverage -- because inventing one
+    would be worse than the silence it replaces.
 
-def _canonical_node_ids(grid: Any) -> list[int]:
-    """Map nodes onto identity by position, not by index.
-
-    A structured global grid stores the 0/360 seam twice and every pole
-    once per meridian, so counting edges on raw indices reports boundary
-    edges on a mesh that is geometrically closed. Merging nodes that sit
-    at the same point -- with all pole nodes collapsing to one, since
-    longitude is meaningless there -- makes the count reflect the surface
-    rather than the storage layout.
+    Kept to one sentence on purpose: the block is re-sent on every later
+    turn of a conversation, so every word here is paid for repeatedly
+    (#83).
     """
-    import numpy as np
+    coverage = result.get("mesh_coverage")
+    if not coverage:
+        return None
 
-    lon = np.asarray(grid.node_lon, dtype=float) % 360.0
-    lat = np.asarray(grid.node_lat, dtype=float)
-    seen: dict[str, int] = {}
-    ids: list[int] = []
-    for x, y in zip(lon, lat):
-        if abs(abs(y) - 90.0) < 1e-9:
-            key = f"pole{y:+.1f}"
-        else:
-            key = (
-                f"{round(x, _COORD_DECIMALS) % 360:.6f}_{round(y, _COORD_DECIMALS):.6f}"
-            )
-        ids.append(seen.setdefault(key, len(seen)))
-    return ids
+    if coverage.get("topology_skipped"):
+        return (
+            "The 4*pi*R^2 identity holds only on a closed mesh and closure "
+            f"was not checked: {coverage['topology_skipped']}"
+        )
 
+    if coverage.get("closed") is False:
+        fraction = coverage.get("sphere_fraction")
+        extent = (
+            f" It covers {fraction:.4%} of the sphere."
+            if isinstance(fraction, (int, float))
+            else ""
+        )
+        return (
+            "The 4*pi*R^2 identity holds only on a closed mesh, and this one "
+            f"has at least one boundary edge.{extent}"
+        )
 
-def mesh_is_closed(grid: Any) -> bool:
-    """True when every edge is shared by exactly two faces.
-
-    A closed mesh is the precondition for the ``4*pi*R^2`` identity. The
-    cheap version of this test -- comparing ``n_edge`` against Euler's
-    formula -- is wrong on meshes with holes, so count edge incidences
-    directly. Meshes here are small enough for that to be free.
-    """
-    try:
-        import numpy as np
-
-        connectivity = np.asarray(grid.face_node_connectivity)
-        node_ids = _canonical_node_ids(grid)
-    except Exception:  # pragma: no cover - mocked grids in unit tests
-        return False
-
-    n_node = len(node_ids)
-    incidence: dict[tuple[int, int], int] = {}
-    for face in connectivity:
-        nodes: list[int] = []
-        for raw in face:
-            index = int(raw)
-            if not 0 <= index < n_node:
-                continue  # fill value: a face with fewer nodes than the max
-            node = node_ids[index]
-            if not nodes or nodes[-1] != node:
-                nodes.append(node)
-        # A ring stored with a repeated first/last node is one edge, not two.
-        if len(nodes) > 1 and nodes[0] == nodes[-1]:
-            nodes.pop()
-        if len(nodes) < 3:
-            continue  # degenerate after merging coincident nodes
-        for index, node in enumerate(nodes):
-            other = nodes[(index + 1) % len(nodes)]
-            key = (min(node, other), max(node, other))
-            incidence[key] = incidence.get(key, 0) + 1
-    if not incidence:
-        return False
-    return all(count == 2 for count in incidence.values())
+    return None
 
 
 def postcondition_block(
     checks: list[dict[str, Any]],
     policy: VerdictPolicy,
+    *,
+    not_evaluated_reason: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the block attached to every analysis result.
 
     Present even when nothing was checked: #84's point is that an
     explicit ``not_evaluated`` costs almost nothing and stops a caller
     implying more confidence than the computation supports.
+
+    ``not_evaluated`` on its own turned out to be half the disclosure. A
+    regional mesh came back with ``{"status": "not_evaluated",
+    "checks": []}`` because the area identity abstains on an open mesh,
+    and the payload never said that was why -- indistinguishable from a
+    deployment that had checking switched off. ``not_evaluated_because``
+    carries the reason when the caller can be told one.
     """
     if not checks or policy == "off":
-        return {
+        block: dict[str, Any] = {
             "status": STATUS_NOT_EVALUATED,
             "checks": [],
             "independent_verification": False,
         }
+        reason = (
+            f"{VERDICT_POLICY_ENV.lower()}={policy}: no check was run."
+            if policy == "off"
+            else not_evaluated_reason
+        )
+        if reason:
+            block["not_evaluated_because"] = reason
+        return block
 
     if policy == "reference_only":
         return {

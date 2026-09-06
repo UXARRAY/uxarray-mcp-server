@@ -230,7 +230,8 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
             "description": (
                 "Checks on the value after computing. A check may report "
                 "'not_evaluated', which is an explicit abstention rather "
-                "than a pass."
+                "than a pass; when the server can say why it abstained, "
+                "'not_evaluated_because' carries the reason."
             ),
             "additionalProperties": True,
         },

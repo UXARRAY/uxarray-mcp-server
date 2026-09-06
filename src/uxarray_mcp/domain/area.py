@@ -21,6 +21,8 @@ travels with the numbers.
 
 from typing import Any
 
+from .mesh_coverage import compute_mesh_coverage
+
 #: UXarray's default when a grid declares nothing, and its unit-sphere basis.
 UNIT_SPHERE_RADIUS = 1.0
 
@@ -55,13 +57,18 @@ def compute_area_stats(grid: Any, sphere_radius: float | None = None) -> dict:
     if hasattr(face_areas, "attrs") and "units" in face_areas.attrs:
         area_units = face_areas.attrs["units"]
 
+    steradians = float(face_areas.sum())
     stats = {
-        "total_area": float(face_areas.sum()),
+        "total_area": steradians,
         "mean_area": float(face_areas.mean()),
         "min_area": float(face_areas.min()),
         "max_area": float(face_areas.max()),
         "area_units": area_units,
         "n_face": int(grid.n_face),
+        # Attached before scaling, and measured on the unit sphere whatever
+        # radius is applied below: a total is only readable as global or
+        # regional next to the fraction of the sphere it was summed over.
+        "mesh_coverage": compute_mesh_coverage(grid, steradians=steradians),
     }
     radius, source = resolve_sphere_radius(grid, sphere_radius)
     return apply_sphere_radius(stats, radius, source)
