@@ -168,7 +168,8 @@ def evaluate_area_postconditions(
     if not mesh_is_closed(grid):
         return []
 
-    declared_radius = getattr(grid, "sphere_radius", None)
+    basis = result.get("area_basis") or {}
+    declared_radius = basis.get("sphere_radius", getattr(grid, "sphere_radius", None))
     declared = declared_radius is not None
     radius = (
         float(declared_radius) if declared_radius is not None else UNIT_SPHERE_RADIUS
@@ -180,7 +181,12 @@ def evaluate_area_postconditions(
     # radius was seen and whether it was applied is the point: a unit-sphere
     # answer must not pass by being silently compared against a unit-sphere
     # reference the caller never knew about.
-    scaled = bool(result.get("area_units"))
+    # ``area_basis`` says outright whether the radius was applied. Falling
+    # back to the presence of a units string keeps a remote worker on an
+    # older build, which sends no basis, reading the way it always did.
+    scaled = (
+        bool(basis["scaled"]) if "scaled" in basis else bool(result.get("area_units"))
+    )
     reference = 4.0 * math.pi * (radius**2 if scaled else 1.0)
     identity = "sum(face_areas) == 4*pi*R^2" if scaled else "sum(face_areas) == 4*pi"
     # Kept terse on purpose: the block is re-sent on every later turn, so

@@ -315,7 +315,12 @@ class TestEveryResultValidatesAgainstItsPublishedSchema:
 
         grid_file, data_file = synthetic_mesh_with_data
         result = run_analysis(
-            "calculate_area", grid_path=grid_file, data_path=data_file
+            "calculate_area",
+            grid_path=grid_file,
+            data_path=data_file,
+            # Without a radius the areas are steradians and the call refuses;
+            # this test wants the completed shape (#30).
+            sphere_radius=6371000.0,
         )
 
         self._validate(result)

@@ -686,6 +686,39 @@ def enforce(
     }
 
 
+def evaluate_area_preconditions(
+    operation: str,
+    basis: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Declare that an area is only an area once a radius is applied.
+
+    Same condition the differential operators already refuse on, one
+    dimension up: a gradient without radius scaling is per radian rather than
+    per metre, and a face area without it is steradians rather than square
+    metres. Measured on a 648-face global mesh, ``total_area`` came back as
+    12.566371 -- 4*pi -- with ``area_units: null`` and no warning code, and it
+    came back the same on a grid whose own file declared
+    ``sphere_radius: 6371000.0``.
+    """
+    scaled = bool(basis.get("scaled"))
+    source = basis.get("radius_source")
+    radius = basis.get("sphere_radius")
+    detail = f"{operation}: areas on a sphere of radius {radius:g}"
+    detail += f" (from {source})." if scaled else ", the unit sphere."
+    return [
+        _check(
+            "area_radius_scaling",
+            scaled,
+            detail,
+            # Terse on purpose: the block is re-sent on every later turn, so
+            # every word is paid for repeatedly (#83).
+            "Pass sphere_radius in metres (6371000 for Earth) so the numbers "
+            "are areas, not steradians. A grid declaring its own is used "
+            "automatically; this one declares none.",
+        )
+    ]
+
+
 def evaluate_temporal_preconditions(
     operation: str,
     coverage: dict[str, Any],

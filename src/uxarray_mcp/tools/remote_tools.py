@@ -307,6 +307,7 @@ def calculate_area(
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
+    sphere_radius: float | None = None,
 ) -> Dict[str, Any]:
     """Calculate face areas with optional HPC execution.
 
@@ -317,6 +318,10 @@ def calculate_area(
         Can be local path or HPC filesystem path if use_remote=True
     use_remote : bool
         If True and HPC is configured, execute on remote endpoint
+    sphere_radius : float | None
+        Radius in metres to express the areas on. Defaults to the grid's own
+        ``sphere_radius`` attribute; without either, UXarray integrates on the
+        unit sphere and the numbers are steradians rather than areas.
 
     Returns
     -------
@@ -326,37 +331,56 @@ def calculate_area(
         - mean_area: Mean face area
         - min_area: Minimum face area
         - max_area: Maximum face area
-        - area_units: Units (m^2, km^2, etc.)
+        - area_units: Units (m^2, km^2, etc.), or None when nothing declared them
         - n_face: Number of faces
+        - area_basis: the radius used, where it came from, and whether it was
+          applied
 
     Examples
     --------
-    >>> calculate_area("mesh.nc", use_remote=False)
+    >>> calculate_area("mesh.nc", sphere_radius=6371000.0)
     {
         "total_area": 5.10064e14,
-        "mean_area": 1.246e7,
+        "area_units": "m^2",
+        "area_basis": {"sphere_radius": 6371000.0, "radius_source": "argument",
+                       "scaled": True},
         ...
     }
 
-    >>> calculate_area("/hpc/data/mesh.nc", use_remote=True)
+    >>> calculate_area("mesh.nc")
     {
-        "total_area": 5.10064e14,
+        "total_area": 12.566371,
+        "area_units": None,
+        "area_basis": {"sphere_radius": 1.0, "radius_source": "unit_sphere",
+                       "scaled": False},
         ...
     }
     """
     from .inspection import _calculate_area_local
 
-    return _run_with_optional_hpc(
+    result = _run_with_optional_hpc(
         tool_name="calculate_area",
         use_remote=use_remote,
         endpoint=endpoint,
         path_hint=file_path,
         session_id=session_id,
-        local_call=lambda: _calculate_area_local(file_path),
+        local_call=lambda: _calculate_area_local(
+            file_path, sphere_radius=sphere_radius
+        ),
         remote_call=lambda agent: _run_sync(
             lambda: agent.calculate_area_remote(file_path, use_remote)
         ),
     )
+    if sphere_radius is not None and "area_basis" not in result:
+        # The remote worker measured on its own grid and returned unit-sphere
+        # numbers: a worker on an older build knows nothing about the radius
+        # argument. Areas scale as R**2, so the correction is exact without
+        # the grid, and doing it here keeps the two paths reporting the same
+        # quantity. A worker that did apply a radius already sent the basis.
+        from uxarray_mcp.domain.area import apply_sphere_radius
+
+        result = apply_sphere_radius(result, float(sphere_radius), "argument")
+    return result
 
 
 def inspect_variable(

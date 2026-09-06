@@ -194,7 +194,9 @@ def _inspect_variable_local(
     )
 
 
-def _calculate_area_local(file_path: str) -> Dict[str, Any]:
+def _calculate_area_local(
+    file_path: str, sphere_radius: float | None = None
+) -> Dict[str, Any]:
     """
     Calculate face areas for an unstructured mesh.
 
@@ -203,6 +205,9 @@ def _calculate_area_local(file_path: str) -> Dict[str, Any]:
 
     Args:
         file_path: Path to the mesh file (supports UGRID, MPAS, SCRIP, ESMF, etc.)
+        sphere_radius: Radius in metres to express the areas on. Defaults to
+            the grid's own sphere_radius attribute, or the unit sphere when it
+            declares none.
 
     Returns:
         Dictionary containing:
@@ -239,7 +244,7 @@ def _calculate_area_local(file_path: str) -> Dict[str, Any]:
         raise RuntimeError(f"Failed to load mesh file: {str(e)}")
 
     try:
-        result = compute_area_stats(grid)
+        result = compute_area_stats(grid, sphere_radius=sphere_radius)
     except Exception as e:
         raise RuntimeError(f"Failed to calculate face areas: {str(e)}")
 
