@@ -5,6 +5,28 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- `zonal_anomaly` now says how much of the anomaly field the band means
+  actually defined, and refuses when they defined none of it. The anomaly is
+  a per-face field rather than a binned profile, so the bin coverage added for
+  `calculate_zonal_mean` did not apply and the loss stayed invisible: a band
+  mean is undefined as soon as one face in the band is missing, and every face
+  in that band comes back NaN including faces that carried a value. Measured on
+  a 90-face regional mesh, one missing value per latitude band emptied all 90
+  faces while 85 of them held data, and the result was `outcome: complete`,
+  `status: complete`, no warning codes, and `stats` of `{min: null, max: null,
+  mean: null, std: null}`. The partial case was quieter still — 30 faces with
+  data, 18 anomalies returned, 12 measurable faces dropped, and finite
+  min/max/mean/std computed from the survivors.
+- Results now carry an `anomaly_coverage` block with `n_face`,
+  `n_face_with_data`, `n_face_with_anomaly`, `n_face_data_lost` and `cause`.
+  `ANOMALY_COVERAGE_PARTIAL` fires on lost faces rather than on empty ones, so
+  an ordinary land-masked field does not warn on every call; a face that had
+  data and no anomaly is a deduction from `value - band_mean`, not a guess.
+  Zero coverage fails `anomaly_coverage_nonzero` and returns the refusal
+  payload with no number. The repair names the missing values rather than
+  `lat_spec` when faces did carry data, because no choice of bands can avoid a
+  gap that is in every band; when nothing was measurable it names the variable
+  and the time/level slice instead.
 - The `file://` links returned for large figures are now fetchable. A figure at
   or above the inline payload limit is written to the artifact store and handed
   back as an MCP `resource_link`, which is the right trade — base64 inflates the

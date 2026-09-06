@@ -10,6 +10,7 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any
 
+from uxarray_mcp.domain.anomaly_coverage import anomaly_coverage_warning_codes
 from uxarray_mcp.domain.profile_coverage import profile_coverage_warning_codes
 from uxarray_mcp.postconditions import (
     evaluate_area_postconditions,
@@ -20,6 +21,7 @@ from uxarray_mcp.preconditions import (
     OUTCOME_COMPLETE,
     PreconditionRefusal,
     enforce,
+    evaluate_anomaly_preconditions,
     evaluate_comparison_preconditions,
     evaluate_ensemble_preconditions,
     evaluate_profile_preconditions,
@@ -293,6 +295,17 @@ def _finalize_analysis_result(
             status = "warning"
             warning_codes.extend(codes)
         preconditions = evaluate_profile_preconditions(operation, coverage)
+    elif operation == "zonal_anomaly" and "anomaly_coverage" in result:
+        # Same reason the profile branch keys off the block being present:
+        # a remote worker on an older build sends no coverage, and absent
+        # measurement stays unknown rather than becoming a claim.
+        coverage = result["anomaly_coverage"]
+        codes = anomaly_coverage_warning_codes(coverage)
+        physically_interpretable = not codes
+        if codes:
+            status = "warning"
+            warning_codes.extend(codes)
+        preconditions = evaluate_anomaly_preconditions(operation, coverage)
 
     # Refuses by default when a declared precondition fails: raises
     # PreconditionRefusal unless the caller passed the override token.
