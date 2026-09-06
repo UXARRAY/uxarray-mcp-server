@@ -59,6 +59,35 @@ uxarray-mcp serve --transport sse --host 127.0.0.1 --port 8001
 uxarray-mcp serve --transport http --port 8000
 ```
 
+## Artifact resources
+
+A figure or dataset too large to inline comes back as an MCP `resource_link`
+carrying a `file://` URI into the server's artifact store, rather than as a
+base64 blob that would cost the caller far more context than the picture is
+worth. The server answers `resources/list` and `resources/read` for those URIs,
+so a client fetches the artifact over the same connection instead of needing
+access to the server's filesystem — which it does not have when the transport
+is `sse` or `http`.
+
+Reading is confined to the artifact directory, enforced after the path is
+resolved, so `..` segments and symlinks pointing out of the store are refused
+rather than clamped. Only `file://` URIs naming the local host are accepted.
+
+`resources/list` is paginated at 100 artifacts per page; keep following
+`nextCursor` until it comes back absent. The store grows without bound —
+1258 files, 212 KB of listing JSON, on one developer machine — so an unpaged
+listing would swallow more context than the results it describes. Pass the
+cursor back verbatim; it is opaque, and one the server did not issue is
+rejected rather than treated as "start over".
+
+The store is per-machine, not per-session: every session under the same
+`UXARRAY_MCP_STATE_DIR` (default `~/.uxarray_mcp_server`) writes into it, and
+`resources/list` describes all of it. Over stdio that is the same trust
+boundary as the user's own shell. Over `sse` or `http` it is not — any client
+authorized to reach the server can enumerate and read every artifact any
+session has produced, so bind those transports to a trusted interface, or give
+each tenant its own state directory.
+
 ## OpenAPI / REST
 
 The same tools can be exposed as an OpenAPI/REST service for clients that speak
