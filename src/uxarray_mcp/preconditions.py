@@ -498,6 +498,46 @@ def evaluate_anomaly_preconditions(
     ]
 
 
+#: What the caller changes to move a selection, per operation.
+_SUBSET_ARGUMENTS: dict[str, str] = {
+    "subset_bbox": "lon_bounds/lat_bounds",
+    "subset_polygon": "polygon_lon_lat",
+    "cross_section": "latitude/longitude",
+}
+
+
+def evaluate_subset_preconditions(
+    operation: str,
+    coverage: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Declare that a selection must keep at least one face.
+
+    An empty selection comes back with a grid of ``n_face: 0``, a variable
+    summary of ``shape: [0]``, a persisted handle and a next-steps list -- the
+    full shape of an answer, describing nothing. Keeping *fewer* faces is not a
+    defect and is not checked: that is what a subset is for.
+    """
+    retained = coverage.get("n_face_retained", 0)
+    source = coverage.get("n_face_source", 0)
+    argument = _SUBSET_ARGUMENTS.get(operation, "the selection")
+    repair = f"Move {argument} onto the mesh."
+    extent = coverage.get("source_extent")
+    if extent:
+        repair += (
+            " The mesh spans longitude {lon_min:g} to {lon_max:g} and latitude "
+            "{lat_min:g} to {lat_max:g}; check the longitude convention too "
+            "(-180..180 against 0..360)."
+        ).format(**extent)
+    return [
+        _check(
+            "subset_retains_faces",
+            retained > 0,
+            f"{operation}: {retained} of {source} faces selected.",
+            repair,
+        )
+    ]
+
+
 def _request_state(operation: str, failed: list[dict[str, Any]]) -> str:
     """An opaque token identifying exactly this refusal.
 
