@@ -5,6 +5,54 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- `inspect_variable` reported statistics over an unstated subset of a
+  variable. `sst` returned `mean: 80.5`; the same field with 145 of its 162
+  faces masked returned `mean: 153.0` in the same shape, with nothing saying
+  the number describes 17 faces. A fully masked field returned
+  `min/max/mean: nan` — not valid JSON — after emitting three
+  `RuntimeWarning: All-NaN slice encountered` on stderr the caller never
+  sees. Statistics are now taken over a boolean index of the finite entries;
+  a partly masked variable also reports `n_finite` and `n_total`, and a field
+  with nothing finite reports `null` rather than `nan`. Integers and booleans
+  carry no missing value to skip and keep the plain reductions with no extra
+  keys, matching `summarize_array`.
+- `mesh_coverage` never reached a result computed on HPC, so `MESH_NOT_GLOBAL`
+  could not fire on any remote reply whatever the mesh. `AllCodeStrategies`
+  ships one function's code and nothing else, so the worker has no
+  `uxarray_mcp` to import; the measurement is now nested inside
+  `remote_inspect_mesh` and `remote_calculate_area`, following the same
+  worker-side inlining already used for `profile_coverage` and
+  `source_coverage`. `tests/test_remote_mesh_coverage.py` compares the three
+  copies key for key on a global mesh, a regional patch and a polar-hole grid,
+  which is the only thing standing between them and drift.
+- Every result computed on HPC failed its own response contract.
+  `_run_on_hpc` stamps `tool=func.__name__`, so a worker reply arrived as
+  `remote_calculate_area`; nothing declares a contract under that name, so
+  `attach_provenance` skipped the required `operation` field and
+  `validate_response("calculate_area", ...)` answered
+  `{missing_fields: ["operation"], verdict: "malformed_envelope"}` for a reply
+  whose science was fine — and an SDK validating `structuredContent` against
+  the published schema rejects such a reply outright. The four `remote_*`
+  functions now alias to the operations they answer, and `operation` names the
+  contract rather than the venue, which is already in `_provenance`.
+- `export` claimed success without checking anything. The three export
+  functions contained no `stat`, `getsize` or `nbytes` call, so
+  `status: "complete"` meant `to_csv` returned without raising, and
+  `rows_written` was `len(frame)` read off the in-memory DataFrame. Measured
+  on a 9-face dataset: CSV dropped all 8 attributes, including every unit,
+  and wrote its one NaN as an empty field with no sentinel and no mention;
+  single-variable NetCDF export dropped `salinity` and the CF `crs` container
+  while leaving `sst` pointing at it, so the file references a coordinate
+  reference system it does not contain. Exports now return an
+  `export_fidelity` block measured on the written file — `bytes_written`,
+  `rows_written` against `rows_expected`, `variables_dropped`,
+  `attributes_dropped`, `missing_values` with `missing_written_as`,
+  `dangling_grid_mapping` — and raise `EXPORT_ATTRIBUTES_DROPPED`,
+  `EXPORT_MISSING_VALUES_UNMARKED`, `EXPORT_VARIABLES_DROPPED`,
+  `EXPORT_DANGLING_GRID_MAPPING`, `EXPORT_ROW_COUNT_MISMATCH` or
+  `EXPORT_EMPTY_FILE`. The file is still written and its path still returned;
+  a lossy export is the export that was asked for, and only the silence was
+  wrong. The datasets the exporters opened are now closed.
 - Nothing in an area result said how much of the sphere it was summed over. A
   5-degree mesh spanning 0-40E/0-40N with `sphere_radius: 6371000.0` returned
   `total_area: 22936016715559.137 m^2` — 4.4967% of `4*pi*R^2` — with
@@ -214,6 +262,18 @@ uses Semantic Versioning for public releases.
   pass on their own: 764 passed, 14 skipped against mcp 1.24.0,
   toolregistry-server 0.5.0, uxarray 2026.8.1, holoviews 1.19.0 and
   matplotlib 3.9.0.
+
+### Added
+- `scripts/measure_payload.py` says where a reply's bytes go, which
+  `tests/test_payload_budget.py` can only pass or fail on. It shares the
+  budget test's fixtures so a figure printed here and a budget asserted there
+  describe the same payload, and reports per-key and per-category
+  breakdowns plus the tool catalog. Pooled over five replies: 8199 bytes,
+  28.9% answer, 26.2% provenance, 24.8% checks, 12.6% advice, 6.1% status.
+  Token counts are printed only when `tiktoken` is installed, and the
+  encoding is named; they are never estimated from a bytes-per-token
+  constant, which moves with how much of a payload is JSON punctuation and
+  would be wrong for every caller who does not share the guess.
 
 ## 0.3.1 — 2026-09-05
 ### Fixed

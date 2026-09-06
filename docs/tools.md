@@ -372,6 +372,41 @@ The default also reads from the `UXARRAY_MCP_VERDICT_POLICY` environment
 variable, and an unrecognized value is rejected before the computation runs
 rather than after it has already cost something.
 
+## Export fidelity
+
+`export` used to be the one operation that reported `status: "complete"`
+with nothing behind it — no `stat`, no read-back, no comparison against the
+source. It now returns an **`export_fidelity`** block measured on the file
+that was written: `bytes_written`, `rows_written` and `rows_expected`,
+`n_variables_written`, `variables_dropped`, `attributes_dropped`,
+`missing_values` with `missing_written_as`, and `dangling_grid_mapping`.
+`summary.rows_written` is counted out of the file too; it used to be
+`len(frame)`, the number of rows the writer intended.
+
+Measured on a 9-face dataset carrying `sst` (units K, a long_name, a CF
+`grid_mapping: crs`), `salinity` (units psu), a scalar `crs` container and
+global `title`/`Conventions`:
+
+| Export | Before | Now |
+|---|---|---|
+| CSV, whole dataset | 129 bytes, `complete`, no codes | `attributes_dropped: 8`, `missing_values: 1` written as an empty field, `warning` |
+| NetCDF, `sst` only | 8264 bytes, `complete`, no codes | `variables_dropped: ["crs", "salinity"]`, `dangling_grid_mapping: ["crs"]`, `warning` |
+
+The NetCDF case is the one worth reading twice: `sst` keeps its
+`grid_mapping: "crs"` attribute into a file that no longer contains `crs`,
+so a CF reader is told where to find the coordinate reference system and
+finds nothing.
+
+A lossy export is still written and still returns its path — the caller
+asked for CSV and CSV is what a CSV can hold. What changed is that
+`physically_interpretable` goes `false` when a unit or a CRS did not
+survive: numbers in a file that no longer says what they measure are not
+interpretable, and the export is the last point at which anyone can see it.
+The codes are `EXPORT_EMPTY_FILE`, `EXPORT_ROW_COUNT_MISMATCH`,
+`EXPORT_VARIABLES_DROPPED`, `EXPORT_ATTRIBUTES_DROPPED`,
+`EXPORT_MISSING_VALUES_UNMARKED` and `EXPORT_DANGLING_GRID_MAPPING`. A
+whole-dataset NetCDF copy raises none of them.
+
 ## Response contracts (`contract/`)
 
 Two tools under the `contract/` namespace let a caller ask what shape a

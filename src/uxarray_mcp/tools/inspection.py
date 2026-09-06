@@ -135,7 +135,12 @@ def _inspect_variable_local(
           - dtype: Data type string
           - location: "faces", "nodes", "edges", or "other"
           - attrs: Variable attributes dict (units, long_name, etc.)
-          - statistics: {min, max, mean} if numeric, None otherwise
+          - statistics: {min, max, mean} over the entries that are
+            present, if numeric, None otherwise. Gains n_finite and
+            n_total when the variable is partly masked, and reports
+            min/max/mean as null rather than NaN when none of it is
+            present. A land-masked field is the common case, and its
+            mean is the mean of the ocean, not of the field.
         - grid_info: Brief grid summary {n_face, n_node, n_edge}
 
     Example:

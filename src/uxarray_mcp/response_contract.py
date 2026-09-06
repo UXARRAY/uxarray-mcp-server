@@ -238,12 +238,24 @@ _CONTRACTS: dict[str, dict[str, Any]] = {
 }
 
 #: Operations that share another operation's declared shape.
+#:
+#: The ``remote_*`` entries are the same operation run on a worker, and the
+#: contract is about what the caller receives, not where it was computed.
+#: Without them ``_has_contract`` was false for every HPC result, so
+#: ``attach_provenance`` skipped the required ``operation`` field and
+#: ``validate_response`` returned ``verdict: malformed_envelope`` for a reply
+#: whose science was fine. An SDK validating ``structuredContent`` against
+#: the published schema rejects such a reply outright.
 _ALIASES: dict[str, str] = {
     "area": "calculate_area",
     "mesh": "inspect_mesh",
     "zonal_mean": "calculate_zonal_mean",
     "verify": "verification",
     "check": "verification",
+    "remote_calculate_area": "calculate_area",
+    "remote_inspect_mesh": "inspect_mesh",
+    "remote_calculate_zonal_mean": "calculate_zonal_mean",
+    "remote_validate_dataset": "validate_dataset",
 }
 
 

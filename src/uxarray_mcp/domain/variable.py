@@ -1,8 +1,59 @@
-"""Shared variable inspection logic."""
+"""Shared variable inspection logic.
+
+The statistics here are the same kind of claim ``summarize_array`` makes, and
+they had the same defect. Measured on a 162-face global grid with a field
+masked over 145 of its faces, this module returned
+``{"min": 145.0, "max": 161.0, "mean": 153.0}``: the true statistics of the
+seventeen faces that held a value, presented as the statistics of the
+variable, with nothing saying nine tenths of it was absent. Land masks are
+ordinary in this data, so that was most fields. An all-NaN field was worse --
+``{"min": nan, "max": nan, "mean": nan}``, three ``RuntimeWarning``s on
+stderr, and ``nan`` is not a JSON number.
+
+``n_finite``/``n_total`` follow ``summarize_array``'s contract exactly: they
+appear only when they differ, because a count that always equals the size
+costs payload on every call and tells the caller nothing ``shape`` does not
+already say.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Optional
+
+
+def _numeric_statistics(values: Any) -> dict[str, Any]:
+    """Statistics over the entries that are there, saying when some were not.
+
+    Masked entries are dropped with a boolean index rather than by calling
+    ``np.nanmin`` and friends. Those emit ``RuntimeWarning: All-NaN slice
+    encountered`` on a fully masked field and then return ``NaN`` anyway, so
+    the caller got a warning on stderr they never see and a number that is
+    not JSON.
+
+    Integers and booleans carry no missing value to skip, so they take the
+    plain reductions and never grow the two extra keys.
+    """
+    import numpy as np
+
+    if not np.issubdtype(values.dtype, np.inexact):
+        return {
+            "min": float(values.min()),
+            "max": float(values.max()),
+            "mean": float(values.mean()),
+        }
+
+    finite = np.isfinite(values)
+    n_finite = int(finite.sum())
+    usable = values[finite]
+    stats: dict[str, Any] = {
+        "min": float(usable.min()) if n_finite else None,
+        "max": float(usable.max()) if n_finite else None,
+        "mean": float(usable.mean()) if n_finite else None,
+    }
+    if n_finite != values.size:
+        stats["n_finite"] = n_finite
+        stats["n_total"] = int(values.size)
+    return stats
 
 
 def compute_variable_info(uxds: Any, variable_name: Optional[str] = None) -> dict:
@@ -18,7 +69,14 @@ def compute_variable_info(uxds: Any, variable_name: Optional[str] = None) -> dic
     Returns
     -------
     dict
-        Keys: variables (list of metadata dicts), grid_info
+        Keys: variables (list of metadata dicts), grid_info.
+
+        Each variable's ``statistics`` is ``{min, max, mean}`` over the
+        entries that are actually present, plus ``n_finite`` and ``n_total``
+        when those differ. ``min``/``max``/``mean`` are ``None`` when nothing
+        is finite -- an honest absence rather than a ``NaN`` that no strict
+        JSON decoder will accept. ``statistics`` itself is ``None`` for a
+        variable that has no numeric statistics at all.
     """
     import numpy as np
 
@@ -55,12 +113,7 @@ def compute_variable_info(uxds: Any, variable_name: Optional[str] = None) -> dic
 
         try:
             if np.issubdtype(var.dtype, np.number):
-                values = var.values
-                var_info["statistics"] = {
-                    "min": float(np.nanmin(values)),
-                    "max": float(np.nanmax(values)),
-                    "mean": float(np.nanmean(values)),
-                }
+                var_info["statistics"] = _numeric_statistics(np.asarray(var.values))
             else:
                 var_info["statistics"] = None
         except Exception:

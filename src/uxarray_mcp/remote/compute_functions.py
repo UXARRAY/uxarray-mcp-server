@@ -164,7 +164,8 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
     Returns
     -------
     dict
-        Mesh topology including n_face, n_node, n_edge, source
+        Mesh topology including n_face, n_node, n_edge, source, and the
+        same ``mesh_coverage`` block the local path attaches.
 
     Notes
     -----
@@ -174,6 +175,103 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
     import os
 
     import uxarray as ux
+
+    # The same measurement domain/mesh_coverage.py makes, nested here rather
+    # than imported: AllCodeStrategies ships this function's code and nothing
+    # else, so the worker has no uxarray_mcp to import from. Nested, not
+    # module-level, for the same reason. tests/test_remote_mesh_coverage.py
+    # asserts the two implementations agree on the same grid, which is the
+    # only thing standing between them and drift.
+    def _mesh_coverage(_grid, _steradians=None):
+        import math as _math
+
+        import numpy as _np
+
+        _MAX_FACES = 250_000
+        _DP = 6
+        _cov: dict = {
+            "sphere_fraction": None,
+            "closed": None,
+            "euler_characteristic": None,
+            "lon_extent": None,
+            "lat_extent": None,
+        }
+        if _steradians is None:
+            try:
+                _steradians = float(_np.asarray(_grid.face_areas).sum())
+            except Exception:
+                _steradians = None
+        if _steradians is not None and _math.isfinite(_steradians):
+            _cov["sphere_fraction"] = round(float(_steradians) / (4.0 * _math.pi), _DP)
+        try:
+            _lon = _np.asarray(_grid.node_lon, dtype=float)
+            _lat = _np.asarray(_grid.node_lat, dtype=float)
+            if _lon.size and _lat.size:
+                _cov["lon_extent"] = [
+                    round(float(_lon.min()), _DP),
+                    round(float(_lon.max()), _DP),
+                ]
+                _cov["lat_extent"] = [
+                    round(float(_lat.min()), _DP),
+                    round(float(_lat.max()), _DP),
+                ]
+        except Exception:
+            pass
+        try:
+            _n_face = int(_grid.n_face)
+        except Exception:
+            return _cov
+        # Kept identical to the local limit, and it matters more here: the
+        # meshes that justify an HPC endpoint are the ones above it.
+        if _n_face > _MAX_FACES:
+            _cov["topology_skipped"] = (
+                f"{_n_face} faces exceeds the {_MAX_FACES}-face limit for "
+                "counting edge incidences; closure was not checked."
+            )
+            return _cov
+        try:
+            _cov["euler_characteristic"] = (
+                int(_grid.n_node) - int(_grid.n_edge) + _n_face
+            )
+        except Exception:
+            pass
+        try:
+            _conn = _np.asarray(_grid.face_node_connectivity)
+            _clon = _np.asarray(_grid.node_lon, dtype=float) % 360.0
+            _clat = _np.asarray(_grid.node_lat, dtype=float)
+        except Exception:
+            return _cov
+        _seen: dict = {}
+        _ids = []
+        for _x, _y in zip(_clon, _clat):
+            if abs(abs(_y) - 90.0) < 1e-9:
+                _key = f"pole{_y:+.1f}"
+            else:
+                _key = f"{round(_x, _DP) % 360:.6f}_{round(_y, _DP):.6f}"
+            _ids.append(_seen.setdefault(_key, len(_seen)))
+        _n_node = len(_ids)
+        _incidence: dict = {}
+        for _face in _conn:
+            _nodes: list = []
+            for _raw in _face:
+                _index = int(_raw)
+                if not 0 <= _index < _n_node:
+                    continue
+                _node = _ids[_index]
+                if not _nodes or _nodes[-1] != _node:
+                    _nodes.append(_node)
+            if len(_nodes) > 1 and _nodes[0] == _nodes[-1]:
+                _nodes.pop()
+            if len(_nodes) < 3:
+                continue
+            for _index, _node in enumerate(_nodes):
+                _other = _nodes[(_index + 1) % len(_nodes)]
+                _edge = (min(_node, _other), max(_node, _other))
+                _incidence[_edge] = _incidence.get(_edge, 0) + 1
+        _cov["closed"] = bool(_incidence) and all(
+            _count == 2 for _count in _incidence.values()
+        )
+        return _cov
 
     if file_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(file_path.split(":")[1]))
@@ -187,6 +285,7 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
         "n_node": int(grid.n_node),
         "n_edge": int(grid.n_edge),
         "source": file_path,
+        "mesh_coverage": _mesh_coverage(grid),
         "_worker_runtime": {
             "hostname": __import__("socket").gethostname(),
             "python_version": __import__("platform").python_version(),
@@ -287,7 +386,9 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
     Returns
     -------
     dict
-        Area statistics including total_area, mean_area, min_area, max_area
+        Area statistics including total_area, mean_area, min_area,
+        max_area, and the ``mesh_coverage`` block that says what fraction
+        of the sphere the total was summed over.
 
     Notes
     -----
@@ -298,6 +399,99 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
 
     import numpy as np
     import uxarray as ux
+
+    # Nested copy of domain/mesh_coverage.py -- see remote_inspect_mesh for
+    # why it cannot be imported or shared. Without it a remote total is the
+    # bare number the local path stopped shipping in #33: nothing in the
+    # payload says whether it was summed over the planet or over a patch.
+    def _mesh_coverage(_grid, _steradians=None):
+        import math as _math
+
+        import numpy as _np
+
+        _MAX_FACES = 250_000
+        _DP = 6
+        _cov: dict = {
+            "sphere_fraction": None,
+            "closed": None,
+            "euler_characteristic": None,
+            "lon_extent": None,
+            "lat_extent": None,
+        }
+        if _steradians is None:
+            try:
+                _steradians = float(_np.asarray(_grid.face_areas).sum())
+            except Exception:
+                _steradians = None
+        if _steradians is not None and _math.isfinite(_steradians):
+            _cov["sphere_fraction"] = round(float(_steradians) / (4.0 * _math.pi), _DP)
+        try:
+            _lon = _np.asarray(_grid.node_lon, dtype=float)
+            _lat = _np.asarray(_grid.node_lat, dtype=float)
+            if _lon.size and _lat.size:
+                _cov["lon_extent"] = [
+                    round(float(_lon.min()), _DP),
+                    round(float(_lon.max()), _DP),
+                ]
+                _cov["lat_extent"] = [
+                    round(float(_lat.min()), _DP),
+                    round(float(_lat.max()), _DP),
+                ]
+        except Exception:
+            pass
+        try:
+            _n_face = int(_grid.n_face)
+        except Exception:
+            return _cov
+        if _n_face > _MAX_FACES:
+            _cov["topology_skipped"] = (
+                f"{_n_face} faces exceeds the {_MAX_FACES}-face limit for "
+                "counting edge incidences; closure was not checked."
+            )
+            return _cov
+        try:
+            _cov["euler_characteristic"] = (
+                int(_grid.n_node) - int(_grid.n_edge) + _n_face
+            )
+        except Exception:
+            pass
+        try:
+            _conn = _np.asarray(_grid.face_node_connectivity)
+            _clon = _np.asarray(_grid.node_lon, dtype=float) % 360.0
+            _clat = _np.asarray(_grid.node_lat, dtype=float)
+        except Exception:
+            return _cov
+        _seen: dict = {}
+        _ids = []
+        for _x, _y in zip(_clon, _clat):
+            if abs(abs(_y) - 90.0) < 1e-9:
+                _key = f"pole{_y:+.1f}"
+            else:
+                _key = f"{round(_x, _DP) % 360:.6f}_{round(_y, _DP):.6f}"
+            _ids.append(_seen.setdefault(_key, len(_seen)))
+        _n_node = len(_ids)
+        _incidence: dict = {}
+        for _face in _conn:
+            _nodes: list = []
+            for _raw in _face:
+                _index = int(_raw)
+                if not 0 <= _index < _n_node:
+                    continue
+                _node = _ids[_index]
+                if not _nodes or _nodes[-1] != _node:
+                    _nodes.append(_node)
+            if len(_nodes) > 1 and _nodes[0] == _nodes[-1]:
+                _nodes.pop()
+            if len(_nodes) < 3:
+                continue
+            for _index, _node in enumerate(_nodes):
+                _other = _nodes[(_index + 1) % len(_nodes)]
+                _edge = (min(_node, _other), max(_node, _other))
+                _incidence[_edge] = _incidence.get(_edge, 0) + 1
+        _cov["closed"] = bool(_incidence) and all(
+            _count == 2 for _count in _incidence.values()
+        )
+        return _cov
 
     if file_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(file_path.split(":")[1]))
@@ -314,14 +508,18 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
     area_attrs = getattr(areas, "attrs", {}) or {}
     units = area_attrs.get("units")
     values = areas.values if hasattr(areas, "values") else np.asarray(areas)
+    steradians = float(np.sum(values))
 
     return {
-        "total_area": float(np.sum(values)),
+        "total_area": steradians,
         "mean_area": float(np.mean(values)),
         "min_area": float(np.min(values)),
         "max_area": float(np.max(values)),
         "area_units": units,
         "n_face": int(grid.n_face),
+        # Measured on the unit sphere, before any radius the caller applies
+        # locally -- the same place compute_area_stats attaches it.
+        "mesh_coverage": _mesh_coverage(grid, steradians),
         "_worker_runtime": {
             "hostname": __import__("socket").gethostname(),
             "python_version": __import__("platform").python_version(),
