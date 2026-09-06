@@ -5,6 +5,19 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- Array summaries no longer report NaN for every statistic as soon as one
+  value is missing. `summarize_array` called plain `min`/`max`/`mean`, which
+  propagate NaN, so a field masked over half its faces returned `min`, `max`
+  and `mean` all NaN while three faces held finite values — and land masks are
+  ordinary in this data, so that was most fields. The statistics now skip
+  non-finite entries, report `None` rather than NaN when nothing is finite, and
+  add `n_finite`/`n_total` only when the two differ, so a complete field costs
+  no extra bytes. An infinity counts as missing rather than as an extreme,
+  since a maximum of `inf` is not a measurement.
+- The same payloads were not valid JSON. `json.dumps` writes NaN as the bare
+  token `NaN`, which no JSON parser is required to accept, so a strict client
+  rejected the whole result rather than the one number: measured with
+  `json.loads(..., parse_constant=...)`, which raised on `{"min": NaN}`.
 - `temporal_mean` and `anomaly` now say how much time they averaged over.
   Measured on a 6-element, 12-step file: a variable missing at every step
   returned `outcome: complete`, `status: complete`, no warning codes and a

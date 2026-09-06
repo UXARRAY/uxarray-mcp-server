@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import xarray as xr
 
 _WRITE_LOCK = threading.RLock()
@@ -124,15 +125,49 @@ def summarize_grid(grid: Any) -> dict[str, Any]:
 
 
 def summarize_array(data: xr.DataArray) -> dict[str, Any]:
-    values = data.values
+    """Shape, dtype and statistics over the values that are actually there.
+
+    The statistics skip non-finite entries, and say so when they had to. The
+    plain reductions this used to call propagate NaN, so a single missing
+    value made ``min``, ``max`` and ``mean`` all NaN -- measured on a temporal
+    mean whose field was masked over half its faces, where three faces held
+    finite means and the summary reported none of them. Land masks are
+    ordinary in this data, so that was most fields.
+
+    ``NaN`` was also going out on the wire. ``json.dumps`` writes it as the
+    bare token ``NaN``, which is not JSON, and a client parsing strictly
+    rejects the payload rather than the number. Nothing finite reports
+    ``None`` instead.
+
+    ``n_finite``/``n_total`` appear only when they differ. A count that is
+    always equal to the size costs payload on every call and tells the caller
+    nothing they could not read off ``shape``.
+    """
+    values = np.asarray(data.values)
     summary: dict[str, Any] = {
         "dims": list(data.dims),
         "shape": list(data.shape),
         "dtype": str(data.dtype),
         "name": str(data.name) if data.name is not None else None,
     }
-    if values.size > 0:
-        with suppress(Exception):
+    if values.size == 0:
+        return summary
+
+    with suppress(Exception):
+        if np.issubdtype(values.dtype, np.inexact):
+            finite = np.isfinite(values)
+            n_finite = int(finite.sum())
+            if n_finite != values.size:
+                summary["n_finite"] = n_finite
+                summary["n_total"] = int(values.size)
+            usable = values[finite]
+            summary["min"] = float(usable.min()) if n_finite else None
+            summary["max"] = float(usable.max()) if n_finite else None
+            summary["mean"] = float(usable.mean()) if n_finite else None
+        else:
+            # Integers and booleans carry no missing value to skip, and
+            # datetimes raise on float() -- which the suppression handles the
+            # same way it did before.
             summary["min"] = float(values.min())
             summary["max"] = float(values.max())
             summary["mean"] = float(values.mean())
