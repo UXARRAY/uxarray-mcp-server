@@ -9,6 +9,7 @@ import numpy as np
 
 from uxarray_mcp.domain import (
     compute_area_stats,
+    compute_mesh_coverage,
     compute_variable_info,
     compute_zonal_anomaly_stats,
     compute_zonal_mean_stats,
@@ -39,6 +40,10 @@ def _inspect_mesh_local(file_path: str) -> Dict[str, Any]:
         - n_edge: Number of edges (boundaries between nodes)
         - n_max_face_nodes: Maximum number of nodes per face
         - file_size_mb: Size of the file in megabytes
+        - mesh_coverage: How much of the sphere the mesh spans and what
+          shape it is -- sphere_fraction, closed, euler_characteristic,
+          lon_extent, lat_extent. Counts alone do not distinguish a
+          global mesh from a regional patch.
 
     Example:
         >>> inspect_mesh("/path/to/mesh.nc")
@@ -62,6 +67,7 @@ def _inspect_mesh_local(file_path: str) -> Dict[str, Any]:
                     "n_edge": int(grid.n_edge),
                     "n_max_face_nodes": int(grid.n_max_face_nodes),
                     "file_size_mb": 0.0,
+                    "mesh_coverage": compute_mesh_coverage(grid),
                 },
                 tool="inspect_mesh",
                 inputs={"file_path": file_path},
@@ -92,6 +98,7 @@ def _inspect_mesh_local(file_path: str) -> Dict[str, Any]:
             "n_edge": int(grid.n_edge),
             "n_max_face_nodes": int(grid.n_max_face_nodes),
             "file_size_mb": round(file_size_mb, 2),
+            "mesh_coverage": compute_mesh_coverage(grid),
             "recommended_next_steps": [
                 call("calculate_area", "grid_path"),
                 call("plot_mesh", "grid_path"),
