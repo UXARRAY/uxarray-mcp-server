@@ -17,6 +17,8 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
+from uxarray_mcp.json_safe import json_safe
+
 _WRITE_LOCK = threading.RLock()
 
 
@@ -36,27 +38,17 @@ def _ensure_dir(path: Path) -> Path:
     return path
 
 
-def _json_safe(value: Any) -> Any:
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe(v) for v in value]
-    with suppress(Exception):
-        import numpy as np
-
-        if isinstance(value, np.generic):
-            return value.item()
-        if isinstance(value, np.ndarray):
-            return value.tolist()
-    return value
+# Kept as a module-local name because it is used throughout this file, but
+# there is only one implementation: the same pass that runs on the wire also
+# runs on what we persist, so a stored result and a returned one cannot
+# disagree about how a NaN is written.
+_json_safe = json_safe
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    serialized = json.dumps(_json_safe(payload), indent=2, sort_keys=True)
+    serialized = json.dumps(
+        _json_safe(payload), indent=2, sort_keys=True, allow_nan=False
+    )
     with _WRITE_LOCK:
         _atomic_write(path, lambda temporary: temporary.write_text(serialized))
 

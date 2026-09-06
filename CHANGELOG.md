@@ -5,6 +5,20 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- Non-finite floats no longer reach the wire. JSON has no `NaN` or
+  `Infinity`; `json.dumps` writes them as bare tokens unless told otherwise,
+  and `structuredContent` never passed through `json.dumps` at all — the live
+  dict went to pydantic. Measured: a zonal mean over a half-masked field
+  returned 19 latitude bands, every one `NaN`, and
+  `json.dumps(result, allow_nan=False)` raised `Out of range float values are
+  not JSON compliant: nan`, so a strict decoder in any other language lost the
+  whole response rather than those bands. Results are now sanitized at
+  registration, the one point every tool passes through, and an undefined
+  value is written as `null` — still reported, still the same length as
+  `latitudes`, no longer poisoning everything around it. Called in-process,
+  `run_analysis` still returns `NaN`, which is the honest value for a Python
+  caller; the conversion belongs at the JSON boundary and a test pins it there.
+
 - `calculate_area` returned steradians for every grid, including grids that
   declare an Earth radius. `Grid.sphere_radius` is a property reading
   `_ds.attrs.get("sphere_radius", 1.0)` and nothing in UXarray's area path

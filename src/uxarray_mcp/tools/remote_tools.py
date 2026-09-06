@@ -17,6 +17,7 @@ from uxarray_mcp.content_blocks import (
     text_block,
 )
 from uxarray_mcp.domain.mesh import is_healpix_spec
+from uxarray_mcp.json_safe import json_text
 from uxarray_mcp.state import OperationTracker
 
 
@@ -183,7 +184,7 @@ def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
     biggest meshes.
     """
     metadata = {key: value for key, value in result.items() if key != "png_b64"}
-    text = text_block(json.dumps(metadata, indent=2))
+    text = text_block(json_text(metadata))
 
     b64 = result.get("png_b64")
     if b64 is not None:
@@ -571,8 +572,6 @@ def plot_mesh(
     resolved_grid, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
 
     def _local() -> Dict[str, Any]:
-        import json
-
         items = _plot_mesh_local(resolved_grid, width=width, height=height)
         # _plot_mesh_local returns [image|resource_link, text] blocks; unpack
         # the bytes-or-URI and the metadata back out of them.
@@ -674,8 +673,6 @@ def plot_variable(
     )
 
     def _local() -> Dict[str, Any]:
-        import json
-
         items = _plot_variable_local(
             resolved_grid,
             resolved_data,
@@ -801,8 +798,6 @@ def plot_zonal_mean(
     )
 
     def _local() -> Dict[str, Any]:
-        import json
-
         items = _plot_zonal_mean_local(
             resolved_grid,
             resolved_data,

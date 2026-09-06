@@ -1,7 +1,6 @@
 """MCP plotting tools for UXarray mesh visualization."""
 
 import base64
-import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -15,6 +14,7 @@ from uxarray_mcp.domain.plotting import (
     render_zonal_mean,
 )
 from uxarray_mcp.domain.zonal import compute_zonal_mean_stats
+from uxarray_mcp.json_safe import json_text
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.typed_results import spill_png
 
@@ -151,7 +151,7 @@ def _plot_mesh_local(
 
     return [
         img_block,
-        text_block(json.dumps(provenance, indent=2)),
+        text_block(json_text(provenance)),
     ]
 
 
@@ -364,7 +364,7 @@ def plot_mesh_geo(
     )
     return [
         img_block,
-        text_block(note + "\n\n" + json.dumps(provenance, indent=2)),
+        text_block(note + "\n\n" + json_text(provenance)),
     ]
 
 
@@ -745,7 +745,7 @@ def _plot_variable_local(
 
     return [
         img_block,
-        text_block(json.dumps(provenance, indent=2)),
+        text_block(json_text(provenance)),
     ]
 
 
@@ -919,5 +919,5 @@ def _plot_zonal_mean_local(
 
     return [
         img_block,
-        text_block(json.dumps(provenance, indent=2)),
+        text_block(json_text(provenance)),
     ]

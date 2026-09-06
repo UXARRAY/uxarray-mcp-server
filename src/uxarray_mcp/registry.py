@@ -21,13 +21,15 @@ Nothing in ``uxarray_mcp.tools``, ``uxarray_mcp.domain``, or
 
 from __future__ import annotations
 
+import functools
 import inspect
-from typing import TYPE_CHECKING, Iterable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Literal
 
 from toolregistry import ToolRegistry
 from toolregistry.tool import ToolTag
 
 import uxarray_mcp.tools as _tools_mod
+from uxarray_mcp.json_safe import json_safe
 
 if TYPE_CHECKING:
     pass
@@ -530,15 +532,75 @@ def _default_tags_for(
     return predefined, custom
 
 
+_WIRE_SAFE_FLAG = "_uxarray_mcp_wire_safe"
+
+
+def _wire_safe(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Wrap ``func`` so its result is JSON-representable before it leaves.
+
+    Registration is the one place every tool passes through, which is why
+    the sanitizer attaches here rather than at the ~81 sites that call
+    ``attach_provenance`` -- those cover most tools, but "most" is the
+    wrong guarantee for a serialization boundary. A NaN that escapes is
+    not a wrong number in one field; it is a response the client's JSON
+    decoder rejects whole.
+    """
+    if getattr(func, _WIRE_SAFE_FLAG, False):
+        return func
+
+    if inspect.iscoroutinefunction(func):
+        # No async tools exist today. If one is added it must be wrapped
+        # too, rather than quietly bypassing the boundary.
+        @functools.wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return json_safe(await func(*args, **kwargs))
+
+    else:
+
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return json_safe(func(*args, **kwargs))
+
+    setattr(wrapper, _WIRE_SAFE_FLAG, True)
+    return wrapper
+
+
+def _make_results_wire_safe(tool: Any) -> None:
+    """Sanitize a registered tool's results without touching its schema.
+
+    The wrapper is swapped in *after* registration, on the callable
+    ``Tool.from_function`` already built, rather than passed to
+    ``register()``. Passing it in looked equivalent and was not:
+    parameter schemas are generated with ``get_type_hints``, which
+    resolves annotations against the function's own ``__globals__``, and
+    ``functools.wraps`` cannot carry those over. Registering the wrapper
+    directly resolved every annotation in *this* module's namespace
+    instead, where ``Optional`` and the rest are not defined -- measured
+    as 28 parameters across the deferred-full surface silently falling
+    back to an unconstrained schema. By this point the schema is built,
+    so replacing the underlying function is invisible to it.
+    """
+    callable_ = getattr(tool, "callable", None)
+    if callable_ is None:
+        return
+    inner = getattr(callable_, "fn", None)
+    if inner is None:
+        return
+    callable_.fn = _wire_safe(inner)
+
+
 def _apply_tags(
     registry: ToolRegistry,
     registered_name: str,
     raw_name: str,
     func: object,
 ) -> None:
-    """Apply policy tags to a freshly registered tool."""
+    """Apply policy tags and the JSON boundary to a freshly registered tool."""
     tool = registry.get_tool(registered_name)
-    if tool is None or tool.metadata is None:
+    if tool is None:
+        return
+    _make_results_wire_safe(tool)
+    if tool.metadata is None:
         return
     if raw_name in _TAG_OVERRIDES:
         predefined, custom = _TAG_OVERRIDES[raw_name]
@@ -699,6 +761,16 @@ def build_registry(
             )
             registered.add(raw)
         registry.enable_tool_discovery()
+
+    # ``enable_tool_discovery`` registers ``discover_tools`` itself, so it
+    # never passes through the loops above. Sweep the whole surface rather
+    # than name that one tool: anything the library registers on its own
+    # belongs behind the same boundary, and ``_make_results_wire_safe`` is
+    # idempotent, so re-running it over already-wrapped tools costs nothing.
+    for name in registry.list_tools():
+        tool = registry.get_tool(name)
+        if tool is not None:
+            _make_results_wire_safe(tool)
 
     _verify_coverage(registered, profile)
     return registry
