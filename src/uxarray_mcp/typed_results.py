@@ -24,7 +24,10 @@ Two things matter about how this is done here:
 
 The complementary half is ``resource_link``: results that carry a large
 opaque payload (a rendered PNG, a full zonal profile) can hand back a
-URI instead of inlining bytes into the conversation.
+URI instead of inlining bytes into the conversation.  Those URIs are
+served by :mod:`uxarray_mcp.resources`, which answers ``resources/list``
+and ``resources/read`` for them -- a link is only worth handing out if
+the client can follow it.
 """
 
 from __future__ import annotations
