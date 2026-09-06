@@ -444,6 +444,60 @@ def evaluate_profile_preconditions(
     ]
 
 
+def evaluate_anomaly_preconditions(
+    operation: str,
+    coverage: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Declare that an anomaly field must carry at least one anomaly.
+
+    ``zonal_anomaly`` returns one entry per face whether or not any band mean
+    was defined, so an entirely NaN field is shaped exactly like an answer --
+    the same state ``profile_coverage_nonzero`` refuses over, arriving through
+    a per-face field instead of through bins.
+
+    The repair depends on which of the two ways it emptied. When no face had
+    data to begin with, telling the caller to move the bands would send them
+    after the wrong thing.
+
+    Faces that had data and lost their anomaly stay a warning. A band that
+    holds a little missing data legitimately loses that band, and refusing
+    there would make ordinary masked fields unusable.
+    """
+    with_anomaly = coverage.get("n_face_with_anomaly", 0)
+    n_face = coverage.get("n_face", 0)
+    with_data = coverage.get("n_face_with_data")
+    if with_data == 0:
+        repair = (
+            "The variable carries no usable values on this mesh, so there is "
+            "nothing to take an anomaly of. Check the variable name and the "
+            "time/level slice, or pick a variable that is not entirely masked."
+        )
+    else:
+        # Reaching here means faces carried data and still got nothing back,
+        # so the bands are not the thing to move: a band mean is undefined as
+        # soon as one face in the band is missing, and on a 90-face mesh a
+        # single gap per band emptied all 90 faces. Naming lat_spec first
+        # would send the caller after a change that cannot help.
+        repair = (
+            "Every latitude band contains at least one missing value, and a "
+            "band mean is undefined if any face in the band is missing, so no "
+            "face gets an anomaly. Drop or fill the missing faces before "
+            "taking the anomaly. Bands chosen with lat_spec to avoid them "
+            "work too, but only if some band ends up entirely free of gaps."
+        )
+    detail = f"{operation}: {with_anomaly} of {n_face} faces received an anomaly."
+    if with_data:
+        detail += f" {with_data} faces carried data."
+    return [
+        _check(
+            "anomaly_coverage_nonzero",
+            with_anomaly > 0,
+            detail,
+            repair,
+        )
+    ]
+
+
 def _request_state(operation: str, failed: list[dict[str, Any]]) -> str:
     """An opaque token identifying exactly this refusal.
 
