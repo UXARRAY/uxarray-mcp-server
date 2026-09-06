@@ -5,6 +5,26 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- `temporal_mean` and `anomaly` now say how much time they averaged over.
+  Measured on a 6-element, 12-step file: a variable missing at every step
+  returned `outcome: complete`, `status: complete`, no warning codes and a
+  full-length field of NaN; a one-step file returned a "temporal mean" that was
+  the value and a "temporal anomaly" of exactly `0.0` at every element, which
+  is what that operation returns for any data whatsoever; and a file holding 1,
+  2 and 12 usable steps at different elements returned a single finite
+  min/max/mean mixing all three. Results now carry a `temporal_coverage` block
+  with `n_time`, `samples_min`/`samples_max`, `n_elements_with_value`,
+  `n_series_with_data` and, under `groupby`, `n_bins` with
+  `bin_occupancy_min`/`bin_occupancy_max`.
+- An empty mean fails `temporal_coverage_nonzero` and returns the refusal
+  payload with no number; a single-step baseline fails
+  `anomaly_baseline_multisample` on `anomaly` alone. A single-step
+  `temporal_mean` only warns, because the value it returns was measured and
+  only the word "mean" is wrong. `TEMPORAL_SAMPLES_RAGGED` fires on elements
+  averaged over different numbers of steps, excluding elements that never held
+  data so a land-masked field stays quiet, and `TEMPORAL_BINS_SINGLE_SAMPLE`
+  fires when a `groupby` bin holds one step — a monthly climatology built from
+  three months is three single observations.
 - `subset_bbox`, `subset_polygon` and `cross_section` now refuse a selection
   that kept no faces. A bounding box at 160-170W / 70-80S applied to a mesh
   covering 0-40E / 0-40N returned `outcome: complete`, `status: complete`, no

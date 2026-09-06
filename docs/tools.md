@@ -238,6 +238,29 @@ way to arrive here. `cross_section` is the one case UXarray already caught: it
 raises rather than returning empty, and that error is turned into the same
 refusal so the extent reaches the caller. Any other error still propagates.
 
+`temporal_mean` and `anomaly` both reduce along `time`, and both return a
+full-length array whatever went in. Both report a **`temporal_coverage`** block
+giving `n_time`, the `samples_min`/`samples_max` range of usable steps per
+element, `n_elements_with_value`, `n_series_with_data`, and — when `groupby` is
+set — `n_bins` with `bin_occupancy_min`/`bin_occupancy_max`.
+
+A mean over a variable that is missing at every step **refuses**: it returns a
+field of NaN shaped exactly like a climatology. A mean over a single step
+**warns** with `TEMPORAL_SINGLE_SAMPLE` rather than refusing, because the value
+it returns is real — only the name "mean" is wrong. `TEMPORAL_SAMPLES_RAGGED`
+says elements averaged different numbers of steps, since `mean(dim="time")`
+skips missing values and a face with one usable step comes back looking like a
+face with twelve. Elements that never held data are excluded from that range,
+so an ordinary land-masked field does not warn. `TEMPORAL_BINS_SINGLE_SAMPLE`
+says at least one group holds one time step: `groupby="month"` over three
+months is a monthly climatology in name and three single observations in fact.
+
+`anomaly` additionally **refuses** when the baseline covers one time step. Its
+baseline is the mean over time of the same variable, so with one step the
+baseline equals the value and every anomaly is exactly zero — the same array
+for any data whatsoever, which is the condition this server refuses over rather
+than returning the number.
+
 `ensemble_mean` and `ensemble_spread` combine several files cell-by-cell, and
 nothing in the shapes says the files measure the same thing on the same mesh.
 Both report a **`member_evidence`** block naming the per-member `units`, the
