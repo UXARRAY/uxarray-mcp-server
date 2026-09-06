@@ -5,6 +5,24 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- Spatial selections now say which rule chose the faces. The three operations
+  do not agree: `subset_polygon` selects by face centre, `cross_section` by
+  intersection, and `subset_bbox` keeps a face only when its whole spherical
+  footprint fits inside the box. That last one is much stricter than the name
+  suggests — measured on an 81-face mesh of 5-degree cells, a box of lon 5–15 /
+  lat 5–15 holds six face centres and returns one face, and the surviving face
+  spans latitude 7.5000–12.5115 because the great-circle edge bulges poleward
+  of the nodes it joins. `subset_coverage` now carries `selection_rule`, and for
+  `subset_bbox` also `n_face_centers_in_bounds`, so the gap between what a
+  caller asked for and what the geometry allowed is visible. Dropping boundary
+  faces happens on every bounding-box call, so it is reported and not warned
+  about.
+- A bounding box that lands on the mesh and still selects nothing was told to
+  move onto the mesh, which is where it already was. A box narrower than one
+  face returns nothing while sitting on top of the mesh — measured at lon 6–11 /
+  lat 6–11, one face centre inside and zero faces returned. That case now gets
+  its own repair: widen the box, or use `subset_polygon`, which selects by
+  centre.
 - Array summaries no longer report NaN for every statistic as soon as one
   value is missing. `summarize_array` called plain `min`/`max`/`mean`, which
   propagate NaN, so a field masked over half its faces returned `min`, `max`

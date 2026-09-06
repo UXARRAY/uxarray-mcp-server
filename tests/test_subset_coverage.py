@@ -25,6 +25,7 @@ import xarray as xr
 
 from uxarray_mcp.domain.subset_coverage import (
     compute_subset_coverage,
+    count_face_centers_in_bounds,
     mesh_extent,
     subset_coverage_warning_codes,
 )
@@ -81,6 +82,41 @@ def test_an_extent_is_carried_when_it_was_measured():
     extent = {"lon_min": 0.0, "lon_max": 40.0, "lat_min": 0.0, "lat_max": 40.0}
     coverage = compute_subset_coverage(81, 9, extent=extent)
     assert coverage["source_extent"] == extent
+
+
+def test_the_selection_rule_is_carried_when_it_was_given():
+    coverage = compute_subset_coverage(81, 9, selection_rule="face_bounds_within")
+    assert coverage["selection_rule"] == "face_bounds_within"
+
+
+def test_centres_inside_are_reported_separately_from_faces_kept():
+    coverage = compute_subset_coverage(81, 2, n_face_centers_in_bounds=4)
+    assert coverage["n_face_centers_in_bounds"] == 4
+    assert coverage["n_face_retained"] == 2
+
+
+def test_a_grid_without_coordinates_has_no_centre_count():
+    class Bare:
+        pass
+
+    assert count_face_centers_in_bounds(Bare(), [0.0, 10.0], [0.0, 10.0]) is None
+
+
+def test_malformed_bounds_yield_no_centre_count():
+    class Small:
+        face_lon = np.array([1.0])
+        face_lat = np.array([1.0])
+
+    assert count_face_centers_in_bounds(Small(), [0.0], [0.0, 10.0]) is None
+
+
+def test_centres_are_counted_inclusively_on_the_bound():
+    class Row:
+        face_lon = np.array([2.5, 7.5, 12.5])
+        face_lat = np.array([7.5, 7.5, 7.5])
+
+    assert count_face_centers_in_bounds(Row(), [7.5, 12.5], [0.0, 10.0]) == 2
+    assert count_face_centers_in_bounds(Row(), [20.0, 30.0], [0.0, 10.0]) == 0
 
 
 def test_a_grid_without_coordinates_has_no_extent():
@@ -202,6 +238,94 @@ def test_an_on_mesh_selection_completes_and_reports_what_it_kept(
     # not certify it either way.
     assert result["scientific_status"]["physically_interpretable"] is None
     assert result["scientific_status"]["warning_codes"] == []
+
+
+@pytest.mark.parametrize(
+    ("operation", "kwargs", "rule"),
+    [
+        (
+            "subset_bbox",
+            {"lon_bounds": [5.0, 15.0], "lat_bounds": [5.0, 15.0]},
+            "face_bounds_within",
+        ),
+        (
+            "subset_polygon",
+            {"polygon_lon_lat": [[5.0, 5.0], [25.0, 5.0], [25.0, 25.0]]},
+            "face_center_inside",
+        ),
+        ("cross_section", {"latitude": 20.0}, "face_intersects_line"),
+    ],
+)
+def test_each_operation_names_the_rule_it_selected_by(
+    regional_files, operation, kwargs, rule
+):
+    """The three operations answer different questions about the same face."""
+    grid_file, data_file, _ = regional_files
+    result = _analyze(grid_file, data_file, operation=operation, **kwargs)
+    assert result["subset_coverage"]["selection_rule"] == rule
+
+
+def test_a_bounding_box_keeps_fewer_faces_than_it_has_centres(regional_files):
+    """A box keeps a face only when the whole face fits inside it.
+
+    Measured on the fixture mesh, whose faces are 5 degrees across and centred
+    on multiples of 5: lon 5..15 / lat 5..15 holds six face centres and returns
+    one face. Five of the six extend up to half a cell past the box. The one
+    that fits spans latitude 7.5000..12.5115 -- the 0.0115 is the great-circle
+    edge bulging poleward of its own nodes, which is what drops a face whose
+    nodes sit exactly on the bound.
+    """
+    grid_file, data_file, _ = regional_files
+    result = _analyze(
+        grid_file,
+        data_file,
+        operation="subset_bbox",
+        lon_bounds=[5.0, 15.0],
+        lat_bounds=[5.0, 15.0],
+    )
+    coverage = result["subset_coverage"]
+    assert coverage["n_face_centers_in_bounds"] == 6
+    assert coverage["n_face_retained"] == 1
+    # Dropping boundary faces is what a bounding box does on every call, so it
+    # is reported and not warned about.
+    assert result["scientific_status"]["warning_codes"] == []
+
+
+def test_a_box_narrower_than_one_face_is_told_to_widen_not_to_move(regional_files):
+    """The box is on the mesh, so "move it onto the mesh" would be wrong."""
+    grid_file, data_file, _ = regional_files
+    result = _analyze(
+        grid_file,
+        data_file,
+        operation="subset_bbox",
+        lon_bounds=[6.0, 11.0],
+        lat_bounds=[6.0, 11.0],
+    )
+    assert result["outcome"] == "input_required"
+    failed = result["refusal"]["failed_checks"]
+    assert [check["id"] for check in failed] == ["subset_retains_faces"]
+    assert "1 face centres lie inside the box" in failed[0]["detail"]
+    repair = failed[0]["repair"]
+    assert "Widen lon_bounds/lat_bounds" in repair
+    assert "subset_polygon" in repair
+    # The extent belongs to the other repair; quoting it here would suggest the
+    # box is somewhere it is not.
+    assert "0..360" not in repair
+
+
+def test_a_narrow_box_still_returns_the_faces_on_an_override(regional_files):
+    grid_file, data_file, _ = regional_files
+    result = _analyze(
+        grid_file,
+        data_file,
+        operation="subset_bbox",
+        lon_bounds=[6.0, 11.0],
+        lat_bounds=[6.0, 11.0],
+        acknowledge=OVERRIDE_TOKEN,
+    )
+    assert result["outcome"] == "complete"
+    assert result["subset_coverage"]["n_face_retained"] == 0
+    assert result["preconditions"]["status"] == "overridden"
 
 
 def test_a_cross_section_that_misses_no_longer_raises(regional_files):

@@ -230,13 +230,31 @@ empty box returns a `subset_grid` of `n_face: 0`, a `variable_summary` of
 `shape: [0]`, a persisted handle and a next-steps list suggesting the caller
 plot it, which is the full shape of an answer describing nothing.
 
+The three do not select the same way, so the block also reports which rule ran.
+`subset_polygon` keeps a face when its centre is inside the polygon
+(`selection_rule: face_center_inside`). `cross_section` keeps a face the line
+crosses (`face_intersects_line`). `subset_bbox` keeps a face only when the
+face's whole spherical footprint fits inside the box
+(`face_bounds_within`), which is stricter than the name suggests: on a mesh of
+5-degree cells centred on multiples of 5, a box of lon 5–15 / lat 5–15 holds
+six face centres and returns one face. The block reports
+`n_face_centers_in_bounds` next to `n_face_retained` so that gap is visible.
+The footprint is spherical rather than the rectangle through the nodes — the
+surviving face above spans latitude 7.5000–12.5115, the extra 0.0115 being the
+great-circle edge bulging poleward of the nodes it joins. On a mesh whose nodes
+sit exactly on the requested bound, that bulge alone drops the face. Use
+`subset_polygon` with a rectangle when centre-based selection is what you want.
+
 The repair names the argument the caller controls — `lon_bounds`/`lat_bounds`,
 `polygon_lon_lat`, or `latitude`/`longitude` — and quotes the longitude and
 latitude the mesh actually spans, since "nothing selected" does not say where
 to put the box and the `-180..180` against `0..360` mix-up is the most likely
-way to arrive here. `cross_section` is the one case UXarray already caught: it
-raises rather than returning empty, and that error is turned into the same
-refusal so the extent reaches the caller. Any other error still propagates.
+way to arrive here. A box that lands on the mesh and still keeps nothing gets a
+different repair: a box narrower than one face selects nothing while sitting on
+top of the mesh, so it is told to widen, not to move. `cross_section` is the one
+case UXarray already caught: it raises rather than returning empty, and that
+error is turned into the same refusal so the extent reaches the caller. Any
+other error still propagates.
 
 `temporal_mean` and `anomaly` both reduce along `time`, and both return a
 full-length array whatever went in. Both report a **`temporal_coverage`** block
