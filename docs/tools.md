@@ -313,6 +313,24 @@ face areas of a closed mesh must sum to `4*pi*R^2`, or `4*pi` on a unit
 sphere. The check abstains — status `not_evaluated` — whenever it cannot be
 trusted: an open or regional mesh, a missing total, or an unreadable grid.
 
+`calculate_area` also declares which sphere it measured on. UXarray computes
+face areas on the unit sphere and never applies `sphere_radius`, so a global
+mesh sums to `12.566371` — `4*pi` steradians — even when its file declares
+`sphere_radius: 6371000.0`. The server now scales by `R^2` and reports an
+**`area_basis`** block giving `sphere_radius`, `radius_source` and `scaled`.
+The radius comes from the `sphere_radius` argument, or from the grid when it
+declares one; with neither, the call **refuses** rather than returning a
+steradian labelled as an area, the same way the differential operators
+already refuse when radius scaling was not applied. Passing
+`sphere_radius=6371000.0` to a 648-face global mesh returns
+`510064487992182.1` against a `4*pi*R^2` reference of `510064471909788.25`.
+
+A caller-supplied radius is documented as metres, so the result declares
+`area_units: "m^2"`. A grid-declared radius is not: a file saying
+`sphere_radius: 6371000.0` never said what that number is measured in, so the
+result keeps `area_units: null`, warns `AREA_UNITS_UNDECLARED`, and is not
+marked physically interpretable. Pass the radius explicitly to settle it.
+
 `run_analysis` accepts `verdict_policy` to control how much of the check
 comes back:
 

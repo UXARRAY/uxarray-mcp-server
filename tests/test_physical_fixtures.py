@@ -64,12 +64,12 @@ class TestPhysicalRadius:
     def test_area_postcondition_reports_the_radius_it_saw(
         self, state_dir, earth_radius_mesh_files
     ):
-        """A unit-sphere answer must not pass by a hidden unit-sphere reference.
+        """The grid declares Earth's radius, so the areas are in metres.
 
-        UXarray returns unscaled areas here, so ``4*pi`` is the right
-        reference -- but the check has to say that the declared radius was
-        not applied, otherwise the caller cannot tell which quantity it
-        just verified.
+        UXarray never applies ``sphere_radius`` to ``face_areas``; we do
+        (#30). The check must compare against ``4*pi*R^2`` and name the
+        radius, so a unit-sphere answer cannot pass by being measured
+        against a unit-sphere reference the caller never saw.
         """
         grid_file, _ = earth_radius_mesh_files
         result = run_analysis(operation="calculate_area", grid_path=grid_file)
@@ -77,14 +77,20 @@ class TestPhysicalRadius:
         check = result["postconditions"]["checks"][0]
         assert result["postconditions"]["status"] == "checked"
         assert check["passed"] is True
-        assert check["reference"] == pytest.approx(4 * np.pi)
+        assert check["reference"] == pytest.approx(4 * np.pi * EARTH_RADIUS_M**2)
         assert "6.371e+06" in check["reference_source"]
-        assert "not applied" in check["reference_source"]
+        assert "not applied" not in check["reference_source"]
 
     def test_open_mesh_gets_no_area_verdict(self, state_dir, regional_mesh_files):
         """``4*pi`` is not the reference for a mesh with a boundary."""
         grid_file, _ = regional_mesh_files
-        result = run_analysis(operation="calculate_area", grid_path=grid_file)
+        result = run_analysis(
+            operation="calculate_area",
+            grid_path=grid_file,
+            # This mesh declares no radius, so without one the call refuses
+            # before any postcondition runs (#30).
+            sphere_radius=EARTH_RADIUS_M,
+        )
 
         assert not mesh_is_closed(ux.open_grid(grid_file))
         assert result["postconditions"]["status"] == "not_evaluated"

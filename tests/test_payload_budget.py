@@ -20,6 +20,10 @@ import pytest
 
 from uxarray_mcp.tools.frontdoor import run_analysis
 
+#: Earth's mean radius, so calculate_area measures its completed payload
+#: rather than its refusal.
+EARTH_RADIUS_M = 6371000.0
+
 #: Keys that belong to discovery (``get_capabilities``), not to a result.
 DISCOVERY_ONLY_KEYS = {
     "mcp_server_tools",
@@ -44,7 +48,11 @@ RESULT_BYTE_BUDGETS = {
     # Kept above inspect_mesh for the postcondition block (#84/#90): ~440
     # bytes that took correct verification answers from 11/20 to 20/20 in
     # the study, which is the one payload increase we have evidence for.
-    "calculate_area": 1550,
+    # Raised from 1550 for `area_basis` and its precondition (#30): ~200
+    # bytes. Before it, a global mesh returned `total_area: 12.566371` --
+    # 4*pi steradians -- with `area_units: null` and no warning code, and did
+    # so even on a grid whose file declared `sphere_radius: 6371000.0`.
+    "calculate_area": 1800,
     "inspect_variable": 1700,
     # Raised from 2050 for the bin-coverage block and its precondition (#23),
     # most of it the repair text. Before it, a regional mesh asked for bands
@@ -84,7 +92,7 @@ def analysis_results(state_dir, structured_mesh_files):
     grid_file, data_file = structured_mesh_files
     calls = {
         "inspect_mesh": {},
-        "calculate_area": {},
+        "calculate_area": {"sphere_radius": EARTH_RADIUS_M},
         "inspect_variable": {"variable_name": "temperature", "data_path": data_file},
         "calculate_zonal_mean": {
             "variable_name": "temperature",

@@ -24,11 +24,17 @@ import time
 
 PROTOCOL_VERSION = "2025-06-18"
 
-# The global fixture is a structured 18 x 9 lon/lat mesh on a unit sphere.
-# Its faces tile the whole sphere exactly once, so total area must be 4*pi.
-# That is an analytic ground truth, not a recorded snapshot -- if the area
-# code regresses, this number cannot follow it.
-EXPECTED_TOTAL_AREA = 4.0 * math.pi
+# The global fixture is a structured 18 x 9 lon/lat mesh whose faces tile the
+# whole sphere exactly once, so its total area must be 4*pi*R^2. That is an
+# analytic ground truth, not a recorded snapshot -- if the area code regresses,
+# this number cannot follow it.
+#
+# The radius is passed rather than left to the grid, because a mesh declaring
+# no radius is measured on the unit sphere and the server refuses to call
+# steradians an area (#30). Both halves are checked below: the refusal without
+# a radius, and the number with one.
+EARTH_RADIUS_M = 6371000.0
+EXPECTED_TOTAL_AREA = 4.0 * math.pi * EARTH_RADIUS_M**2
 
 # Tolerance is 1e-4, not machine epsilon, and the gap is physics rather than
 # sloppiness: UXarray integrates each face with a finite-order quadrature, so
@@ -218,6 +224,8 @@ def main(argv: list[str] | None = None) -> int:
 
         # 4 -- real numerics against an analytic ground truth.
         if "run_analysis" in names:
+            # 4a -- the same call without a radius must refuse, and must not
+            # hand back a number beside the warning (#86).
             response = client.call(
                 "tools/call",
                 {
@@ -225,6 +233,25 @@ def main(argv: list[str] | None = None) -> int:
                     "arguments": {
                         "operation": "calculate_area",
                         "grid_path": "/data/uxarray/global_grid.nc",
+                    },
+                },
+                timeout=180.0,
+            )
+            unscaled = _unwrap(response.get("result", {}))
+            if _find(unscaled, "total_area") is not None:
+                failures.append("calculate_area returned an area for no radius")
+                print("[FAIL] run_analysis: unit-sphere areas were returned as areas")
+            else:
+                print("[ OK ] run_analysis(calculate_area) refuses without a radius")
+
+            response = client.call(
+                "tools/call",
+                {
+                    "name": "run_analysis",
+                    "arguments": {
+                        "operation": "calculate_area",
+                        "grid_path": "/data/uxarray/global_grid.nc",
+                        "sphere_radius": EARTH_RADIUS_M,
                     },
                 },
                 timeout=180.0,
@@ -243,14 +270,14 @@ def main(argv: list[str] | None = None) -> int:
                     float(total_area), EXPECTED_TOTAL_AREA, rel_tol=AREA_RTOL
                 ):
                     print(
-                        f"[ OK ] run_analysis(calculate_area) -> {float(total_area):.9f} "
-                        f"== 4*pi ({EXPECTED_TOTAL_AREA:.9f})"
+                        f"[ OK ] run_analysis(calculate_area) -> {float(total_area):.6g} "
+                        f"== 4*pi*R^2 ({EXPECTED_TOTAL_AREA:.6g})"
                     )
                 else:
                     failures.append(
-                        f"total_area {total_area} != 4*pi {EXPECTED_TOTAL_AREA}"
+                        f"total_area {total_area} != 4*pi*R^2 {EXPECTED_TOTAL_AREA}"
                     )
-                    print(f"[FAIL] total_area {total_area} != 4*pi")
+                    print(f"[FAIL] total_area {total_area} != 4*pi*R^2")
         else:
             failures.append("run_analysis missing from the tool surface")
             print("[FAIL] run_analysis not exposed")
