@@ -5,6 +5,18 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- A directory of SCRIP meshes was classified as nothing and advised nothing.
+  `_GRID_HINTS` held `grid`, `mesh`, `topo`, `coord` and `geo` but not
+  `scrip` or `esmf`, and E3SM names half its meshes with the convention
+  rather than the word: scanning the 2026 INCITE CONUS grid directory
+  returned every one of its 24 NetCDF files as `kind: "unknown"` with
+  `recommendations: []`. The recommendation branches covered an empty
+  directory, grids without data and data without grids, so a directory that
+  was entirely meshes fell through all three and got less help than an empty
+  one. `scrip` and `esmf` now classify as `grid`, and any scan that matched
+  files but no hint says how many it found and suggests `inspect_mesh` on one
+  instead of returning silence. Both copies of the scan changed together,
+  guarded by the same AST comparison.
 - A figure rendered on HPC was never written down. The artifact store was
   wired into the local plot helpers only; a worker returns `png_b64` and
   nothing else, so `plot_mesh`, `plot_variable` and `plot_zonal_mean` came
