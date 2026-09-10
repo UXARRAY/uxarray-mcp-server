@@ -112,10 +112,17 @@ class UXarrayComputeAgent(_AcademyAgent):
                     message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
                     category=UserWarning,
                 )
-                self._executor = Executor(
-                    endpoint_id=self.config.endpoint_id,
-                    serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
-                )
+                executor_kwargs: dict[str, Any] = {
+                    "endpoint_id": self.config.endpoint_id,
+                    "serializer": ComputeSerializer(strategy_code=AllCodeStrategies()),
+                }
+                # Only send the key when configured. A multi-user endpoint
+                # rejects a submit without it; a single-user endpoint rejects
+                # one that carries it. Which kind this is comes from config.
+                user_config = getattr(self.config, "user_endpoint_config", None)
+                if user_config is not None:
+                    executor_kwargs["user_endpoint_config"] = user_config
+                self._executor = Executor(**executor_kwargs)
         return self._executor
 
     @action
