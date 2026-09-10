@@ -16,37 +16,63 @@ from uxarray_mcp.domain.plotting import (
 from uxarray_mcp.domain.zonal import compute_zonal_mean_stats
 from uxarray_mcp.json_safe import json_text
 from uxarray_mcp.provenance import attach_provenance
-from uxarray_mcp.typed_results import spill_png
+from uxarray_mcp.typed_results import should_link_rather_than_inline, store_png
 
 
 def _png_content(
-    png_bytes: bytes, *, plot_type: str
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Return the content block for a rendered PNG, plus a note about it.
+    png_bytes: bytes, *, plot_type: str, variable: str | None = None
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    """Return the content block for a rendered PNG, a note, and its artifact.
 
     Small images are inlined as an ``image`` block, which keeps the common
-    interactive case a single round trip. A large one is written to the
-    artifact store and handed back as a ``resource_link`` instead: base64
-    inflates bytes by a third, and a multi-hundred-kilobyte figure costs
-    far more of the caller's context than the picture is worth. The caller
-    fetches it by URI if it actually wants to look.
+    interactive case a single round trip. A large one is handed back as a
+    ``resource_link`` instead: base64 inflates bytes by a third, and a
+    multi-hundred-kilobyte figure costs far more of the caller's context
+    than the picture is worth.
+
+    Either way the figure is written to the artifact store and the
+    returned artifact record names the file, so ``_provenance.artifacts``
+    describes something that exists. It used to list a `type: plot` entry
+    with a byte count and no path, next to a file that had never been
+    written -- the one shape a caller cannot act on and cannot detect.
     """
-    link = spill_png(png_bytes, plot_type=plot_type)
-    if link is None:
+    stored = store_png(png_bytes, plot_type=plot_type)
+
+    artifact: dict[str, Any] = {
+        "type": "plot",
+        "plot_type": plot_type,
+        "format": "png",
+        "size_bytes": len(png_bytes),
+        "stored": bool(stored.get("stored")),
+    }
+    if variable is not None:
+        artifact["variable"] = variable
+    if stored.get("stored"):
+        artifact["path"] = stored["path"]
+        artifact["uri"] = stored["uri"]
+    else:
+        artifact["not_stored_because"] = stored["not_stored_because"]
+
+    if not should_link_rather_than_inline(len(png_bytes)) or not stored.get("stored"):
         b64 = base64.b64encode(png_bytes).decode("utf-8")
-        return image_block(b64), {"image_delivery": "inline"}
+        delivery: dict[str, Any] = {"image_delivery": "inline"}
+        if stored.get("stored"):
+            delivery["image_uri"] = stored["uri"]
+        return image_block(b64), delivery, [artifact]
 
     # The adapter keeps only uri/name/mimeType off a resource_link, so the
     # title, description and byte count ride along in the metadata block
     # instead of being dropped on the floor.
-    return resource_link_block(
-        link["uri"], link["name"], mime_type=link["mime_type"]
-    ), {
-        "image_delivery": "resource_link",
-        "image_uri": link["uri"],
-        "image_size_bytes": link.get("size"),
-        "image_description": link.get("description"),
-    }
+    return (
+        resource_link_block(stored["uri"], stored["name"], mime_type="image/png"),
+        {
+            "image_delivery": "resource_link",
+            "image_uri": stored["uri"],
+            "image_size_bytes": stored.get("size"),
+            "image_description": stored.get("description"),
+        },
+        [artifact],
+    )
 
 
 def _resolve_plot_paths(
@@ -117,7 +143,9 @@ def _plot_mesh_local(
     grid = load_grid(grid_path)
 
     png_bytes = render_mesh(grid, width=width, height=height)
-    img_block, delivery = _png_content(png_bytes, plot_type="mesh_wireframe")
+    img_block, delivery, plot_artifacts = _png_content(
+        png_bytes, plot_type="mesh_wireframe"
+    )
 
     result = {
         "image_size_bytes": len(png_bytes),
@@ -139,14 +167,7 @@ def _plot_mesh_local(
             "session_id": session_id,
             "dataset_handle": dataset_handle,
         },
-        artifacts=[
-            {
-                "type": "plot",
-                "plot_type": "mesh_wireframe",
-                "format": "png",
-                "size_bytes": len(png_bytes),
-            }
-        ],
+        artifacts=plot_artifacts,
     )
 
     return [
@@ -324,7 +345,9 @@ def plot_mesh_geo(
             city_scale=city_scale,
         )
 
-    img_block, delivery = _png_content(png_bytes, plot_type="mesh_geographic")
+    img_block, delivery, plot_artifacts = _png_content(
+        png_bytes, plot_type="mesh_geographic"
+    )
 
     # ── Build human-readable plot note ───────────────────────────────────────
     note = _build_plot_note(
@@ -353,14 +376,7 @@ def plot_mesh_geo(
             "basemap": basemap,
             "cities": cities,
         },
-        artifacts=[
-            {
-                "type": "plot",
-                "plot_type": "mesh_geographic",
-                "format": "png",
-                "size_bytes": len(png_bytes),
-            }
-        ],
+        artifacts=plot_artifacts,
     )
     return [
         img_block,
@@ -697,7 +713,9 @@ def _plot_variable_local(
         time_index=time_index,
         level_index=level_index,
     )
-    img_block, delivery = _png_content(png_bytes, plot_type="variable_polygons")
+    img_block, delivery, plot_artifacts = _png_content(
+        png_bytes, plot_type="variable_polygons", variable=variable_name
+    )
 
     result = {
         "image_size_bytes": len(png_bytes),
@@ -732,15 +750,7 @@ def _plot_variable_local(
             "dataset_handle": dataset_handle,
         },
         selected_variable=variable_name,
-        artifacts=[
-            {
-                "type": "plot",
-                "plot_type": "variable_polygons",
-                "variable": variable_name,
-                "format": "png",
-                "size_bytes": len(png_bytes),
-            }
-        ],
+        artifacts=plot_artifacts,
     )
 
     return [
@@ -875,7 +885,9 @@ def _plot_zonal_mean_local(
         line_color=line_color,
         title=title,
     )
-    img_block, delivery = _png_content(png_bytes, plot_type="zonal_mean_profile")
+    img_block, delivery, plot_artifacts = _png_content(
+        png_bytes, plot_type="zonal_mean_profile", variable=variable_name
+    )
 
     result = {
         "image_size_bytes": len(png_bytes),
@@ -906,15 +918,7 @@ def _plot_zonal_mean_local(
             "level_index": level_index,
         },
         selected_variable=variable_name,
-        artifacts=[
-            {
-                "type": "plot",
-                "plot_type": "zonal_mean_profile",
-                "variable": variable_name,
-                "format": "png",
-                "size_bytes": len(png_bytes),
-            }
-        ],
+        artifacts=plot_artifacts,
     )
 
     return [

@@ -69,6 +69,64 @@ def _normalize_remote_error(exc: Exception, config: Any) -> Exception:
     return exc
 
 
+def _stored_plot_artifacts(result: Any, func_name: str) -> list[dict[str, Any]] | None:
+    """Write a worker's PNG to the local store and describe it.
+
+    A remote plot returns its figure as ``png_b64`` in the payload and
+    nothing else: no path, because the file it might have written lives on
+    a compute node the caller cannot reach. The bytes are here now, so the
+    submitter is the only place the figure can be kept, and keeping it is
+    what lets a remote plot report the same artifact a local one does
+    instead of an empty list.
+
+    Returns ``None`` for every non-plot result, which is what
+    ``attach_provenance`` already means by "no artifacts declared".
+    """
+    if not isinstance(result, dict):
+        return None
+    b64 = result.get("png_b64")
+    if not b64:
+        return None
+
+    import base64 as _base64
+
+    from uxarray_mcp.typed_results import store_png
+
+    plot_type = func_name.removeprefix("remote_").removeprefix("plot_") or "plot"
+    try:
+        png_bytes = _base64.b64decode(b64)
+    except Exception as exc:  # pragma: no cover - a worker that sent junk
+        return [
+            {
+                "type": "plot",
+                "plot_type": plot_type,
+                "format": "png",
+                "stored": False,
+                "not_stored_because": f"{type(exc).__name__}: {exc}",
+            }
+        ]
+
+    stored = store_png(png_bytes, plot_type=plot_type)
+    artifact: dict[str, Any] = {
+        "type": "plot",
+        "plot_type": plot_type,
+        "format": "png",
+        "size_bytes": len(png_bytes),
+        "stored": bool(stored.get("stored")),
+        "computed_on": "worker",
+    }
+    if stored.get("stored"):
+        artifact["path"] = stored["path"]
+        artifact["uri"] = stored["uri"]
+        # The metadata block is what a client reads to find the file; the
+        # local path already sets this key and a remote plot that omitted
+        # it looked like a plot with nowhere to go.
+        result.setdefault("image_uri", stored["uri"])
+    else:
+        artifact["not_stored_because"] = stored["not_stored_because"]
+    return [artifact]
+
+
 class UXarrayComputeAgent(_AcademyAgent):
     """Academy agent for UXarray computations with HPC support.
 
@@ -591,6 +649,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             inputs={"args": [str(a) for a in args]},
             venue=f"hpc:{endpoint_label}",
             warnings=drift_warnings or None,
+            artifacts=_stored_plot_artifacts(result, func.__name__),
         )
         # Record the worker's uxarray version explicitly alongside the local one.
         if worker_uxarray:

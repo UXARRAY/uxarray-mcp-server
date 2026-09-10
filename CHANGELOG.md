@@ -263,6 +263,20 @@ uses Semantic Versioning for public releases.
   toolregistry-server 0.5.0, uxarray 2026.8.1, holoviews 1.19.0 and
   matplotlib 3.9.0.
 
+- A plot result named a PNG that existed nowhere. `plot_dataset` answered
+  `artifacts: [{"type": "plot", "format": "png", "size_bytes": 41830}]` with
+  no `path` and no `uri`, and `resources/list` had nothing to serve: storing
+  the figure and inlining it were one decision, so everything under the
+  256 KB inline threshold — nearly every figure — came back as base64 in the
+  conversation and was never written to disk. Storing is now separate from
+  linking (`store_png` writes, `spill_png` decides delivery); every figure is
+  written and the artifact carries its `path` and `uri` whether the bytes are
+  inlined or handed over as a resource link. A store that cannot be written
+  reports `stored: false` with `not_stored_because` instead of returning
+  `None` from a bare `except`, and the plot still comes back inline. Remote
+  plots — whose worker-side file the submitter can never reach — now write
+  their `png_b64` into the submitter's store, and `analyze_dataset` reports
+  the figures its plot stages drew instead of an empty list.
 - `docs/operating-an-endpoint.md` documented `authentication_policy` as a
   nested mapping with `allowed_identities` under it, in two separate blocks
   including the single-user quickstart. Following it fails endpoint startup
