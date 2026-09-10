@@ -86,6 +86,43 @@ hpc:
         )
         assert config.for_endpoint(endpoint="improv").endpoint_id == "improv-uuid"
 
+    def test_config_load_user_endpoint_config(self, tmp_path):
+        """A multi-user endpoint's config reaches the profile and the top level.
+
+        A multi-user endpoint spawns the child endpoint only when the client
+        asks for one, so a submit carrying no ``user_endpoint_config`` is
+        refused with "did not signal readiness" (HTTP 422) no matter how
+        healthy the manager is. An empty mapping is a valid ask. The top-level
+        copy matters because a bare ``endpoint_id`` submit does not go through
+        the named profile and would otherwise ask differently than the profile
+        that supplied the very same UUID.
+        """
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            """
+hpc:
+  default_endpoint: chrysalis
+  endpoints:
+    chrysalis:
+      endpoint_id: chrysalis-uuid
+      user_endpoint_config: {}
+    improv:
+      endpoint_id: improv-uuid
+  execution_mode: auto
+""",
+            encoding="utf-8",
+        )
+
+        config = load_config(config_file)
+
+        assert config.endpoints["chrysalis"].user_endpoint_config == {}
+        assert config.user_endpoint_config == {}
+        assert config.for_endpoint(endpoint="chrysalis").user_endpoint_config == {}
+        # A single-user endpoint rejects a submit that carries the key, so the
+        # absence has to survive as None rather than collapse to an empty dict.
+        assert config.endpoints["improv"].user_endpoint_config is None
+        assert config.for_endpoint(endpoint="improv").user_endpoint_config is None
+
     def test_config_unknown_endpoint_raises(self):
         """Unknown endpoint names fail before submitting to the wrong facility."""
         config = HPCConfig(
@@ -218,6 +255,82 @@ class TestUXarrayComputeAgent:
             assert result["total_area"] == 1.0
             assert result["n_face"] == 100
             mock_executor.submit.assert_called_once()
+
+    def test_executor_sends_user_endpoint_config_only_when_configured(self):
+        """The submit is shaped by which kind of endpoint config names."""
+        with patch("globus_compute_sdk.Executor") as executor_cls:
+            multi_user = UXarrayComputeAgent(
+                HPCConfig(
+                    endpoint_id="mep-uuid",
+                    execution_mode="hpc",
+                    user_endpoint_config={},
+                )
+            )
+            multi_user._get_executor()
+            assert executor_cls.call_args.kwargs["user_endpoint_config"] == {}
+
+            executor_cls.reset_mock()
+            single_user = UXarrayComputeAgent(
+                HPCConfig(endpoint_id="sep-uuid", execution_mode="hpc")
+            )
+            single_user._get_executor()
+            # Not merely empty: a single-user endpoint refuses a submit that
+            # carries the key at all, so it must be absent from the kwargs.
+            assert "user_endpoint_config" not in executor_cls.call_args.kwargs
+
+    def test_stopped_executor_is_rebuilt(self):
+        """A failed submit must not poison every later call in the process.
+
+        The SDK marks an Executor ``_stopped`` once a submit fails hard, and
+        every call after that raises "is shutdown; no new functions may be
+        executed". Caching it forever meant one unreachable-endpoint error
+        required restarting the server to talk to an endpoint that had since
+        come back -- which is exactly what made restarting the endpoint look
+        like it changed nothing.
+        """
+        agent = UXarrayComputeAgent(
+            HPCConfig(endpoint_id="test-uuid", execution_mode="hpc")
+        )
+
+        with patch("globus_compute_sdk.Executor") as executor_cls:
+            executor_cls.side_effect = lambda **_: MagicMock(_stopped=False)
+            first = agent._get_executor()
+            assert agent._get_executor() is first  # a live one is reused
+
+            first._stopped = True
+            second = agent._get_executor()
+
+        assert second is not first
+
+    def test_worker_probe_submits_the_same_shape_as_real_work(self, monkeypatch):
+        """A probe shaped unlike real work reports a health it cannot deliver.
+
+        The probe is what decides whether an endpoint is usable, so if it
+        submits without the ``user_endpoint_config`` that every tool call
+        carries, a multi-user endpoint can be declared active and then refuse
+        the very next submit.
+        """
+        from uxarray_mcp.remote import health
+
+        monkeypatch.setattr(
+            health,
+            "check_endpoint_manager_status",
+            lambda config, force=False: {"status": "registered"},
+        )
+
+        config = HPCConfig(
+            endpoint_id="mep-uuid", execution_mode="hpc", user_endpoint_config={}
+        )
+
+        with patch("globus_compute_sdk.Executor") as executor_cls:
+            executor_cls.return_value.submit.return_value.result.return_value = {
+                "node": "chr-0001",
+                "python": "3.12.13",
+                "pythonpath": "",
+            }
+            health.probe_endpoint_worker(config, timeout_seconds=1)
+
+        assert executor_cls.call_args.kwargs["user_endpoint_config"] == {}
 
 
 class TestRemoteTools:

@@ -100,15 +100,11 @@ engine:
       conda activate gce
 ```
 
-Lock down the auth so only **your** Globus identity can submit (find your
-identity UUID at <https://app.globus.org/account/identities>):
-
-```yaml
-authentication_policy:
-  high_assurance: true                  # recent MFA required
-  allowed_identities:
-    - your-globus-identity-uuid
-```
+A single-user endpoint already runs only what the identity that started it
+submits, so there is nothing to add here to lock it to you. **Do not put your
+Globus identity UUID in this file** — no key in it takes one. Sharing the
+endpoint is what Step 6 is for, and it is a policy created in Globus Auth,
+referenced by one UUID.
 
 Then:
 
@@ -148,7 +144,7 @@ If `doctor` reports `active`, you're done. Total time: ~30 min the first time.
 3. [Configure the endpoint](#step-3--configure-the-endpoint) (scheduler, worker init)
 4. [Install the worker environment](#step-4--install-the-worker-environment)
 5. [Start the endpoint and capture its UUID](#step-5--start-the-endpoint)
-6. [Add the Globus Auth policy](#step-6--auth-policy) (who can submit)
+6. [Add the Globus Auth policy](#step-6--auth-policy-optional) (who can submit)
 7. [Harden the install](#step-7--harden)
 8. [Distribute the UUID and test](#step-8--distribute-the-uuid-and-test)
 
@@ -333,6 +329,12 @@ and you get a UUID:
 
 **Save this UUID.** Distribute it (Step 8) only to authenticated submitters.
 
+Two files are called `config.yaml` and they are not interchangeable. The one
+you edited above, `~/.globus_compute/uxarray/config.yaml`, configures the
+endpoint daemon and holds no UUID of yours. The endpoint UUID printed here
+goes in the *client's* config, `~/.config/uxarray-mcp/config.yaml`, as
+`endpoint_id` — written for you by `uxarray-mcp endpoints add` (Step 8).
+
 Check status:
 
 ```bash
@@ -342,30 +344,43 @@ globus-compute-endpoint logs uxarray
 
 ---
 
-### Step 6 — Auth policy
+### Step 6 — Auth policy (optional)
 
-Edit `~/.globus_compute/uxarray/config.yaml` and add (at the top level):
+**A single-user endpoint needs nothing here.** It already runs only functions
+submitted by the identity that started it, so skip to Step 7 unless you are
+sharing the endpoint.
+
+Every field below is a **flat, top-level** key in
+`~/.globus_compute/uxarray/config.yaml`. None of them nests:
 
 ```yaml
-allowed_functions:
-  # Empty list = no allowlist; any function from authorized identities runs.
-  # See "MEP allowlist" section below for the hardened version.
-  []
+# One UUID of a policy you created in Globus Auth -- NOT your identity UUID,
+# and NOT a mapping. The endpoint evaluates its users against that policy.
+authentication_policy: 498c7327-9c6a-4847-c954-1eafa923da8e
 
-authentication_policy:
-  # Require recent MFA at the configured identity provider.
-  high_assurance: true
-  # Restrict to specific Globus identities (UUIDs):
-  allowed_identities:
-    - <your-globus-identity-uuid>
-    - <collaborator-1-uuid>
-  # OR restrict by identity provider domain:
-  # allowed_domains:
-  #   - anl.gov
-  #   - ucar.edu
+# Separate boolean. Requires an active Globus subscription.
+high_assurance: true
+subscription_id: 600ba9ac-ef16-4387-30ad-60c6cc3a6853
 ```
 
-Restart:
+The identity and domain restrictions live *in the policy object*, created
+through Globus Auth (`globus api auth POST /v2/api/policies`, or the Globus
+web app), not in this file. Writing them here as a nested
+`authentication_policy:` block fails at startup with two pydantic errors,
+because the field is typed `UUID | str | None` and gets a dict:
+
+```text
+authentication_policy.uuid
+  UUID input should be a string, bytes or UUID object [input_type=dict]
+authentication_policy.str
+  Input should be a valid string [input_type=dict]
+```
+
+`allowed_functions` is an allow-list of **function** UUIDs, not identities.
+Omit the key to run any function; see "MEP allowlist" below for the hardened
+version. Do not write `allowed_functions: []` expecting "no restriction".
+
+Restart after any change:
 
 ```bash
 globus-compute-endpoint restart uxarray

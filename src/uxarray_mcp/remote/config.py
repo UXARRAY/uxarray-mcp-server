@@ -85,6 +85,11 @@ class EndpointProfile:
     endpoint_id: str
     path_prefixes: tuple[str, ...] = ()
     timeout_seconds: int | None = None
+    # Multi-user endpoints refuse a submit that carries no user_endpoint_config
+    # ("did not signal readiness", HTTP 422) because the child endpoint is only
+    # spawned once the client asks for one. An empty mapping is a valid ask and
+    # is enough when the endpoint's template declares no variables.
+    user_endpoint_config: dict[str, Any] | None = None
 
 
 def normalize_execution_mode(execution_mode: str) -> str:
@@ -129,11 +134,13 @@ class HPCConfig:
         endpoints: dict[str, EndpointProfile] | None = None,
         default_endpoint: str | None = None,
         endpoint_name: str | None = None,
+        user_endpoint_config: dict[str, Any] | None = None,
     ):
         self.endpoints = endpoints or {}
         self.default_endpoint = default_endpoint
         self.endpoint_name = endpoint_name
         self.endpoint_id = endpoint_id
+        self.user_endpoint_config = user_endpoint_config
         self.execution_mode = normalize_execution_mode(execution_mode)
         self.timeout_seconds = timeout_seconds
         # Set by for_endpoint(); declared here so the routing provenance is
@@ -250,6 +257,7 @@ class HPCConfig:
             endpoints=self.endpoints,
             default_endpoint=self.default_endpoint,
             endpoint_name=profile.name,
+            user_endpoint_config=profile.user_endpoint_config,
         )
         # Propagate whether this endpoint was chosen because a prefix claimed
         # the path, or merely because it is the default.
@@ -282,11 +290,15 @@ def _parse_endpoint_profiles(raw_endpoints: Any) -> dict[str, EndpointProfile]:
         if not endpoint_id:
             continue
         timeout = raw_profile.get("timeout_seconds")
+        raw_user_config = raw_profile.get("user_endpoint_config")
         profiles[str(name)] = EndpointProfile(
             name=str(name),
             endpoint_id=str(endpoint_id),
             path_prefixes=_coerce_prefixes(raw_profile.get("path_prefixes")),
             timeout_seconds=int(timeout) if timeout is not None else None,
+            user_endpoint_config=(
+                dict(raw_user_config) if isinstance(raw_user_config, dict) else None
+            ),
         )
     return profiles
 
@@ -348,6 +360,15 @@ def load_config(config_path: Optional[Path] = None) -> HPCConfig:
         else None
     )
 
+    # The top-level config mirrors whichever profile endpoint_id came from, so
+    # a bare `endpoint_id` submit carries the same multi-user config the named
+    # profile would have used.
+    user_endpoint_config = hpc_config.get("user_endpoint_config")
+    if not isinstance(user_endpoint_config, dict):
+        user_endpoint_config = None
+    if user_endpoint_config is None and endpoint_name in endpoints:
+        user_endpoint_config = endpoints[endpoint_name].user_endpoint_config
+
     return HPCConfig(
         endpoint_id=endpoint_id,
         execution_mode=hpc_config.get("execution_mode", "local"),
@@ -355,4 +376,5 @@ def load_config(config_path: Optional[Path] = None) -> HPCConfig:
         endpoints=endpoints,
         default_endpoint=default_endpoint,
         endpoint_name=endpoint_name,
+        user_endpoint_config=user_endpoint_config,
     )

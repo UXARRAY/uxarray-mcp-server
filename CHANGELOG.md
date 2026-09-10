@@ -5,6 +5,46 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- A directory of SCRIP meshes was classified as nothing and advised nothing.
+  `_GRID_HINTS` held `grid`, `mesh`, `topo`, `coord` and `geo` but not
+  `scrip` or `esmf`, and E3SM names half its meshes with the convention
+  rather than the word: scanning the 2026 INCITE CONUS grid directory
+  returned every one of its 24 NetCDF files as `kind: "unknown"` with
+  `recommendations: []`. The recommendation branches covered an empty
+  directory, grids without data and data without grids, so a directory that
+  was entirely meshes fell through all three and got less help than an empty
+  one. `scrip` and `esmf` now classify as `grid`, and any scan that matched
+  files but no hint says how many it found and suggests `inspect_mesh` on one
+  instead of returning silence. Both copies of the scan changed together,
+  guarded by the same AST comparison.
+- A figure rendered on HPC was never written down. The artifact store was
+  wired into the local plot helpers only; a worker returns `png_b64` and
+  nothing else, so `plot_mesh`, `plot_variable` and `plot_zonal_mean` came
+  back from a remote render with `_provenance.artifacts: []`, no path, no URI
+  and nothing for `resources/list` to serve. Plotting the 128k-face CONUS
+  mesh on Chrysalis produced 1,096,863 bytes of PNG that existed only inline
+  in the conversation — minutes of cluster time on a mesh far too large to
+  copy down, and the venue whose figures are most expensive to reproduce was
+  the one keeping none of them. The three remote plot tools now store the PNG
+  and record the same artifact shape the local path does, leaving a reply that
+  already lists a plot untouched so nothing is counted twice. The bytes still
+  come back inline; storing is not delivery.
+- `list_datasets` hid every Exodus mesh in a directory. The scan matched only
+  `.nc`, `.nc4`, `.h5`, `.he5`, `.grb` and `.grib`, so `.g`, `.exo` and `.e`
+  were dropped even though UXarray reads Exodus and `inspect_mesh` opens those
+  files without complaint — discovery and capability disagreed, and the caller
+  was given no sign anything had been filtered. A scan of the 2026 INCITE CONUS
+  grid directory reported 24 files where the directory holds 42; all 18 it
+  dropped were Exodus meshes, including every coarse spectral-element mesh the
+  refined grids are generated from. Silent under-reporting reads exactly like a
+  smaller directory. Exodus is now discovered, and because it carries topology
+  and no data variables, its extensions classify as `grid` ahead of the
+  filename heuristics, so `model_output_history.g` is no longer called data.
+  The scan exists twice — once locally, once inlined into `_remote_catalog_fn`
+  because `AllCodeStrategies` ships that function's source and nothing else —
+  and `tests/test_catalog_extensions.py` compares the two copies by parsing the
+  worker function's AST, which is the only thing standing between them and
+  drift.
 - `inspect_variable` reported statistics over an unstated subset of a
   variable. `sst` returned `mean: 80.5`; the same field with 145 of its 162
   faces masked returned `mean: 153.0` in the same shape, with nothing saying
@@ -263,7 +303,73 @@ uses Semantic Versioning for public releases.
   toolregistry-server 0.5.0, uxarray 2026.8.1, holoviews 1.19.0 and
   matplotlib 3.9.0.
 
+- A plot result named a PNG that existed nowhere. `plot_dataset` answered
+  `artifacts: [{"type": "plot", "format": "png", "size_bytes": 41830}]` with
+  no `path` and no `uri`, and `resources/list` had nothing to serve: storing
+  the figure and inlining it were one decision, so everything under the
+  256 KB inline threshold — nearly every figure — came back as base64 in the
+  conversation and was never written to disk. Storing is now separate from
+  linking (`store_png` writes, `spill_png` decides delivery); every figure is
+  written and the artifact carries its `path` and `uri` whether the bytes are
+  inlined or handed over as a resource link. A store that cannot be written
+  reports `stored: false` with `not_stored_because` instead of returning
+  `None` from a bare `except`, and the plot still comes back inline. Remote
+  plots — whose worker-side file the submitter can never reach — now write
+  their `png_b64` into the submitter's store, and `analyze_dataset` reports
+  the figures its plot stages drew instead of an empty list.
+- `docs/operating-an-endpoint.md` documented `authentication_policy` as a
+  nested mapping with `allowed_identities` under it, in two separate blocks
+  including the single-user quickstart. Following it fails endpoint startup
+  with `(ClickException) 2 validation errors for BaseConfig.__init__ /
+  authentication_policy.uuid / authentication_policy.str`: the field takes one
+  Globus Auth policy UUID as a scalar, `high_assurance` is a separate
+  top-level key, and `allowed_identities` is a property of the policy object
+  in Globus Auth, not an endpoint config key. A single-user endpoint needs no
+  policy at all, so the quickstart no longer suggests one. The two
+  `config.yaml` files are now named apart where the confusion starts:
+  `~/.globus_compute/uxarray/config.yaml` is the endpoint daemon's and holds
+  no user UUID; `~/.config/uxarray-mcp/config.yaml` is the client's and is
+  where `endpoint_id` goes.
+
+### Changed
+- Require `uxarray>=2026.9.0` (was `>=2026.8.1`), in `pyproject.toml` and the
+  conda recipe. Every release below it answers `gradient`, `curl` and
+  `divergence` with the wrong number: the Green-Gauss gradient divided by the
+  primal face area while the contour integral walked the dual cell, inflating
+  the result by `A_dual/A_primal` — roughly 4x on quads and 3x on hexagons —
+  and `curl` and `divergence` separately dropped the `±u·tan(lat)/a` spherical
+  metric terms (UXarray #1663). Both are fixed together in 2026.9.0, whose
+  median ratio to the closed-form answer is within 0.5% across HEALPix z4-z6,
+  ne30pg2 and QU480. This server exposes all three operations, so the floor is
+  the only thing that stops it publishing those numbers. The suite passes
+  unchanged against 2026.9.0: 1005 passed, 5 skipped.
+- Require `mcp>=1.27` (was `>=1.24`), and register the artifact resource
+  handlers through whichever API the installed SDK exposes. The two
+  generations in range differ: mcp 1.27.2 has the `@server.list_resources()` /
+  `@server.read_resource()` decorators and no `Server.add_request_handler`,
+  while 2.1.1 has `add_request_handler` and no decorators. Registering through
+  only one of them left the other advertising no `resources` capability and
+  404-ing every artifact link — silently, because a failed registration looks
+  exactly like an empty artifact store. The conda recipe said `mcp >=1.20,<2`
+  where `pyproject.toml` said `>=1.24,<3`; both now say `>=1.27,<3`.
+  `tests/test_artifact_resources.py` reads whichever handler table is present
+  and asserts on the serialized wire form, since the same field is `mimeType`
+  on one generation and `mime_type` on the other; it passes on 1.27.2 and
+  2.1.1.
+
 ### Added
+- `tests/test_documented_snippets.py` parses every fenced `yaml` and `json`
+  block in `README.md` and `docs/*.md`, so a config snippet that cannot load
+  fails CI rather than a new user's first hour. It checks that the endpoint
+  keys documented as scalars are written as scalars, that the client config
+  path in the docs is the `USER_CONFIG_PATH` the code reads, and that the
+  MCP client snippets invoke the console script that is actually installed.
+  It found a second bad `authentication_policy` block on its first run.
+- Setup sections for Codex CLI, opencode and Cursor in `README.md`, each with
+  the config file that client reads and the shape it expects — `command`/`args`
+  under `[mcp_servers.uxarray]` for Codex, an argv list under `mcp` for
+  opencode, `mcpServers` for Cursor. The README previously named Claude and
+  left every other MCP client a one-line stub.
 - `scripts/measure_payload.py` says where a reply's bytes go, which
   `tests/test_payload_budget.py` can only pass or fail on. It shares the
   budget test's fixtures so a figure printed here and a budget asserted there

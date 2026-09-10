@@ -45,7 +45,12 @@ dependencies = [
     # is_content_block_list about audio/resource_link/resource; on 0.15.0 those
     # blocks are silently stringified into one TextContent instead of failing.
     "toolregistry>=0.16.0",
-    "mcp>=1.24,<3",
+    # Both SDK generations are in range and register handlers differently:
+    # 1.27.2 has the per-method decorators and no `add_request_handler`, 2.1.1
+    # has `add_request_handler` and no decorators. `resources.py` registers
+    # through whichever is present, and `tests/test_artifact_resources.py`
+    # passes on both.
+    "mcp>=1.27,<3",
     "holoviews>=1.19.0",
     "matplotlib>=3.9.0",
     # 6.0.1, not 6.0: PyYAML 6.0 ships no wheel for CPython 3.12 and its sdist
@@ -55,7 +60,7 @@ dependencies = [
     # floor we actually declare, and had failed on it every run since
     # 2026-08-10.
     "pyyaml>=6.0.1",
-    "uxarray>=2026.8.1",
+    "uxarray>=2026.9.0",
 ]
 
 [project.optional-dependencies]

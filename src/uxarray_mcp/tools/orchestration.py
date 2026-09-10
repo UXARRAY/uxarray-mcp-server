@@ -396,6 +396,15 @@ def analyze_dataset(
         venue = venues.pop()
     else:
         venue = "mixed:" + ",".join(sorted(venues))
+    # The plot stages already wrote their figures and described them; this
+    # is a pipeline, so its own provenance has to carry what its stages
+    # produced. Without this an analyze_dataset run that drew two plots
+    # reported `artifacts: []` while both PNGs sat in the store unnamed.
+    stage_artifacts: list[dict[str, Any]] = []
+    for stage in (mesh_plot, variable_plot):
+        if isinstance(stage, dict):
+            stage_artifacts.extend(stage.get("_provenance", {}).get("artifacts", []))
+
     return attach_provenance(
         result,
         tool="analyze_dataset",
@@ -421,4 +430,5 @@ def analyze_dataset(
             else None
         ),
         selected_variable=selected_variable,
+        artifacts=stage_artifacts or None,
     )

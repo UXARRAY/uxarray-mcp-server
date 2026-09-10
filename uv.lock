@@ -4067,7 +4067,7 @@ wheels = [
 
 [[package]]
 name = "uxarray"
-version = "2026.8.1"
+version = "2026.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "antimeridian" },
@@ -4095,9 +4095,9 @@ dependencies = [
     { name = "spatialpandas" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/7a/da84d50b9f86b90c85ba8698ac10560ed2cf75ae959d038a5d0de310afe6/uxarray-2026.8.1.tar.gz", hash = "sha256:6ac97991f6115dc4c9f4f15c0979184c447d0c465fb4e5fbcfa03d2dfb907714", size = 238360, upload-time = "2026-08-29T05:27:40.596Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/05/4465c17acaf9cfff5f546812ef7c763895c41b28e160660a9437ce058840/uxarray-2026.9.0.tar.gz", hash = "sha256:eda0841cea97f74534daf66b4fbc5a9a4fd032b61c3036c700d0d25026bb4155", size = 254991, upload-time = "2026-09-10T16:21:17.32Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/05/ef2d64b6a271abd435fb4dc565e3464c1597073e8c50794cd81a005274e5/uxarray-2026.8.1-py3-none-any.whl", hash = "sha256:5c5613dfc31ec3bd5a7498b992ed5dd7b9b46503e28caa2c92b42fe0e3b912cf", size = 262345, upload-time = "2026-08-29T05:27:38.736Z" },
+    { url = "https://files.pythonhosted.org/packages/62/97/b4f61bcc5ff1ae83b75355f8f7c41b04c124ee20be59a1916dc178366a13/uxarray-2026.9.0-py3-none-any.whl", hash = "sha256:c5c1eee6f7c1608caf21ecfd6659186679c61dd902c358face63bad9f7ef336d", size = 278395, upload-time = "2026-09-10T16:21:15.464Z" },
 ]
 
 [[package]]
@@ -4146,7 +4146,7 @@ requires-dist = [
     { name = "globus-compute-sdk", marker = "extra == 'hpc'", specifier = ">=4.5.0" },
     { name = "holoviews", specifier = ">=1.19.0" },
     { name = "matplotlib", specifier = ">=3.9.0" },
-    { name = "mcp", specifier = ">=1.24,<3" },
+    { name = "mcp", specifier = ">=1.27,<3" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=3.0" },
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0" },
@@ -4154,7 +4154,7 @@ requires-dist = [
     { name = "toolregistry", specifier = ">=0.16.0" },
     { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.5.0" },
     { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.5.0" },
-    { name = "uxarray", specifier = ">=2026.8.1" },
+    { name = "uxarray", specifier = ">=2026.9.0" },
 ]
 provides-extras = ["openapi", "hpc", "docs"]
 
