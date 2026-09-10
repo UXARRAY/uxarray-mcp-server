@@ -231,6 +231,40 @@ def attach_artifact_resources(server: Any) -> Any:
     except ImportError:  # pragma: no cover - MCP SDK is a hard dep of serving
         return server
 
+    async def on_list_resources(ctx: Any, params: Any) -> Any:
+        page, next_cursor = list_artifacts(getattr(params, "cursor", None))
+        return types.ListResourcesResult(
+            resources=[types.Resource(**item) for item in page],
+            nextCursor=next_cursor,
+        )
+
+    async def on_read_resource(ctx: Any, params: Any) -> Any:
+        contents = read_artifact(str(params.uri))
+        if "text" in contents:
+            block: Any = types.TextResourceContents(**contents)
+        else:
+            block = types.BlobResourceContents(**contents)
+        return types.ReadResourceResult(contents=[block])
+
+    # Both SDK generations are inside the range this package declares, and they
+    # register handlers through different APIs: mcp 1.x has per-method
+    # decorators and no ``add_request_handler``, mcp 2.x has
+    # ``add_request_handler`` and no decorators. Registering through only one
+    # of them leaves the other advertising no resources and 404-ing every
+    # artifact link -- silently, because a failed registration looks exactly
+    # like an empty artifact store. Verified against mcp 1.27.2 and 2.1.1.
+    if hasattr(server, "add_request_handler"):
+        server.add_request_handler(
+            "resources/list", types.PaginatedRequestParams, on_list_resources
+        )
+        server.add_request_handler(
+            "resources/read", types.ReadResourceRequestParams, on_read_resource
+        )
+        return server
+
+    if not (hasattr(server, "list_resources") and hasattr(server, "read_resource")):
+        return server
+
     async def _list_resources(req: Any) -> Any:
         cursor = getattr(getattr(req, "params", None), "cursor", None)
         page, next_cursor = list_artifacts(cursor)

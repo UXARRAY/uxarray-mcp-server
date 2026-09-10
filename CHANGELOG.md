@@ -343,16 +343,19 @@ uses Semantic Versioning for public releases.
   ne30pg2 and QU480. This server exposes all three operations, so the floor is
   the only thing that stops it publishing those numbers. The suite passes
   unchanged against 2026.9.0: 1005 passed, 5 skipped.
-- Require `mcp>=1.27` (was `>=1.24`), and drop the pre-1.27 registration path
-  for the artifact resources. 1.27 removed `Server.add_request_handler`, so on
-  the current SDK the old branch was dead code and only the
-  `@server.list_resources()` / `@server.read_resource()` decorators registered
-  anything; carrying both meant an install below the floor would serve no
-  artifacts at all rather than fail at install time. The conda recipe said
-  `mcp >=1.20,<2` where `pyproject.toml` said `>=1.24,<3`; both now say
-  `>=1.27,<3`. `tests/test_artifact_resources.py` reads the SDK's own handler
-  table — keyed by request type, unwrapping the `ServerResult` — instead of
-  probing for whichever generation of the API was present.
+- Require `mcp>=1.27` (was `>=1.24`), and register the artifact resource
+  handlers through whichever API the installed SDK exposes. The two
+  generations in range differ: mcp 1.27.2 has the `@server.list_resources()` /
+  `@server.read_resource()` decorators and no `Server.add_request_handler`,
+  while 2.1.1 has `add_request_handler` and no decorators. Registering through
+  only one of them left the other advertising no `resources` capability and
+  404-ing every artifact link — silently, because a failed registration looks
+  exactly like an empty artifact store. The conda recipe said `mcp >=1.20,<2`
+  where `pyproject.toml` said `>=1.24,<3`; both now say `>=1.27,<3`.
+  `tests/test_artifact_resources.py` reads whichever handler table is present
+  and asserts on the serialized wire form, since the same field is `mimeType`
+  on one generation and `mime_type` on the other; it passes on 1.27.2 and
+  2.1.1.
 
 ### Added
 - `tests/test_documented_snippets.py` parses every fenced `yaml` and `json`
