@@ -1,7 +1,7 @@
 # UXarray MCP Server
 
-An MCP server that lets an AI assistant (Claude Code, Claude Desktop, Cursor,
-or any MCP client) analyze unstructured climate meshes with
+An MCP server that lets an AI assistant (Claude Code, Claude Desktop, Codex,
+opencode, Cursor, or any MCP client) analyze unstructured climate meshes with
 [UXarray](https://uxarray.readthedocs.io/) — locally on your machine, or
 remotely on an HPC system you have access to.
 
@@ -176,10 +176,63 @@ claude mcp add uxarray --transport stdio -- uxarray-mcp serve
 
 Then `/mcp` in Claude Code; pick `uxarray`.
 
-**Cursor / other MCP clients**
+**Codex CLI**
 
-Add an MCP server entry pointing at `uxarray-mcp serve` over stdio. See your
-client's MCP docs.
+```bash
+codex mcp add uxarray -- uxarray-mcp serve
+```
+
+Or write `~/.codex/config.toml` directly:
+
+```toml
+[mcp_servers.uxarray]
+command = "uxarray-mcp"
+args = ["serve"]
+```
+
+Then `/mcp` in a Codex session.
+
+**opencode**
+
+Add to `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "mcp": {
+    "uxarray": {
+      "type": "local",
+      "command": ["uxarray-mcp", "serve"],
+      "enabled": true
+    }
+  }
+}
+```
+
+The server registers 31 tools, which is a large tool schema to carry on every
+request. `"enabled": false` turns it off for sessions that are not doing mesh
+analysis.
+
+**Cursor**
+
+Add to `~/.cursor/mcp.json` (or a project-local `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "uxarray": {
+      "command": "uxarray-mcp",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+**Any other MCP client**
+
+The server speaks stdio, so every client wants the same two facts — the
+command `uxarray-mcp` and the argument `serve`. `uxarray-mcp install-claude
+--print-only` prints the `mcpServers` JSON block that most clients accept
+verbatim.
 
 ### Step 4 — Sanity check
 

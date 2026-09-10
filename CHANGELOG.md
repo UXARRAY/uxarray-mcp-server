@@ -263,6 +263,20 @@ uses Semantic Versioning for public releases.
   toolregistry-server 0.5.0, uxarray 2026.8.1, holoviews 1.19.0 and
   matplotlib 3.9.0.
 
+- `docs/operating-an-endpoint.md` documented `authentication_policy` as a
+  nested mapping with `allowed_identities` under it, in two separate blocks
+  including the single-user quickstart. Following it fails endpoint startup
+  with `(ClickException) 2 validation errors for BaseConfig.__init__ /
+  authentication_policy.uuid / authentication_policy.str`: the field takes one
+  Globus Auth policy UUID as a scalar, `high_assurance` is a separate
+  top-level key, and `allowed_identities` is a property of the policy object
+  in Globus Auth, not an endpoint config key. A single-user endpoint needs no
+  policy at all, so the quickstart no longer suggests one. The two
+  `config.yaml` files are now named apart where the confusion starts:
+  `~/.globus_compute/uxarray/config.yaml` is the endpoint daemon's and holds
+  no user UUID; `~/.config/uxarray-mcp/config.yaml` is the client's and is
+  where `endpoint_id` goes.
+
 ### Changed
 - Require `uxarray>=2026.9.0` (was `>=2026.8.1`), in `pyproject.toml` and the
   conda recipe. Every release below it answers `gradient`, `curl` and
@@ -287,6 +301,18 @@ uses Semantic Versioning for public releases.
   probing for whichever generation of the API was present.
 
 ### Added
+- `tests/test_documented_snippets.py` parses every fenced `yaml` and `json`
+  block in `README.md` and `docs/*.md`, so a config snippet that cannot load
+  fails CI rather than a new user's first hour. It checks that the endpoint
+  keys documented as scalars are written as scalars, that the client config
+  path in the docs is the `USER_CONFIG_PATH` the code reads, and that the
+  MCP client snippets invoke the console script that is actually installed.
+  It found a second bad `authentication_policy` block on its first run.
+- Setup sections for Codex CLI, opencode and Cursor in `README.md`, each with
+  the config file that client reads and the shape it expects — `command`/`args`
+  under `[mcp_servers.uxarray]` for Codex, an argv list under `mcp` for
+  opencode, `mcpServers` for Cursor. The README previously named Claude and
+  left every other MCP client a one-line stub.
 - `scripts/measure_payload.py` says where a reply's bytes go, which
   `tests/test_payload_budget.py` can only pass or fail on. It shares the
   budget test's fixtures so a figure printed here and a budget asserted there
