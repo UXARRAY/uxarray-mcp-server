@@ -9,8 +9,29 @@ from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.agent import get_agent
 from uxarray_mcp.tools.remote_tools import _endpoint_is_ready
 
-# File extensions recognised as potential mesh/data files
-_MESH_EXTENSIONS = {".nc", ".nc4", ".h5", ".he5", ".grb", ".grib"}
+# File extensions recognised as potential mesh/data files.
+#
+# Exodus belongs here because UXarray reads it. Leaving `.g`/`.exo`/`.e` out
+# made whole meshes invisible to discovery: a scan of the 2026 INCITE CONUS
+# grid directory reported 24 files where the directory holds 42, and every
+# one of the 18 it dropped was an Exodus mesh this server can open. A caller
+# who trusts `list_datasets` to say what is there was told the coarse SE
+# meshes did not exist.
+_MESH_EXTENSIONS = {
+    ".nc",
+    ".nc4",
+    ".h5",
+    ".he5",
+    ".grb",
+    ".grib",
+    ".g",
+    ".exo",
+    ".e",
+}
+
+# Extensions that are a mesh by definition -- Exodus carries topology and no
+# data variables, so no filename hint should be able to call one "data".
+_MESH_ONLY_EXTENSIONS = {".g", ".exo", ".e"}
 
 # Heuristic: filenames containing these substrings are likely grid files
 _GRID_HINTS = {"grid", "mesh", "topo", "coord", "geo"}
@@ -22,6 +43,8 @@ _DATA_HINTS = {"data", "output", "field", "var", "diag", "hist"}
 def _classify(name: str) -> str:
     """Guess whether a filename is a grid, data, or unknown file."""
     lower = name.lower()
+    if Path(lower).suffix in _MESH_ONLY_EXTENSIONS:
+        return "grid"
     if any(h in lower for h in _GRID_HINTS):
         return "grid"
     if any(h in lower for h in _DATA_HINTS):
@@ -201,12 +224,28 @@ def _remote_catalog_fn(
     """
     from pathlib import Path
 
-    _MESH_EXTENSIONS = {".nc", ".nc4", ".h5", ".he5", ".grb", ".grib"}
+    # Kept identical to the module-level constants above; the two copies
+    # exist only because AllCodeStrategies ships this function's source and
+    # nothing else, and tests/test_catalog_extensions.py compares them.
+    _MESH_EXTENSIONS = {
+        ".nc",
+        ".nc4",
+        ".h5",
+        ".he5",
+        ".grb",
+        ".grib",
+        ".g",
+        ".exo",
+        ".e",
+    }
+    _MESH_ONLY_EXTENSIONS = {".g", ".exo", ".e"}
     _GRID_HINTS = {"grid", "mesh", "topo", "coord", "geo"}
     _DATA_HINTS = {"data", "output", "field", "var", "diag", "hist"}
 
     def _classify(name: str) -> str:
         lower = name.lower()
+        if Path(lower).suffix in _MESH_ONLY_EXTENSIONS:
+            return "grid"
         if any(h in lower for h in _GRID_HINTS):
             return "grid"
         if any(h in lower for h in _DATA_HINTS):

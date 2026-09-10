@@ -5,6 +5,22 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- `list_datasets` hid every Exodus mesh in a directory. The scan matched only
+  `.nc`, `.nc4`, `.h5`, `.he5`, `.grb` and `.grib`, so `.g`, `.exo` and `.e`
+  were dropped even though UXarray reads Exodus and `inspect_mesh` opens those
+  files without complaint — discovery and capability disagreed, and the caller
+  was given no sign anything had been filtered. A scan of the 2026 INCITE CONUS
+  grid directory reported 24 files where the directory holds 42; all 18 it
+  dropped were Exodus meshes, including every coarse spectral-element mesh the
+  refined grids are generated from. Silent under-reporting reads exactly like a
+  smaller directory. Exodus is now discovered, and because it carries topology
+  and no data variables, its extensions classify as `grid` ahead of the
+  filename heuristics, so `model_output_history.g` is no longer called data.
+  The scan exists twice — once locally, once inlined into `_remote_catalog_fn`
+  because `AllCodeStrategies` ships that function's source and nothing else —
+  and `tests/test_catalog_extensions.py` compares the two copies by parsing the
+  worker function's AST, which is the only thing standing between them and
+  drift.
 - `inspect_variable` reported statistics over an unstated subset of a
   variable. `sst` returned `mean: 80.5`; the same field with 145 of its 162
   faces masked returned `mean: 153.0` in the same shape, with nothing saying
