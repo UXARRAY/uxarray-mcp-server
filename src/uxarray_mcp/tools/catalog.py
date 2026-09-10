@@ -33,8 +33,15 @@ _MESH_EXTENSIONS = {
 # data variables, so no filename hint should be able to call one "data".
 _MESH_ONLY_EXTENSIONS = {".g", ".exo", ".e"}
 
-# Heuristic: filenames containing these substrings are likely grid files
-_GRID_HINTS = {"grid", "mesh", "topo", "coord", "geo"}
+# Heuristic: filenames containing these substrings are likely grid files.
+#
+# "scrip" and "esmf" name mesh conventions, not topics, and a file carrying
+# one is a mesh whatever else it is called. Without them a directory of E3SM
+# meshes classified every file "unknown" and earned no recommendation at all:
+# scanning the 2026 INCITE CONUS tree found 24 mesh files, called none of them
+# a grid, and returned an empty recommendation list -- less help than the
+# empty-directory case, which at least suggests what to try next.
+_GRID_HINTS = {"grid", "mesh", "topo", "coord", "geo", "scrip", "esmf"}
 
 # Heuristic: filenames containing these are likely data files
 _DATA_HINTS = {"data", "output", "field", "var", "diag", "hist"}
@@ -186,6 +193,16 @@ def list_datasets(
                 "Some MPAS and UGRID files contain both grid and data — "
                 "try inspect_mesh on the data file directly."
             )
+        else:
+            # Nothing matched a hint. Saying nothing here was the worst of
+            # the three outcomes: a directory of meshes whose names the
+            # heuristics do not recognise got an empty recommendation list,
+            # less help than an empty directory gets.
+            recommendations.append(
+                f"{len(all_files)} candidate files found, none matching the "
+                "grid or data naming heuristics. Try inspect_mesh on one to "
+                "see whether it carries topology."
+            )
         if truncated:
             recommendations.append(
                 f"Results truncated at {max_files} files. "
@@ -239,7 +256,7 @@ def _remote_catalog_fn(
         ".e",
     }
     _MESH_ONLY_EXTENSIONS = {".g", ".exo", ".e"}
-    _GRID_HINTS = {"grid", "mesh", "topo", "coord", "geo"}
+    _GRID_HINTS = {"grid", "mesh", "topo", "coord", "geo", "scrip", "esmf"}
     _DATA_HINTS = {"data", "output", "field", "var", "diag", "hist"}
 
     def _classify(name: str) -> str:
@@ -329,6 +346,16 @@ def _remote_catalog_fn(
                 "Data files found but no obvious grid files. "
                 "Some MPAS and UGRID files contain both grid and data — "
                 "try inspect_mesh on the data file directly."
+            )
+        else:
+            # Nothing matched a hint. Saying nothing here was the worst of
+            # the three outcomes: a directory of meshes whose names the
+            # heuristics do not recognise got an empty recommendation list,
+            # less help than an empty directory gets.
+            recommendations.append(
+                f"{len(all_files)} candidate files found, none matching the "
+                "grid or data naming heuristics. Try inspect_mesh on one to "
+                "see whether it carries topology."
             )
         if truncated:
             recommendations.append(

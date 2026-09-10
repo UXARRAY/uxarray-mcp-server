@@ -72,7 +72,7 @@ def test_an_exodus_file_is_classified_as_a_grid_whatever_it_is_called(tmp_path):
     assert catalog._classify("model_output_history.g") == "grid", (
         "a filename hint must not outrank a format that cannot hold data"
     )
-    assert catalog._classify("ne3000pg1_scrip.nc") == "unknown"
+    assert catalog._classify("wibble.nc") == "unknown"
 
 
 def test_the_scan_still_finds_netcdf(tmp_path):
@@ -85,6 +85,41 @@ def test_the_scan_still_finds_netcdf(tmp_path):
         f["name"]: f["kind"] for group in result["groups"] for f in group["files"]
     }
     assert by_name == {"mesh_grid.nc": "grid", "output_data.h5": "data"}
+
+
+def test_a_scrip_mesh_is_recognised_as_a_grid():
+    """SCRIP is a mesh convention, and E3SM names half its meshes with it."""
+    assert catalog._classify("2026-incite-conus-1024x2-pg2_scrip.nc") == "grid"
+    assert catalog._classify("ne30pg2_scrip.nc") == "grid"
+    assert catalog._classify("map_ne30_to_ne120.esmf.nc") == "grid"
+
+
+def test_a_directory_of_meshes_is_told_what_to_do_with_them(tmp_path):
+    """The failure: 24 meshes found, all "unknown", zero recommendations.
+
+    Scanning the INCITE tree classified nothing and advised nothing, which
+    is less help than the empty-directory branch gives.
+    """
+    for name in ("2026-incite-conus-1024x2-pg2_scrip.nc", "ne3000pg1_scrip.nc"):
+        (tmp_path / name).write_bytes(b"\x00" * 16)
+
+    result = catalog.list_datasets(str(tmp_path))
+
+    kinds = {f["kind"] for group in result["groups"] for f in group["files"]}
+    assert kinds == {"grid"}
+    assert result["recommendations"], "meshes found and nothing suggested"
+
+
+def test_files_matching_no_hint_still_earn_advice(tmp_path):
+    """A name the heuristics miss must not produce silence."""
+    (tmp_path / "wibble.nc").write_bytes(b"\x00" * 16)
+
+    result = catalog.list_datasets(str(tmp_path))
+
+    assert result["recommendations"], (
+        "an unclassifiable file left the caller with no next step at all"
+    )
+    assert "1 candidate" in result["recommendations"][0]
 
 
 def test_every_discovered_extension_is_one_uxarray_can_open():
