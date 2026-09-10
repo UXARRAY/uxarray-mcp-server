@@ -231,12 +231,6 @@ def attach_artifact_resources(server: Any) -> Any:
     except ImportError:  # pragma: no cover - MCP SDK is a hard dep of serving
         return server
 
-    if not hasattr(server, "add_request_handler"):  # pragma: no cover - SDK v1
-        # The v1 low-level server registers handlers through decorators and
-        # has no post-hoc entry point. Leaving the links unserved there is
-        # the same state as before this module, not a regression.
-        return server
-
     async def on_list_resources(ctx: Any, params: Any) -> Any:
         page, next_cursor = list_artifacts(getattr(params, "cursor", None))
         return types.ListResourcesResult(
@@ -252,10 +246,55 @@ def attach_artifact_resources(server: Any) -> Any:
             block = types.BlobResourceContents(**contents)
         return types.ReadResourceResult(contents=[block])
 
-    server.add_request_handler(
-        "resources/list", types.PaginatedRequestParams, on_list_resources
-    )
-    server.add_request_handler(
-        "resources/read", types.ReadResourceRequestParams, on_read_resource
-    )
+    # Both SDK generations are inside the range this package declares, and they
+    # register handlers through different APIs: mcp 1.x has per-method
+    # decorators and no ``add_request_handler``, mcp 2.x has
+    # ``add_request_handler`` and no decorators. Registering through only one
+    # of them leaves the other advertising no resources and 404-ing every
+    # artifact link -- silently, because a failed registration looks exactly
+    # like an empty artifact store. Verified against mcp 1.27.2 and 2.1.1.
+    if hasattr(server, "add_request_handler"):
+        server.add_request_handler(
+            "resources/list", types.PaginatedRequestParams, on_list_resources
+        )
+        server.add_request_handler(
+            "resources/read", types.ReadResourceRequestParams, on_read_resource
+        )
+        return server
+
+    if not (hasattr(server, "list_resources") and hasattr(server, "read_resource")):
+        return server
+
+    async def _list_resources(req: Any) -> Any:
+        cursor = getattr(getattr(req, "params", None), "cursor", None)
+        page, next_cursor = list_artifacts(cursor)
+        return types.ListResourcesResult(
+            resources=[types.Resource(**item) for item in page],
+            nextCursor=next_cursor,
+        )
+
+    # The SDK decides whether to hand the handler its request by resolving the
+    # annotations with ``get_type_hints``, and ``from __future__ import
+    # annotations`` makes ours strings it evaluates against this module's
+    # globals -- where ``types`` is a local of this function and does not
+    # resolve. Binding the class object is what makes the parameter recognized:
+    # left as ``Any`` the SDK calls the handler with no arguments at all, and
+    # the paging cursor never arrives. Set before registering, because the
+    # decorator inspects the function as it is passed.
+    _list_resources.__annotations__ = {"req": types.ListResourcesRequest}
+    server.list_resources()(_list_resources)
+
+    @server.read_resource()
+    async def _read_resource(uri: Any) -> Any:
+        from mcp.server.lowlevel.helper_types import ReadResourceContents
+
+        contents = read_artifact(str(uri))
+        if "text" in contents:
+            payload: Any = contents["text"]
+        else:
+            payload = base64.b64decode(contents["blob"])
+        return [
+            ReadResourceContents(content=payload, mime_type=contents.get("mimeType"))
+        ]
+
     return server

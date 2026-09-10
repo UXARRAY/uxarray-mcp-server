@@ -31,9 +31,11 @@ def test_the_suite_ran_against_a_real_uxarray():
 def test_the_installed_uxarray_meets_the_declared_floor():
     """The floor exists because older releases return wrong numbers.
 
-    2026.7.0 computed face areas with an incorrect Jacobian and 2026.8.0
-    matched structured-grid nodes in the lon/lat plane, so a run against
-    either is testing something we have declared unfit to install. Read the
+    2026.7.0 computed face areas with an incorrect Jacobian, 2026.8.0 matched
+    structured-grid nodes in the lon/lat plane, and everything below 2026.9.0
+    inflated the Green-Gauss gradient by ``A_dual/A_primal`` while dropping
+    the spherical metric terms from curl and divergence, so a run against any
+    of them is testing something we have declared unfit to install. Read the
     floor from the packaging metadata rather than repeating it here, so this
     cannot drift away from ``pyproject.toml``.
     """

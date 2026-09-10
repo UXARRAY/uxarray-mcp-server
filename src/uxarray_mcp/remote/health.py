@@ -299,10 +299,17 @@ def probe_endpoint_worker(
                 message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
                 category=UserWarning,
             )
-            ex = Executor(
-                endpoint_id=endpoint_id,
-                serializer=ComputeSerializer(strategy_code=AllCodeStrategies()),
-            )
+            executor_kwargs: dict[str, Any] = {
+                "endpoint_id": endpoint_id,
+                "serializer": ComputeSerializer(strategy_code=AllCodeStrategies()),
+            }
+            # Probe the endpoint the same way real work reaches it, so a
+            # multi-user endpoint is not reported healthy by a submit shaped
+            # differently from every submit that follows.
+            probe_user_config = config.user_endpoint_config
+            if probe_user_config is not None:
+                executor_kwargs["user_endpoint_config"] = probe_user_config
+            ex = Executor(**executor_kwargs)
             try:
                 fut = ex.submit(_worker_probe)
                 result = fut.result(timeout=timeout_seconds)

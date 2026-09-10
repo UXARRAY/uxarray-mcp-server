@@ -173,6 +173,59 @@ def _run_with_optional_hpc(
     return result
 
 
+def _ensure_plot_artifact(
+    result: Dict[str, Any], *, plot_type: str, variable: str | None = None
+) -> Dict[str, Any]:
+    """Write a remotely rendered figure to the artifact store.
+
+    A worker hands back base64 and nothing else: no file, no URI, and an
+    empty ``_provenance.artifacts``. The local path stores its PNG on the
+    way out, so the figures that survived were the cheap ones and the
+    figures that did not were minutes of cluster time on a mesh too large
+    to move -- a 128k-face wireframe rendered on Chrysalis came back as
+    1,096,863 bytes that existed only in the conversation. Storing here
+    puts both venues in the same shape.
+
+    A result whose provenance already lists a plot is left alone, so the
+    local path is not double-counted.
+    """
+    provenance = result.get("_provenance") or {}
+    artifacts = provenance.get("artifacts") or []
+    if any(a.get("type") == "plot" for a in artifacts):
+        return result
+
+    b64 = result.get("png_b64")
+    if not b64:
+        return result
+
+    import base64
+
+    from uxarray_mcp.typed_results import store_png
+
+    png_bytes = base64.b64decode(b64)
+    stored = store_png(png_bytes, plot_type=plot_type)
+
+    artifact: Dict[str, Any] = {
+        "type": "plot",
+        "plot_type": plot_type,
+        "format": "png",
+        "size_bytes": len(png_bytes),
+        "stored": bool(stored.get("stored")),
+    }
+    if variable is not None:
+        artifact["variable"] = variable
+    if stored.get("stored"):
+        artifact["path"] = stored["path"]
+        artifact["uri"] = stored["uri"]
+        result.setdefault("image_uri", stored["uri"])
+    else:
+        artifact["not_stored_because"] = stored["not_stored_because"]
+
+    provenance["artifacts"] = [*artifacts, artifact]
+    result["_provenance"] = provenance
+    return result
+
+
 def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
     """Convert a plot result dict into MCP image/link + metadata contents.
 
@@ -595,7 +648,9 @@ def plot_mesh(
             lambda: agent.plot_mesh_remote(resolved_grid, width, height, use_remote)
         ),
     )
-    return _plot_result_to_mcp_contents(result)
+    return _plot_result_to_mcp_contents(
+        _ensure_plot_artifact(result, plot_type="mesh_wireframe")
+    )
 
 
 def plot_variable(
@@ -724,7 +779,16 @@ def plot_variable(
             )
         ),
     )
-    return _plot_result_to_mcp_contents(result)
+    # The worker resolves a null variable_name to the first face-centered
+    # field, so name the artifact after what was drawn rather than what was
+    # asked for.
+    return _plot_result_to_mcp_contents(
+        _ensure_plot_artifact(
+            result,
+            plot_type="variable_polygons",
+            variable=result.get("variable_name") or variable_name,
+        )
+    )
 
 
 def plot_zonal_mean(
@@ -847,4 +911,10 @@ def plot_zonal_mean(
             )
         ),
     )
-    return _plot_result_to_mcp_contents(result)
+    return _plot_result_to_mcp_contents(
+        _ensure_plot_artifact(
+            result,
+            plot_type="zonal_mean",
+            variable=result.get("variable_name") or variable_name,
+        )
+    )

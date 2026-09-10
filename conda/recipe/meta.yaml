@@ -28,11 +28,11 @@ requirements:
     # behavior is validated on conda-forge.
     - python >={{ python_min }}
     - toolregistry-server >=0.5.0
-    - mcp >=1.20,<2
+    - mcp >=1.27,<3
     - holoviews >=1.19.0
     - matplotlib-base >=3.9.0
     - pyyaml >=6.0.1
-    - uxarray >=2026.8.1
+    - uxarray >=2026.9.0
 
 test:
   requires:

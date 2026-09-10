@@ -30,6 +30,39 @@ from uxarray_mcp.state import _artifacts_dir
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + bytes(range(256)) * 4
 
 
+def _handlers(server):
+    """Return the request methods the SDK's handler table answers.
+
+    Reading the table is deliberate: ``get_capabilities`` derives the
+    capability from ``resources/list`` alone, so a server that advertises the
+    capability and cannot answer a read would pass a capability-only check.
+    Both SDK generations are inside the range this package declares and they
+    shape the table differently -- mcp 1.x keys a public ``request_handlers``
+    by request type, mcp 2.x keys ``_request_handlers`` by method string -- so
+    read whichever is present and answer in method strings either way.
+    """
+    table = getattr(server, "request_handlers", None)
+    if table is not None:
+        return {key.model_fields["method"].default for key in table}
+    return set(server._request_handlers)
+
+
+async def _dispatch(server, request):
+    """Invoke a registered handler the way the SDK would.
+
+    mcp 1.x passes the whole request and wraps the answer in a
+    ``ServerResult``; mcp 2.x passes a request context plus the parsed params
+    and returns the result itself. Unwrap only when there is a wrapper.
+    """
+    table = getattr(server, "request_handlers", None)
+    if table is not None:
+        result = await table[type(request)](request)
+    else:
+        entry = server.get_request_handler(request.method)
+        result = await entry.handler(None, request.params)
+    return getattr(result, "root", result)
+
+
 @pytest.fixture
 def artifact_store(tmp_path, monkeypatch):
     """Point the state root at a temp dir so tests never read the real store."""
@@ -59,12 +92,9 @@ def test_make_mcp_server_advertises_resources():
 
 def test_make_mcp_server_registers_both_resource_methods():
     server = make_mcp_server(profile="core")
-    # ``_request_handlers`` is the SDK's own handler table, and reading it here
-    # is deliberate: ``get_capabilities`` derives the capability from the
-    # presence of ``resources/list`` alone, so a server that advertises the
-    # capability and cannot answer a read would pass the test above.
-    assert "resources/list" in server._request_handlers
-    assert "resources/read" in server._request_handlers
+    handlers = _handlers(server)
+    assert "resources/list" in handlers
+    assert "resources/read" in handlers
 
 
 def test_serve_mcp_registers_the_same_handlers(monkeypatch):
@@ -80,7 +110,7 @@ def test_serve_mcp_registers_the_same_handlers(monkeypatch):
     from toolregistry_server.adapters.mcp import MCPAdapter
 
     def fake_run(self, **kwargs):
-        captured["handlers"] = set(self.server._request_handlers)
+        captured["handlers"] = _handlers(self.server)
 
     monkeypatch.setattr(MCPAdapter, "run", fake_run)
     app_module.UXarrayApp().serve_mcp(profile="core")
@@ -103,19 +133,32 @@ async def test_registered_handlers_answer_over_the_protocol_types(artifact_store
     _write(artifact_store, "plot_abc.png", PNG_BYTES)
     server = make_mcp_server(profile="core")
 
-    listed = await server._request_handlers["resources/list"].handler(
-        None, types.PaginatedRequestParams(cursor=None)
+    listed = await _dispatch(
+        server,
+        types.ListResourcesRequest(
+            method="resources/list", params=types.PaginatedRequestParams(cursor=None)
+        ),
     )
-    assert [str(item.uri) for item in listed.resources] == [
+    # Assert on the serialized form rather than the attribute names: the two
+    # SDK generations spell the same wire field differently in Python
+    # (``mimeType`` on mcp 1.x, ``mime_type`` on 2.x), and it is the wire form
+    # the client actually reads.
+    listed_wire = listed.model_dump(by_alias=True)
+    assert [str(item["uri"]) for item in listed_wire["resources"]] == [
         (artifact_store / "plot_abc.png").as_uri()
     ]
-    assert listed.resources[0].mime_type == "image/png"
-    assert listed.next_cursor is None
+    assert listed_wire["resources"][0]["mimeType"] == "image/png"
+    assert listed_wire["nextCursor"] is None
 
-    read = await server._request_handlers["resources/read"].handler(
-        None, types.ReadResourceRequestParams(uri=str(listed.resources[0].uri))
+    read = await _dispatch(
+        server,
+        types.ReadResourceRequest(
+            method="resources/read",
+            params=types.ReadResourceRequestParams(uri=str(listed.resources[0].uri)),
+        ),
     )
-    assert base64.b64decode(read.contents[0].blob) == PNG_BYTES
+    read_wire = read.model_dump(by_alias=True)
+    assert base64.b64decode(read_wire["contents"][0]["blob"]) == PNG_BYTES
 
 
 def _no_notifications():

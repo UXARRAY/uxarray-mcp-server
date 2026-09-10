@@ -374,36 +374,59 @@ def should_link_rather_than_inline(size_bytes: int) -> bool:
     return size_bytes >= INLINE_PAYLOAD_LIMIT_BYTES
 
 
-def spill_png(png_bytes: bytes, *, plot_type: str) -> dict[str, Any] | None:
-    """Write a large PNG to the artifact store and describe it as a link.
+def store_png(png_bytes: bytes, *, plot_type: str) -> dict[str, Any]:
+    """Write a rendered PNG to the artifact store and describe the file.
 
-    Returns ``None`` when the image is small enough to inline, which keeps
-    the ordinary interactive case a single round trip with no file to clean
-    up. Above the threshold the bytes go to the same artifact directory
-    result handles already use, and the caller gets a ``file://`` URI.
+    Every figure is written, whatever its size. Storing and inlining used
+    to be one decision, so a plot under
+    :data:`INLINE_PAYLOAD_LIMIT_BYTES` -- which is nearly all of them --
+    came back as base64 in the conversation and nowhere else: no file, no
+    path, and an ``artifacts`` list that named a PNG the caller could not
+    open. Whether to *inline* the bytes is still a size question and still
+    answered by :func:`should_link_rather_than_inline`; whether the figure
+    exists on disk afterwards is not, and a stored file is what makes the
+    artifact resources worth serving.
 
-    Never raises: if the artifact store is not writable, inlining is still
-    correct behaviour, so a failure here degrades to the old path.
+    Never raises. A store that cannot be written to is a reason to fall
+    back to inlining, not to lose the plot, so the failure is reported in
+    the returned dict rather than thrown -- and reported, not swallowed,
+    because a silent ``None`` here was indistinguishable from a figure
+    nobody asked to keep.
     """
-    if not should_link_rather_than_inline(len(png_bytes)):
-        return None
     try:
         from .state import _artifacts_dir, _new_id
 
         result_id = _new_id("plot")
         path = _artifacts_dir() / f"{result_id}.png"
         path.write_bytes(png_bytes)
-    except Exception:  # pragma: no cover - defensive, falls back to inline
-        return None
-    return make_resource_link(
+    except Exception as exc:
+        return {"stored": False, "not_stored_because": f"{type(exc).__name__}: {exc}"}
+
+    link = make_resource_link(
         uri=path.as_uri(),
         name=f"{result_id}.png",
         title=f"{plot_type} plot",
         description=(
-            f"Rendered {plot_type} PNG, {len(png_bytes)} bytes. Held out of "
-            "the conversation because inlining it would cost more context "
-            "than the figure is worth."
+            f"Rendered {plot_type} PNG, {len(png_bytes)} bytes, written to "
+            f"the artifact store."
         ),
         mime_type="image/png",
         size=len(png_bytes),
     )
+    link["stored"] = True
+    link["path"] = str(path)
+    return link
+
+
+def spill_png(png_bytes: bytes, *, plot_type: str) -> dict[str, Any] | None:
+    """Describe a PNG as a link when it is too large to inline.
+
+    Returns ``None`` when the image is small enough to inline, which keeps
+    the ordinary interactive case a single round trip. The file is written
+    either way -- see :func:`store_png` -- so ``None`` means "inline it",
+    never "there is no file".
+    """
+    if not should_link_rather_than_inline(len(png_bytes)):
+        return None
+    stored = store_png(png_bytes, plot_type=plot_type)
+    return stored if stored.get("stored") else None
