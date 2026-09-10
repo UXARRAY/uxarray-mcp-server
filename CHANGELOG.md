@@ -5,6 +5,18 @@ uses Semantic Versioning for public releases.
 
 ## Unreleased
 ### Fixed
+- A figure rendered on HPC was never written down. The artifact store was
+  wired into the local plot helpers only; a worker returns `png_b64` and
+  nothing else, so `plot_mesh`, `plot_variable` and `plot_zonal_mean` came
+  back from a remote render with `_provenance.artifacts: []`, no path, no URI
+  and nothing for `resources/list` to serve. Plotting the 128k-face CONUS
+  mesh on Chrysalis produced 1,096,863 bytes of PNG that existed only inline
+  in the conversation — minutes of cluster time on a mesh far too large to
+  copy down, and the venue whose figures are most expensive to reproduce was
+  the one keeping none of them. The three remote plot tools now store the PNG
+  and record the same artifact shape the local path does, leaving a reply that
+  already lists a plot untouched so nothing is counted twice. The bytes still
+  come back inline; storing is not delivery.
 - `list_datasets` hid every Exodus mesh in a directory. The scan matched only
   `.nc`, `.nc4`, `.h5`, `.he5`, `.grb` and `.grib`, so `.g`, `.exo` and `.e`
   were dropped even though UXarray reads Exodus and `inspect_mesh` opens those
