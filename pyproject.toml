@@ -45,7 +45,10 @@ dependencies = [
     # is_content_block_list about audio/resource_link/resource; on 0.15.0 those
     # blocks are silently stringified into one TextContent instead of failing.
     "toolregistry>=0.16.0",
-    "mcp>=1.24,<3",
+    # 1.27 is where per-method decorators replaced add_request_handler. The
+    # resource handlers register only through the decorators now, so an older
+    # SDK would serve no artifacts at all rather than fail loudly.
+    "mcp>=1.27,<3",
     "holoviews>=1.19.0",
     "matplotlib>=3.9.0",
     # 6.0.1, not 6.0: PyYAML 6.0 ships no wheel for CPython 3.12 and its sdist

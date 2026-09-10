@@ -231,38 +231,6 @@ def attach_artifact_resources(server: Any) -> Any:
     except ImportError:  # pragma: no cover - MCP SDK is a hard dep of serving
         return server
 
-    async def on_list_resources(ctx: Any, params: Any) -> Any:
-        page, next_cursor = list_artifacts(getattr(params, "cursor", None))
-        return types.ListResourcesResult(
-            resources=[types.Resource(**item) for item in page],
-            nextCursor=next_cursor,
-        )
-
-    async def on_read_resource(ctx: Any, params: Any) -> Any:
-        contents = read_artifact(str(params.uri))
-        if "text" in contents:
-            block: Any = types.TextResourceContents(**contents)
-        else:
-            block = types.BlobResourceContents(**contents)
-        return types.ReadResourceResult(contents=[block])
-
-    if hasattr(server, "add_request_handler"):
-        server.add_request_handler(
-            "resources/list", types.PaginatedRequestParams, on_list_resources
-        )
-        server.add_request_handler(
-            "resources/read", types.ReadResourceRequestParams, on_read_resource
-        )
-        return server
-
-    # mcp >= 1.27 dropped add_request_handler for per-method decorators. The
-    # previous code treated a missing add_request_handler as "nothing to do"
-    # and returned, so on a current SDK the handshake advertised no resources
-    # at all and every artifact link 404'd -- silently, because registration
-    # failing looks identical to having no artifacts.
-    if not (hasattr(server, "list_resources") and hasattr(server, "read_resource")):
-        return server
-
     async def _list_resources(req: Any) -> Any:
         cursor = getattr(getattr(req, "params", None), "cursor", None)
         page, next_cursor = list_artifacts(cursor)

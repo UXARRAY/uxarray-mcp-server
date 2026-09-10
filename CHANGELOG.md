@@ -263,6 +263,18 @@ uses Semantic Versioning for public releases.
   toolregistry-server 0.5.0, uxarray 2026.8.1, holoviews 1.19.0 and
   matplotlib 3.9.0.
 
+### Changed
+- Require `mcp>=1.27` (was `>=1.24`), and drop the pre-1.27 registration path
+  for the artifact resources. 1.27 removed `Server.add_request_handler`, so on
+  the current SDK the old branch was dead code and only the
+  `@server.list_resources()` / `@server.read_resource()` decorators registered
+  anything; carrying both meant an install below the floor would serve no
+  artifacts at all rather than fail at install time. The conda recipe said
+  `mcp >=1.20,<2` where `pyproject.toml` said `>=1.24,<3`; both now say
+  `>=1.27,<3`. `tests/test_artifact_resources.py` reads the SDK's own handler
+  table — keyed by request type, unwrapping the `ServerResult` — instead of
+  probing for whichever generation of the API was present.
+
 ### Added
 - `scripts/measure_payload.py` says where a reply's bytes go, which
   `tests/test_payload_budget.py` can only pass or fail on. It shares the

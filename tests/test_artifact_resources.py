@@ -31,42 +31,25 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\n" + bytes(range(256)) * 4
 
 
 def _handlers(server):
-    """Return the SDK's handler table across both SDK generations.
+    """Return the methods the SDK's handler table answers.
 
-    Reading the table is deliberate -- ``get_capabilities`` derives the
+    Reading the table is deliberate: ``get_capabilities`` derives the
     capability from ``resources/list`` alone, so a server that advertises the
     capability and cannot answer a read would pass a capability-only check.
-    mcp >= 1.27 renamed the attribute from ``_request_handlers`` to a public
-    ``request_handlers``; the test has to follow the SDK it is running under,
-    and a missing attribute would otherwise read as a registration failure.
+    The table is keyed by request type, so each key is mapped back to the
+    method string it declares.
     """
-    table = getattr(server, "request_handlers", None)
-    if table is None:
-        table = server._request_handlers
-    # Keys are request *types* on the current SDK and method strings on the
-    # old one. Normalize to the method string either way.
-    return {
-        getattr(getattr(key, "model_fields", {}).get("method", None), "default", None)
-        or key
-        for key in table
-    }
+    return {key.model_fields["method"].default for key in server.request_handlers}
 
 
 async def _dispatch(server, request):
-    """Invoke a registered handler with the request the SDK would hand it.
+    """Invoke a registered handler the way the SDK would.
 
-    The two SDK generations differ in both the key and the call: the old one
-    keys by method string and calls ``handler(ctx, params)``, the current one
-    keys by request type and calls ``handler(request)``, wrapping the answer
-    in a ``ServerResult``. Unwrap so the assertions can talk about the result
-    itself rather than about which SDK produced it.
+    The handler is called with the request itself and answers a
+    ``ServerResult``; unwrap it so the assertions can talk about the result.
     """
-    table = getattr(server, "request_handlers", None)
-    if table is None:
-        handler = server._request_handlers[request.method].handler
-        return await handler(None, request.params)
-    result = await table[type(request)](request)
-    return getattr(result, "root", result)
+    result = await server.request_handlers[type(request)](request)
+    return result.root
 
 
 @pytest.fixture

@@ -306,7 +306,7 @@ def probe_endpoint_worker(
             # Probe the endpoint the same way real work reaches it, so a
             # multi-user endpoint is not reported healthy by a submit shaped
             # differently from every submit that follows.
-            probe_user_config = getattr(config, "user_endpoint_config", None)
+            probe_user_config = config.user_endpoint_config
             if probe_user_config is not None:
                 executor_kwargs["user_endpoint_config"] = probe_user_config
             ex = Executor(**executor_kwargs)
