@@ -144,7 +144,7 @@ If `doctor` reports `active`, you're done. Total time: ~30 min the first time.
 3. [Configure the endpoint](#step-3--configure-the-endpoint) (scheduler, worker init)
 4. [Install the worker environment](#step-4--install-the-worker-environment)
 5. [Start the endpoint and capture its UUID](#step-5--start-the-endpoint)
-6. [Add the Globus Auth policy](#step-6--auth-policy) (who can submit)
+6. [Add the Globus Auth policy](#step-6--auth-policy-optional) (who can submit)
 7. [Harden the install](#step-7--harden)
 8. [Distribute the UUID and test](#step-8--distribute-the-uuid-and-test)
 
