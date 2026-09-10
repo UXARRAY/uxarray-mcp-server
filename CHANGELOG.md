@@ -264,6 +264,17 @@ uses Semantic Versioning for public releases.
   matplotlib 3.9.0.
 
 ### Changed
+- Require `uxarray>=2026.9.0` (was `>=2026.8.1`), in `pyproject.toml` and the
+  conda recipe. Every release below it answers `gradient`, `curl` and
+  `divergence` with the wrong number: the Green-Gauss gradient divided by the
+  primal face area while the contour integral walked the dual cell, inflating
+  the result by `A_dual/A_primal` — roughly 4x on quads and 3x on hexagons —
+  and `curl` and `divergence` separately dropped the `±u·tan(lat)/a` spherical
+  metric terms (UXarray #1663). Both are fixed together in 2026.9.0, whose
+  median ratio to the closed-form answer is within 0.5% across HEALPix z4-z6,
+  ne30pg2 and QU480. This server exposes all three operations, so the floor is
+  the only thing that stops it publishing those numbers. The suite passes
+  unchanged against 2026.9.0: 1005 passed, 5 skipped.
 - Require `mcp>=1.27` (was `>=1.24`), and drop the pre-1.27 registration path
   for the artifact resources. 1.27 removed `Server.add_request_handler`, so on
   the current SDK the old branch was dead code and only the

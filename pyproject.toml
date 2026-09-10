@@ -58,7 +58,7 @@ dependencies = [
     # floor we actually declare, and had failed on it every run since
     # 2026-08-10.
     "pyyaml>=6.0.1",
-    "uxarray>=2026.8.1",
+    "uxarray>=2026.9.0",
 ]
 
 [project.optional-dependencies]
