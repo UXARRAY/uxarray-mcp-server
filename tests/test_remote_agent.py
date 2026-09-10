@@ -278,6 +278,30 @@ class TestUXarrayComputeAgent:
             # carries the key at all, so it must be absent from the kwargs.
             assert "user_endpoint_config" not in executor_cls.call_args.kwargs
 
+    def test_stopped_executor_is_rebuilt(self):
+        """A failed submit must not poison every later call in the process.
+
+        The SDK marks an Executor ``_stopped`` once a submit fails hard, and
+        every call after that raises "is shutdown; no new functions may be
+        executed". Caching it forever meant one unreachable-endpoint error
+        required restarting the server to talk to an endpoint that had since
+        come back -- which is exactly what made restarting the endpoint look
+        like it changed nothing.
+        """
+        agent = UXarrayComputeAgent(
+            HPCConfig(endpoint_id="test-uuid", execution_mode="hpc")
+        )
+
+        with patch("globus_compute_sdk.Executor") as executor_cls:
+            executor_cls.side_effect = lambda **_: MagicMock(_stopped=False)
+            first = agent._get_executor()
+            assert agent._get_executor() is first  # a live one is reused
+
+            first._stopped = True
+            second = agent._get_executor()
+
+        assert second is not first
+
     def test_worker_probe_submits_the_same_shape_as_real_work(self, monkeypatch):
         """A probe shaped unlike real work reports a health it cannot deliver.
 

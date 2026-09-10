@@ -99,6 +99,14 @@ class UXarrayComputeAgent(_AcademyAgent):
         just the module reference, so the HPC endpoint does not need
         uxarray_mcp installed — only uxarray and its dependencies.
         """
+        # A submit that fails hard (an endpoint that never signals readiness,
+        # say) leaves the Executor stopped, and every later call then dies with
+        # "is shutdown; no new functions may be executed" — the process has to
+        # be restarted to talk to an endpoint that has since come back. Treat a
+        # stopped executor as no executor and build a fresh one.
+        if self._executor is not None and getattr(self._executor, "_stopped", False):
+            self._executor = None
+
         if self._executor is None and self.config.endpoint_id:
             from globus_compute_sdk import Executor
             from globus_compute_sdk.serialize import (
