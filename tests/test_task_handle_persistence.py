@@ -143,7 +143,17 @@ class TestTheWatcherCatchesALateTaskId:
         token = CURRENT_OPERATION.set(tracker)
         try:
             _record_task_handle_when_assigned(future, _Config())
-            assert _wait_for(lambda: tracker.task_id == "task-abc")
+            # Wait on the file, not on the attribute. ``record_submission``
+            # sets ``tracker.task_id`` first and writes afterwards, so a wait
+            # on the attribute can win the race against its own disk write and
+            # read the record back a moment too early.
+            assert _wait_for(
+                lambda: (
+                    (get_operation(tracker.operation_id) or {}).get("task_id")
+                    == "task-abc"
+                )
+            )
+            assert tracker.task_id == "task-abc"
         finally:
             CURRENT_OPERATION.reset(token)
 
