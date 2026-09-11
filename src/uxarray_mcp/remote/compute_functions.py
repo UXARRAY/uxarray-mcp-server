@@ -1383,7 +1383,7 @@ def remote_subset_bbox_plot(
     }
 
 
-def remote_yac_remap_smoke() -> Dict[str, Any]:
+def remote_yac_remap_smoke(yac_prefix: str = "") -> Dict[str, Any]:
     """Smoke-test YAC's availability on the remote worker.
 
     Runs the native YAC import/remap in a worker-side subprocess. Some YAC/MPI
@@ -1391,9 +1391,18 @@ def remote_yac_remap_smoke() -> Dict[str, Any]:
     is incomplete; keeping the import in a child process lets the Globus worker
     return structured diagnostics instead of disappearing as ``WorkerLost``.
 
+    ``yac_prefix`` points the probe at an install other than the one the
+    endpoint's ``worker_init`` bakes in, which is how a freshly built YAC gets
+    confirmed before anything is reconfigured to use it. Other ``yac-*``
+    prefixes are dropped from both search paths rather than merely
+    out-prioritised: prepending alone still leaves the old ``libyac`` reachable
+    to the dynamic loader, so a broken new build could pass on the old one's
+    libraries.
+
     The function is self-contained and serialised via AllCodeStrategies so the
     Python 3.13/3.11 mismatch between local SDK and worker doesn't bite.
     """
+    import glob
     import json
     import os
     import re
@@ -1493,6 +1502,32 @@ print(json.dumps(out))
 raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
 """
 
+    env = os.environ.copy()
+    prefix_applied = None
+    if yac_prefix:
+        prefix = os.path.abspath(os.path.expanduser(yac_prefix))
+        site = sorted(
+            glob.glob(os.path.join(prefix, "lib", "python*", "site-packages"))
+        )
+
+        def _repoint(var, wanted):
+            kept = [
+                p
+                for p in env.get(var, "").split(os.pathsep)
+                if p and (os.sep + "yac-") not in p
+            ]
+            env[var] = os.pathsep.join(wanted + kept)
+
+        _repoint("PYTHONPATH", site)
+        _repoint("LD_LIBRARY_PATH", [os.path.join(prefix, "lib")])
+        prefix_applied = {
+            "prefix": prefix,
+            "site_packages": site,
+            "exists": os.path.isdir(prefix),
+            "pythonpath": env["PYTHONPATH"],
+            "ld_library_path": env["LD_LIBRARY_PATH"],
+        }
+
     try:
         command = [sys.executable, "-c", textwrap.dedent(code)]
         launch_mode = "direct"
@@ -1501,7 +1536,7 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
             launch_mode = "srun"
         proc = subprocess.run(
             command,
-            env=os.environ.copy(),
+            env=env,
             capture_output=True,
             text=True,
             timeout=240,
@@ -1519,6 +1554,7 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
         "subprocess_ok": proc.returncode == 0,
         "subprocess_returncode": proc.returncode,
         "launch_mode": launch_mode,
+        "yac_prefix_override": prefix_applied,
         "_worker_runtime": {
             "hostname": __import__("socket").gethostname(),
             "python_version": __import__("platform").python_version(),

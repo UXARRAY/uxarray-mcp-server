@@ -11,9 +11,12 @@ USERNAME="${NCAR_USERNAME:-$USER}"   # override with NCAR_USERNAME if it differs
 ENDPOINT_NAME="${ENDPOINT_NAME:-ucar-uxarray-yac}"
 CONDA_ENV="/glade/work/$USERNAME/conda-envs/uxarray_dev"
 # Override to test a freshly built YAC without editing this file:
-#   YAC_VERSION=3.20.2 ucar_endpoint.sh restart
-# Bump the default only once that build is verified on the endpoint.
-YAC_VERSION="${YAC_VERSION:-3.18}"
+#   YAC_VERSION=3.18 ucar_endpoint.sh restart
+# Bump the default only once that build is verified on the endpoint. 3.20.2 was
+# verified on Casper: the uxarray helper resolved to the 3.20.2 .so and a real
+# HEALPix remap ran. worker_init sources activate-yac.sh from this prefix, so
+# `restart` is what picks the change up.
+YAC_VERSION="${YAC_VERSION:-3.20.2}"
 YAC_PREFIX="$HOME/opt/yac-$YAC_VERSION"
 YAC_ACTIVATE="$YAC_PREFIX/activate-yac.sh"
 TMUX_SESSION="uxarray-endpoint"
