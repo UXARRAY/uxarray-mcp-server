@@ -68,6 +68,12 @@ from .stateful import (
     resume_workflow,
     run_workflow,
 )
+from .transfer_tools import (
+    transfer_get,
+    transfer_ls,
+    transfer_put,
+    transfer_status,
+)
 from .vector_calc import (
     calculate_azimuthal_mean,
     calculate_curl,
@@ -135,4 +141,8 @@ __all__ = [
     "manage_session",
     "get_status",
     "get_result",
+    "transfer_ls",
+    "transfer_put",
+    "transfer_get",
+    "transfer_status",
 ]

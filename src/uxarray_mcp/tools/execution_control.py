@@ -62,6 +62,110 @@ def _make_check(
     return result
 
 
+def _transfer_check(
+    base_config: Any, endpoint: str | None, run_probe: bool
+) -> Dict[str, Any]:
+    """Report whether this endpoint can move data, not just run code.
+
+    Passing when nothing is configured is deliberate: transfers are opt-in the
+    way HPC itself is, and a doctor that goes red for a feature the user never
+    asked for teaches people to ignore it. What is worth failing on is a
+    configured transfer that cannot work -- SDK absent, no consent, or a write
+    root the collection will not show.
+
+    The reachability probe rides on ``run_remote_probe`` because it is a real
+    network call, and it lists the write root rather than transferring
+    anything: a listing proves the collection, the consent and the path all
+    line up, and moves no bytes.
+    """
+    try:
+        profile = base_config.resolve_endpoint(endpoint=endpoint)
+    except Exception:
+        profile = None
+    transfer_profile = getattr(profile, "globus_transfer", None)
+    if transfer_profile is None:
+        return _make_check(
+            "transfer",
+            True,
+            "No globus_transfer block configured; this endpoint moves no files.",
+            details={"configured": False},
+            guidance=(
+                "Add hpc.endpoints.<name>.globus_transfer with "
+                "remote_collection_id and remote_write_root to enable "
+                "transfer_put / transfer_get."
+            ),
+        )
+
+    details: Dict[str, Any] = {
+        "configured": True,
+        "endpoint_name": getattr(profile, "name", None),
+        "remote_collection_id": transfer_profile.remote_collection_id,
+        "local_collection_id": transfer_profile.local_collection_id,
+        "remote_write_root": transfer_profile.remote_write_root,
+        "remote_read_root": transfer_profile.remote_read_root,
+        "collection_roots": list(transfer_profile.collection_roots),
+    }
+
+    if not transfer_profile.remote_write_root:
+        return _make_check(
+            "transfer",
+            False,
+            "globus_transfer is configured without a remote_write_root, so "
+            "uploads have nowhere they are allowed to land.",
+            details=details,
+            guidance="Set remote_write_root on this endpoint's globus_transfer block.",
+        )
+
+    from uxarray_mcp.remote.transfer import TransferService
+
+    service = TransferService(transfer_profile)
+    try:
+        service.client  # noqa: B018 -- builds the client, checks login state
+    except Exception as exc:
+        return _make_check(
+            "transfer",
+            False,
+            "Globus Transfer is configured but no client could be built.",
+            details={**details, **_exception_details(exc)},
+            guidance=(
+                "Install the transfer extra (`uv sync --extra transfer`) and "
+                "complete the Globus login in a terminal; an MCP server cannot "
+                "open a browser consent flow."
+            ),
+        )
+
+    if not run_probe:
+        return _make_check(
+            "transfer",
+            True,
+            "Globus Transfer client is authenticated; collection reachability "
+            "not probed.",
+            details=details,
+        )
+
+    try:
+        entries = service.ls(transfer_profile.remote_write_root)
+    except Exception as exc:
+        return _make_check(
+            "transfer",
+            False,
+            f"Write root {transfer_profile.remote_write_root!r} could not be "
+            f"listed on the collection.",
+            details={**details, **_exception_details(exc)},
+            guidance=(
+                "Check that remote_collection_id serves this filesystem, that "
+                "collection_roots translate the path the way the collection "
+                "names it, and that the write root exists."
+            ),
+        )
+    return _make_check(
+        "transfer",
+        True,
+        f"Collection reachable; write root lists {len(entries)} entries.",
+        details={**details, "entry_count": len(entries)},
+    )
+
+
 def _guidance_for_error(message: str) -> str | None:
     """Return targeted next-step guidance for common HPC setup failures."""
     lowered = message.lower()
@@ -661,6 +765,8 @@ def validate_hpc_setup(
                     ),
                 )
             )
+
+    checks.append(_transfer_check(base_config, endpoint, run_remote_probe))
 
     passed = all(check["passed"] for check in checks)
     result = {
