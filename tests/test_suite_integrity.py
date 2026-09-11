@@ -59,3 +59,22 @@ def test_the_installed_uxarray_meets_the_declared_floor():
         f"{declared[0]}; the suite is exercising a version we refuse to "
         f"install against."
     )
+
+
+def test_the_suite_cannot_see_a_real_endpoint():
+    """No test may resolve the machine's own HPC configuration.
+
+    A developer with `~/.config/uxarray-mcp/config.yaml` used to get a real
+    endpoint id here, and any tool called with `use_remote=True` then made a
+    live Globus call that stalled to the SDK's 60 s default before falling
+    back to local. That is a unit test whose runtime and result depend on a
+    file outside the repository and on whether a cluster is up; the autouse
+    `offline_config` fixture closes both discovery paths, and this asserts it
+    is still closed.
+    """
+    from uxarray_mcp.remote.config import discover_config_path, load_config
+
+    config = load_config(discover_config_path())
+
+    assert config.endpoint_id is None
+    assert config.endpoints == {}
