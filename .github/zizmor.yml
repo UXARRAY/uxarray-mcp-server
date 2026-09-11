@@ -10,6 +10,6 @@ rules:
     ignore:
       - ci.yml
       - upstream-compat.yml
-      - monthly-release.yml
+      - release-on-upstream.yml
       - release.yml
       - zizmor.yml
