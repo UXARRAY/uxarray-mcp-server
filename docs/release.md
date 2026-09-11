@@ -1,37 +1,65 @@
 # Release Process
 
-This project follows the same broad release model as UXarray, with an added
-scheduled release workflow:
+This project follows the same broad release model as UXarray, and releases
+when UXarray does:
 
 1. GitHub CI must be green on `main`.
-2. On the 5th of every month, GitHub Actions checks for commits since the
-   latest `v*` tag.
-3. If there are no new commits, the release is skipped.
-4. If there are new commits, the workflow bumps the patch version, commits it,
-   creates a `v<version>` tag, and publishes a GitHub Release.
-5. The release workflow builds and publishes the Python package to PyPI.
+2. Every day, GitHub Actions reads the newest `uxarray` release from PyPI and
+   checks for commits since the latest `v*` tag.
+3. If upstream has not moved and no commits have landed, nothing happens.
+4. Otherwise the workflow computes the version, rewrites the version files and
+   the uxarray pin, runs the full checks against that upstream release, and
+   opens a release pull request.
+5. A human merges that pull request and tags `v<version>` on `main`. Tagging
+   is what publishes; nothing reaches PyPI unattended.
 6. Conda packages are handled through a conda-forge feedstock.
 
-## Monthly Automation
+## Versioning
 
-`.github/workflows/monthly-release.yml` runs at 05:00 UTC on the 5th of every
-month. It can also be run manually with `workflow_dispatch`.
+Versions are CalVer: `<year>.<month>.<patch>`, mirroring the `year.month` of
+the `uxarray` release they were built against, with the patch counting our own
+releases within that month. `2026.9.2` is our third release against upstream's
+September 2026 line, not upstream's third patch.
+
+Components are never zero-padded. Upstream tags `v2026.09.0`, but PEP 440
+strips the leading zero, so a dist built from a padded version publishes as
+`2026.9.0` and disagrees with the tag it came from. `prepare_release.py`
+rejects a padded version rather than normalizing it silently.
+
+Upstream is read from PyPI rather than from upstream's git tags, which mix
+`v2026.09.0` and `v2026.4.0`; PyPI normalizes both.
+
+## Daily Automation
+
+`.github/workflows/release-on-upstream.yml` runs at 05:17 UTC daily. It can
+also be run manually with `workflow_dispatch`.
 
 Default behavior:
 
-- no previous `v*` tag: release the current version from `pyproject.toml`
-- previous `vX.Y.Z` tag exists and commits have landed since then: release
-  `X.Y.(Z+1)`
-- no commits since the latest tag: skip
+- a `uxarray` release with a `year.month` we have not shipped against: release
+  `<that year>.<that month>.0`
+- the same `year.month` we already shipped against, with commits since the
+  latest tag: bump our patch
+- neither: skip
+
+The release commit moves both ends of the uxarray pin, to
+`uxarray>=<upstream>,<next month>`. Raising only the floor would leave a
+ceiling written for the previous month, which makes the package uninstallable
+beside the upstream release it was just tested against.
+
+If PyPI cannot be reached, the version falls back to a patch bump and the pin
+is left exactly as it was; a ceiling is never guessed from a version that
+could not be read.
 
 Manual inputs:
 
-- `version`: release an explicit version such as `0.1.0`
-- `force`: release even if there are no commits since the latest tag
+- `version`: release an explicit version such as `2026.9.0`
+- `upstream`: mirror a specific `uxarray` version instead of reading PyPI
+- `force`: prepare a release with no commits and no new upstream
 
 The workflow updates:
 
-- `pyproject.toml`
+- `pyproject.toml` — the version and both ends of the uxarray pin
 - `src/uxarray_mcp/__init__.py`
 - `conda/recipe/meta.yaml`
 - `CHANGELOG.md` — the `## Unreleased` section is closed under a heading for
@@ -40,8 +68,16 @@ The workflow updates:
   relocked. Nothing in CI passes `--locked`, which means a stale lock is
   invisible here and only fails for someone checking out the tag
 
-Then it runs the release checks, builds the package, commits the version bump,
-tags it, pushes to `main`, and creates the GitHub Release.
+Then it installs the upstream release being mirrored, runs the release checks
+against it with `uv run --no-sync` (a bare `uv run` re-syncs to `uv.lock` and
+would silently put the locked uxarray back), builds the package, and opens the
+release pull request. On failure it opens an issue naming the upstream version
+and stops. It never tags, never publishes, and never pushes to `main`.
+
+The cutover from `0.3.1` to CalVer is a one-time manual `workflow_dispatch`
+with `version=2026.9.0`, run after reading the diff. It is irreversible: PEP
+440 makes `2026.9.0 > 0.3.1`, so anyone pinned `>=0.3` moves to CalVer on
+their next resolve.
 
 ## PyPI
 

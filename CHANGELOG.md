@@ -1,7 +1,8 @@
 # Changelog
 
-All notable changes are recorded here. Dates are ISO 8601 (UTC). The project
-uses Semantic Versioning for public releases.
+All notable changes are recorded here. Dates are ISO 8601 (UTC). Releases are
+CalVer, `<year>.<month>.<patch>`, mirroring the `uxarray` release they were
+built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
 ### Added
@@ -26,6 +27,21 @@ uses Semantic Versioning for public releases.
   count stated. The service builds its submission payload as a plain dict after
   an explicit `get_submission_id()`, which keeps the wire shape in one place and
   lets all 44 tests run against a fake client with no credentials in CI.
+
+### Changed
+- Releases now follow upstream instead of the calendar. The workflow polled on
+  the 5th of every month, but upstream skipped 2026.01 and 2026.05, shipped
+  twice in August, and released 2026.09.0 on the 10th, so the poll was either
+  early or late every time. It now runs daily, reads the newest `uxarray` from
+  PyPI (not from upstream's tags, which mix `v2026.09.0` and `v2026.4.0`), and
+  releases `<year>.<month>.<patch>` mirroring upstream's month. The release
+  commit moves both ends of the uxarray pin: a floor raised without its
+  ceiling leaves the package uninstallable beside the very release it was
+  tested against. Zero-padded versions are refused rather than normalized,
+  because PEP 440 strips the zero and `2026.09.0` would publish as a dist
+  disagreeing with its own tag. The workflow no longer tags, releases or
+  publishes on its own — green opens a release pull request, red opens an
+  issue, and a human merge is what reaches PyPI.
 
 ### Fixed
 - A directory of SCRIP meshes was classified as nothing and advised nothing.
