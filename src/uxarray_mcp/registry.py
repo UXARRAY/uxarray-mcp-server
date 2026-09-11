@@ -138,6 +138,35 @@ _DEFERRED_TOOLS: dict[str, tuple[str, ...]] = {
     "hpc": ("check_remote_yac",),
 }
 
+# Deferred too, but only when some endpoint declares a ``globus_transfer``
+# block. An install that moves no files should show no sign of these: a tool
+# whose only possible answer is "not configured" is still a tool the model can
+# call, and calling it is the wrong lesson to have taught it.
+_CONDITIONAL_TOOLS: dict[str, tuple[str, ...]] = {
+    "transfer": (
+        "transfer_ls",
+        "transfer_put",
+        "transfer_get",
+        "transfer_status",
+    ),
+}
+
+_CONDITIONAL_NAMES: frozenset[str] = frozenset(
+    name for names in _CONDITIONAL_TOOLS.values() for name in names
+)
+
+
+def _transfers_are_configured() -> bool:
+    """Whether any endpoint says where its files live.
+
+    Wrapped rather than imported at module scope so building a registry never
+    depends on config being readable, and so a test can decide the answer
+    without writing a config file.
+    """
+    from uxarray_mcp.tools.transfer_tools import transfers_are_configured
+
+    return transfers_are_configured()
+
 
 # ---------------------------------------------------------------------------
 # Prompt-as-tool helpers (formerly @mcp.prompt() decorators)
@@ -638,6 +667,10 @@ def _apply_output_schema(tool: object, raw_name: str) -> None:
 
 _SEARCH_HINTS: dict[str, str] = {
     "check_remote_yac": "yac native remap conservative interpolation worker library build smoke test hpc",
+    "transfer_ls": "list remote directory globus collection files hpc browse",
+    "transfer_put": "upload stage copy file to hpc cluster globus transfer send",
+    "transfer_get": "download fetch retrieve file from hpc cluster globus transfer",
+    "transfer_status": "transfer task progress bytes globus poll",
     "calculate_curl": "vorticity rotation circulation wind curl cross product compute vector field zeta",
     "calculate_divergence": "compression expansion source sink wind divergence",
     "calculate_gradient": "spatial derivative slope field gradient",
@@ -760,6 +793,18 @@ def build_registry(
                 search_hint=_SEARCH_HINTS.get(raw, ""),
             )
             registered.add(raw)
+        if _transfers_are_configured():
+            for ns, raw in _flatten(_CONDITIONAL_TOOLS):
+                func = getattr(_tools_mod, raw)
+                registry.register(func, namespace=ns)
+                qualified = f"{ns}{sep}{raw}"
+                _apply_tags(registry, qualified, raw, func)
+                registry.update_tool_metadata(
+                    qualified,
+                    defer=True,
+                    search_hint=_SEARCH_HINTS.get(raw, ""),
+                )
+                registered.add(raw)
         registry.enable_tool_discovery()
 
     # ``enable_tool_discovery`` registers ``discover_tools`` itself, so it
@@ -795,7 +840,11 @@ def _verify_coverage(registered: set[str], profile: Profile) -> None:
                 f"Bridge tried to register non-public tools: {sorted(bogus)}"
             )
         return
-    missing = public - registered
+    # The conditional tools are public so they can be imported and tested, but
+    # absent from an unconfigured registry on purpose. Excusing them here is
+    # narrower than excusing whatever happens not to be registered: anything
+    # else missing is still the loud failure this check exists to be.
+    missing = public - registered - _CONDITIONAL_NAMES
     if missing:
         raise RuntimeError(
             f"Namespace plan out of date — {len(missing)} public tools "
