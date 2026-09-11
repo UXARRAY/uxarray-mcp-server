@@ -9,6 +9,7 @@ import tempfile
 import threading
 import uuid
 from contextlib import suppress
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -299,6 +300,9 @@ def create_operation(
     tool_name: str,
     session_id: str | None = None,
     workflow_id: str | None = None,
+    endpoint_id: str | None = None,
+    task_id: str | None = None,
+    submitted_at: str | None = None,
 ) -> dict[str, Any]:
     operation_id = _new_id("op")
     record = {
@@ -306,6 +310,13 @@ def create_operation(
         "tool_name": tool_name,
         "session_id": session_id,
         "workflow_id": workflow_id,
+        # Written as None up front and filled in at submit. A record that
+        # never reaches an endpoint keeps them None, which is the honest
+        # answer; records written before these keys existed simply lack
+        # them, so every reader goes through .get().
+        "endpoint_id": endpoint_id,
+        "task_id": task_id,
+        "submitted_at": submitted_at,
         "status": "running",
         "stage": "started",
         "created_at": _now_utc(),
@@ -359,6 +370,34 @@ def append_operation_event(
     if details:
         event["details"] = details
     operation["events"].append(event)
+    return save_operation(operation)
+
+
+def record_task_handle(
+    operation_id: str,
+    *,
+    task_id: str | None,
+    endpoint_id: str | None = None,
+) -> dict[str, Any]:
+    """Persist the Globus Compute handle for work that is now in flight.
+
+    Until this exists a process that dies while waiting on a remote task
+    leaves nothing behind that could find that task again: the job keeps
+    running on the cluster and the only record of it was in the memory that
+    just went away.
+    """
+    operation = get_operation(operation_id)
+    operation["task_id"] = task_id
+    if endpoint_id is not None:
+        operation["endpoint_id"] = endpoint_id
+    operation["submitted_at"] = _now_utc()
+    operation["events"].append(
+        {
+            "timestamp_utc": operation["submitted_at"],
+            "stage": operation.get("stage", "submitted"),
+            "message": f"Remote task {task_id or 'unknown'} accepted.",
+        }
+    )
     return save_operation(operation)
 
 
@@ -613,6 +652,8 @@ class OperationTracker:
     tool_name: str
     session_id: str | None = None
     workflow_id: str | None = None
+    endpoint_id: str | None = None
+    task_id: str | None = field(init=False, default=None)
     operation_id: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -620,8 +661,20 @@ class OperationTracker:
             tool_name=self.tool_name,
             session_id=self.session_id,
             workflow_id=self.workflow_id,
+            endpoint_id=self.endpoint_id,
         )
         self.operation_id = record["operation_id"]
+
+    def record_submission(
+        self, task_id: str | None, endpoint_id: str | None = None
+    ) -> None:
+        """Store the handle for a task the endpoint has acknowledged."""
+        self.task_id = task_id
+        if endpoint_id is not None:
+            self.endpoint_id = endpoint_id
+        record_task_handle(
+            self.operation_id, task_id=task_id, endpoint_id=self.endpoint_id
+        )
 
     def stage(
         self, stage: str, message: str, details: dict[str, Any] | None = None
@@ -639,3 +692,16 @@ class OperationTracker:
 
     def fail(self, summary: str) -> None:
         finalize_operation(self.operation_id, status="failed", summary=summary)
+
+
+#: The operation the current call is being tracked under, if any.
+#:
+#: The tracker is created in ``tools/remote_tools.py`` but the task id only
+#: exists deep inside ``remote/agent.py``, past a dozen tool-specific agent
+#: methods. Threading an extra argument through all of them to carry one
+#: string would put the plumbing in every signature; a context variable
+#: keeps it out of the API and, unlike an attribute on the shared agent,
+#: does not mix up two tools submitting at once.
+CURRENT_OPERATION: ContextVar[OperationTracker | None] = ContextVar(
+    "uxarray_mcp_current_operation", default=None
+)

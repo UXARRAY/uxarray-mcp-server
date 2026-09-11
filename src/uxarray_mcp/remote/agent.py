@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import re
+import threading
+import time
 import warnings
+from contextlib import suppress
 from typing import Any, Dict, Optional
 
 try:
@@ -67,6 +70,47 @@ def _normalize_remote_error(exc: Exception, config: Any) -> Exception:
     if len(text) > 600:
         return RuntimeError(f"Remote execution failed on {endpoint}: {final}")
     return exc
+
+
+#: How long to wait for the Globus Compute web service to hand back a task id.
+_TASK_ID_WAIT_SECONDS = 30.0
+_TASK_ID_POLL_SECONDS = 0.05
+
+
+def _record_task_handle_when_assigned(future: Any, config: Any) -> None:
+    """Write the task id onto the tracked operation as soon as it exists.
+
+    ``submit()`` returns before the web service has acknowledged anything, so
+    ``future.task_id`` is ``None`` at that line -- the SDK's own docstring says
+    it "will appear later when the task is submitted". Waiting for it on this
+    thread would add that delay to every remote call, so a watcher thread does
+    the waiting and the caller goes straight on to await the result.
+
+    Best effort by design: a task id that never arrives means the submission
+    itself is in trouble, and ``future.result()`` is about to say so far more
+    usefully than an exception raised from here would.
+    """
+    from uxarray_mcp.state import CURRENT_OPERATION
+
+    tracker = CURRENT_OPERATION.get()
+    if tracker is None:
+        return
+
+    endpoint_id = getattr(config, "endpoint_id", None)
+
+    def _watch() -> None:
+        deadline = time.monotonic() + _TASK_ID_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            task_id = getattr(future, "task_id", None)
+            if task_id is not None:
+                with suppress(Exception):
+                    tracker.record_submission(str(task_id), endpoint_id)
+                return
+            if future.done():
+                return
+            time.sleep(_TASK_ID_POLL_SECONDS)
+
+    threading.Thread(target=_watch, name="uxarray-mcp-task-handle", daemon=True).start()
 
 
 def _stored_plot_artifacts(result: Any, func_name: str) -> list[dict[str, Any]] | None:
@@ -589,6 +633,7 @@ class UXarrayComputeAgent(_AcademyAgent):
                 category=UserWarning,
             )
             future = executor.submit(func, *args, **kwargs)
+            _record_task_handle_when_assigned(future, self.config)
             try:
                 result = await loop.run_in_executor(
                     None, future.result, self.config.timeout_seconds

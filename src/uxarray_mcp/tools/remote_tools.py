@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextvars
 import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -18,7 +19,7 @@ from uxarray_mcp.content_blocks import (
 )
 from uxarray_mcp.domain.mesh import is_healpix_spec, parse_healpix_zoom
 from uxarray_mcp.json_safe import json_text
-from uxarray_mcp.state import OperationTracker
+from uxarray_mcp.state import CURRENT_OPERATION, OperationTracker
 
 
 def _endpoint_manager_is_up(agent) -> tuple[bool, str]:
@@ -62,8 +63,14 @@ def _run_sync(async_call: Callable[[], Any]) -> Dict[str, Any]:
 
     # Inside async context (e.g. MCP server) — run in a new thread. Keep the
     # operation outside the loop-detection try so its RuntimeError is preserved.
+    #
+    # The context is copied across by hand because a thread starts with a fresh
+    # one, and the tracker that records the task handle travels in a context
+    # variable. Without this, remote calls made from the MCP server would be
+    # the ones that lost their handle -- the only calls that matter.
+    context = contextvars.copy_context()
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        return pool.submit(lambda: asyncio.run(async_call())).result()
+        return pool.submit(context.run, lambda: asyncio.run(async_call())).result()
 
 
 def _path_is_locally_reachable(path_hint: str | None) -> bool:
@@ -159,17 +166,24 @@ def _run_with_optional_hpc(
         return result
 
     endpoint_label = agent.config.endpoint_name or "configured"
+    tracker.endpoint_id = agent.config.endpoint_id
     tracker.stage(
         "submitted", f"Submitting {tool_name} to the HPC endpoint {endpoint_label}."
     )
+    token = CURRENT_OPERATION.set(tracker)
     try:
         result = remote_call(agent)
     except (TimeoutError, concurrent.futures.TimeoutError) as exc:
+        # The task is still running out there; naming it is the difference
+        # between "wait and try again" and being able to go look.
+        still_running = (
+            f" The submitted task is {tracker.task_id}." if tracker.task_id else ""
+        )
         msg = (
             f"Remote execution of {tool_name} timed out after {agent.config.timeout_seconds} seconds. "
             f"This usually means the job was submitted to the remote queue on endpoint '{endpoint_label}' but is "
             "waiting in the scheduler queue (Slurm/PBS), or the compute nodes are busy. "
-            "You can increase the timeout in config.yaml or wait and try again."
+            f"You can increase the timeout in config.yaml or wait and try again.{still_running}"
         )
         tracker.fail(msg)
         raise RuntimeError(msg) from exc
@@ -177,6 +191,8 @@ def _run_with_optional_hpc(
         msg = f"Remote execution of {tool_name} failed: {exc}"
         tracker.fail(msg)
         raise
+    finally:
+        CURRENT_OPERATION.reset(token)
 
     result["_provenance"]["operation_id"] = tracker.operation_id
     tracker.succeed(f"{tool_name} completed with remote execution.")
