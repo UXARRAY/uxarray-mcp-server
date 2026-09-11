@@ -15,9 +15,13 @@ TMUX_SESSION="uxarray-endpoint"
 
 YAC_SHIM_LIB="$HOME/local/yac-runtime-shims/lib"
 # Override to test a freshly built YAC without editing this file:
-#   YAC_VERSION=3.20.2 chrysalis_endpoint.sh restart
-# Bump the default only once that build is verified on the endpoint.
-YAC_VERSION="${YAC_VERSION:-3.18}"
+#   YAC_VERSION=3.18 chrysalis_endpoint.sh restart
+# Bump the default only once that build is verified on the endpoint. 3.20.2 was
+# verified on chr-0104 under srun via `yac_smoke_test.py --yac-prefix`: the
+# uxarray helper resolved to the 3.20.2 .so and the 192->768 remap returned the
+# same mean as 3.18 to 16 digits. worker_init bakes the prefix in at configure
+# time, so changing this needs `configure <mode>` again, then `restart`.
+YAC_VERSION="${YAC_VERSION:-3.20.2}"
 YAC_LOCAL_PREFIX="$HOME/local/yac-$YAC_VERSION"
 UXARRAY_YAC_SRC="/lcrc/group/e3sm/jain/uxarray-yac-src"
 MKL_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/oneapi-2022.1.0/intel-oneapi-mkl-2022.1.0-iwhfz52/mkl/2022.1.0/lib/intel64"
