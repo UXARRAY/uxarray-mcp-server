@@ -1,0 +1,187 @@
+name: Release on upstream
+
+# Upstream uxarray does not release on a schedule: it skipped 2026.01 and
+# 2026.05, shipped twice in August, and released 2026.09.0 on the 10th. A
+# monthly cron on the 5th was therefore either early or late every time. This
+# polls daily and reacts to what upstream actually published.
+#
+# It never publishes. Green opens a release PR; red opens an issue. Everything
+# that reaches PyPI does so through a human merge of that PR.
+
+on:
+  schedule:
+    # 05:17 UTC daily.
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Explicit version to release, e.g. 2026.9.0. Leave empty to derive from upstream."
+        required: false
+        default: ""
+      upstream:
+        description: "Upstream uxarray version to mirror. Leave empty to read PyPI."
+        required: false
+        default: ""
+      force:
+        description: "Prepare a release even with no commits and no new upstream."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  prepare-release:
+    if: github.repository == 'UXARRAY/uxarray-mcp-server'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Git identity
+        run: |
+          git config user.name "Rajeev Jain"
+          git config user.email "rajeeja@gmail.com"
+
+      - name: Prepare version
+        id: prep
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_UPSTREAM: ${{ inputs.upstream }}
+          INPUT_FORCE: ${{ inputs.force }}
+        run: |
+          args=()
+          if [ -n "$INPUT_VERSION" ]; then
+            args+=(--version "$INPUT_VERSION")
+          fi
+          if [ -n "$INPUT_UPSTREAM" ]; then
+            args+=(--upstream "$INPUT_UPSTREAM")
+          fi
+          if [ "$INPUT_FORCE" = "true" ]; then
+            args+=(--force)
+          fi
+          python scripts/prepare_release.py "${args[@]}"
+
+      - name: Stop if no release is needed
+        if: steps.prep.outputs.release_needed != 'true'
+        run: |
+          echo "No commits since the latest tag and no new upstream release."
+
+      - name: Install uv
+        if: steps.prep.outputs.release_needed == 'true'
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.12
+        if: steps.prep.outputs.release_needed == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Relock uv.lock at the new version
+        if: steps.prep.outputs.release_needed == 'true'
+        run: |
+          # uv.lock records the project's own version and the resolved uxarray,
+          # so the bump above left it describing the previous release against
+          # the previous upstream. Nothing in CI passes --locked, so the
+          # mismatch is invisible here and surfaces for whoever checks out the
+          # tag and runs `uv sync --locked`.
+          # Extras go in here, not on the `uv run` lines below: those pass
+          # --no-sync, and a `uv run --extra` would have to sync to honour it.
+          uv lock
+          uv sync --locked --dev --extra hpc --extra docs
+
+      - name: Install the upstream release being mirrored
+        if: steps.prep.outputs.release_needed == 'true'
+        env:
+          UPSTREAM: ${{ steps.prep.outputs.upstream }}
+        run: |
+          if [ -n "$UPSTREAM" ]; then
+            uv pip install --upgrade "uxarray==${UPSTREAM}"
+          fi
+          uv pip list | grep -E '^uxarray '
+
+      - name: Run release checks
+        if: steps.prep.outputs.release_needed == 'true'
+        # --no-sync, or this step silently undoes the install above it. A bare
+        # `uv run` re-syncs the environment to `uv.lock` first, which would put
+        # back whatever uxarray the lock resolved and leave this job proving
+        # nothing about the upstream release it is named for. Measured in
+        # upstream-compat.yml: a bare `uv run` reported the locked version
+        # after an explicit `uv pip install` of a different one.
+        run: |
+          uv run --no-sync pre-commit run --all-files
+          uv run --no-sync pytest tests/ -m "not live" -v
+          uv run --no-sync --extra docs sphinx-build -b html docs docs/_build/html -W --keep-going
+
+      - name: Build and check distributions
+        if: steps.prep.outputs.release_needed == 'true'
+        run: |
+          uv build
+          uvx twine check dist/*
+          uv venv /tmp/uxarray-mcp-wheel --python 3.12
+          uv pip install --python /tmp/uxarray-mcp-wheel/bin/python dist/uxarray_mcp-*.whl
+          /tmp/uxarray-mcp-wheel/bin/uxarray-mcp --help
+
+      - name: Update conda recipe source hash
+        if: steps.prep.outputs.release_needed == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.prep.outputs.version }}
+        run: |
+          python scripts/update_conda_recipe.py \
+            --version "$RELEASE_VERSION" \
+            --sdist dist/uxarray_mcp-*.tar.gz
+
+      - name: Open the release pull request
+        if: steps.prep.outputs.release_needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.prep.outputs.version }}
+          RELEASE_TAG: ${{ steps.prep.outputs.tag }}
+          PREVIOUS_TAG: ${{ steps.prep.outputs.previous_tag }}
+          CHANGED_COMMITS: ${{ steps.prep.outputs.changed_commits }}
+          UPSTREAM: ${{ steps.prep.outputs.upstream }}
+        run: |
+          # No tag, no GitHub release, no dispatch to release.yml. The tag is
+          # cut from the merge commit by a human; nothing here can reach PyPI.
+          branch="release/${RELEASE_VERSION}"
+          git checkout -b "$branch"
+          git add pyproject.toml src/uxarray_mcp/__init__.py \
+            conda/recipe/meta.yaml CHANGELOG.md uv.lock
+          if git diff --cached --quiet; then
+            echo "Version files already match ${RELEASE_VERSION}; nothing to open."
+            exit 0
+          fi
+          git commit -m "Release ${RELEASE_VERSION}"
+          git push origin "$branch"
+          {
+            echo "Release ${RELEASE_VERSION} against uxarray ${UPSTREAM:-unchanged}, ${CHANGED_COMMITS} commit(s) since ${PREVIOUS_TAG:-the first commit}."
+            echo "Checks, build and wheel smoke test passed on this branch before it was opened."
+            echo "Merging this, then tagging ${RELEASE_TAG} on main, is what publishes."
+          } > pr-body.md
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$branch" \
+            --title "Release ${RELEASE_VERSION}" \
+            --body-file pr-body.md
+
+      - name: Report a failed release check
+        if: failure() && steps.prep.outputs.release_needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.prep.outputs.version }}
+          UPSTREAM: ${{ steps.prep.outputs.upstream }}
+        run: |
+          {
+            echo "Preparing ${RELEASE_VERSION} against uxarray ${UPSTREAM:-unchanged} failed before any pull request was opened."
+            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > issue-body.md
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Release ${RELEASE_VERSION} blocked by uxarray ${UPSTREAM:-unchanged}" \
+            --body-file issue-body.md
