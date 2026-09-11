@@ -71,6 +71,14 @@ hpc = [
     "academy-py>=0.3.1",
     "globus-compute-sdk>=4.5.0",
 ]
+# Moving files is separate from running code on them: an install that only
+# needs remote compute should not pull a second Globus SDK, and a transfer
+# client is useless without the Compute login it reuses, so this extra is
+# additive to `hpc` rather than a replacement for it.
+transfer = [
+    "globus-compute-sdk>=4.5.0",
+    "globus-sdk>=3.40.0",
+]
 docs = [
     "sphinx>=7.0",
     "sphinx-book-theme>=1.1.0",
