@@ -4128,6 +4128,10 @@ hpc = [
 openapi = [
     { name = "toolregistry-server", extra = ["openapi"] },
 ]
+transfer = [
+    { name = "globus-compute-sdk" },
+    { name = "globus-sdk" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -4144,6 +4148,8 @@ dev = [
 requires-dist = [
     { name = "academy-py", marker = "extra == 'hpc'", specifier = ">=0.3.1" },
     { name = "globus-compute-sdk", marker = "extra == 'hpc'", specifier = ">=4.5.0" },
+    { name = "globus-compute-sdk", marker = "extra == 'transfer'", specifier = ">=4.5.0" },
+    { name = "globus-sdk", marker = "extra == 'transfer'", specifier = ">=3.40.0" },
     { name = "holoviews", specifier = ">=1.19.0" },
     { name = "matplotlib", specifier = ">=3.9.0" },
     { name = "mcp", specifier = ">=1.27,<3" },
@@ -4156,7 +4162,7 @@ requires-dist = [
     { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.5.0" },
     { name = "uxarray", specifier = ">=2026.9.0" },
 ]
-provides-extras = ["openapi", "hpc", "docs"]
+provides-extras = ["openapi", "hpc", "transfer", "docs"]
 
 [package.metadata.requires-dev]
 dev = [
