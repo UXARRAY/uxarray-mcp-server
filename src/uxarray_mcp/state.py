@@ -107,6 +107,76 @@ def _sanitize_netcdf_attrs(data: Any) -> Any:
     return cleaned
 
 
+#: Connectivity names a UGRID ``grid_topology`` variable may point at. Kept
+#: here rather than imported so the sanitizer does not depend on a private
+#: uxarray module path.
+_UGRID_CONNECTIVITY_NAMES = (
+    "face_node_connectivity",
+    "face_edge_connectivity",
+    "face_face_connectivity",
+    "edge_node_connectivity",
+    "edge_face_connectivity",
+    "node_edge_connectivity",
+    "node_face_connectivity",
+)
+
+
+def _widen_narrow_fill_values(ds: xr.Dataset) -> xr.Dataset:
+    """Widen integer arrays whose ``_FillValue`` does not fit their dtype.
+
+    uxarray's ICON reader keeps the file's native int32 connectivity while
+    attaching the UGRID attribute template, whose ``_FillValue`` is the int64
+    sentinel ``np.iinfo(np.intp).min``. netCDF4 rejects that pairing at
+    ``createVariable`` with ``OverflowError: Python integer
+    -9223372036854775808 out of bounds for int32``, so an ICON grid cannot be
+    written at all. The sentinel is the convention and the data is the thing
+    that is too narrow, so widen the data rather than rewrite the attribute.
+    """
+    for name, var in ds.variables.items():
+        fill = var.attrs.get("_FillValue")
+        if fill is None or not np.issubdtype(var.dtype, np.integer):
+            continue
+        info = np.iinfo(var.dtype)
+        if info.min <= int(fill) <= info.max:
+            continue
+        ds[name] = var.astype(np.int64)
+        ds[name].attrs = dict(var.attrs)
+    return ds
+
+
+def _drop_phantom_topology_attrs(ds: xr.Dataset) -> xr.Dataset:
+    """Strip ``grid_topology`` attributes that name something not in the file.
+
+    uxarray's ``_encode_ugrid`` aliases its module-level attribute template
+    instead of copying it, then mutates it per grid. So the first grid a
+    process exports leaves its own connectivity names on the template, and
+    every later grid inherits them whether or not it has those variables.
+    Reading such a file back raises ``ValueError: cannot rename
+    'face_edge_connectivity' because it is not a variable or dimension in this
+    dataset`` -- ordering-dependent, and silent until someone reopens it.
+    """
+    topology = ds.variables.get("grid_topology")
+    if topology is None:
+        return ds
+    present = set(ds.variables)
+    kept = {}
+    for key, value in topology.attrs.items():
+        # `topology_dimension` is an integer rank, not the name of anything --
+        # only string-valued attributes name variables or dimensions.
+        if not isinstance(value, str):
+            kept[key] = value
+            continue
+        if key in _UGRID_CONNECTIVITY_NAMES and value not in present:
+            continue
+        if key.endswith("_coordinates") and not set(value.split()) <= present:
+            continue
+        if key.endswith("_dimension") and value not in ds.dims:
+            continue
+        kept[key] = value
+    ds["grid_topology"].attrs = kept
+    return ds
+
+
 def summarize_grid(grid: Any) -> dict[str, Any]:
     return {
         "format": str(getattr(grid, "source_grid_spec", "Unknown")),
@@ -366,8 +436,14 @@ def save_result(result: dict[str, Any]) -> dict[str, Any]:
 
 def write_grid_artifact(grid: Any, result_id: str) -> str:
     path = _result_path(result_id, ".nc")
+    # Two upstream defects make a bare `grid.to_xarray().to_netcdf(...)`
+    # unreliable: an int32 grid cannot be written at all, and a grid exported
+    # after a richer one is written with attributes it does not have and
+    # cannot be read back. Both are repaired here, on the dataset, not on the
+    # grid -- see tests/test_upstream_roundtrip.py for the reproducers.
+    encoded = _drop_phantom_topology_attrs(_widen_narrow_fill_values(grid.to_xarray()))
     with _WRITE_LOCK:
-        _atomic_write(path, lambda temporary: grid.to_xarray().to_netcdf(temporary))
+        _atomic_write(path, lambda temporary: encoded.to_netcdf(temporary))
     return str(path)
 
 
