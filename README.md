@@ -134,16 +134,22 @@ uv tool install --python 3.12 uxarray-mcp
 
 # Or from a fresh clone (developer path)
 git clone https://github.com/UXARRAY/uxarray-mcp-server.git
-cd uxarray-mcp-server && uv sync --python 3.12
-# or: bash SETUP.sh   (does the sync + runs the local test suite in one step)
+cd uxarray-mcp-server && uv sync --python 3.12 --extra hpc --extra transfer
+# or: bash SETUP.sh   (local-only sync + runs the local test suite in one step)
 ```
 
-> **Why `--python 3.12`?** The server uses Globus Compute to submit work to
-> HPC endpoints, and Globus Compute's serializer is fragile across Python
-> minor versions — a 3.13 submitter against a 3.12 endpoint worker raises
-> `WorkerLost` on non-trivial payloads. HPC sites broadly ship 3.12 conda
-> stacks today, so we pin the install to match. Tracking removal of this pin
-> at [globus/globus-compute#2139](https://github.com/globus/globus-compute/issues/2139).
+The `hpc` and `transfer` extras hold the Globus Compute and Globus Transfer
+SDKs. Leave them off for a laptop-only install. Note that `uv sync` installs
+*exactly* the requested set: running a plain `uv sync` later removes the
+extras again, and `hpc/endpoint_status` will then report `unreachable` with
+`No module named 'globus_compute_sdk'`.
+
+> **Why `--python 3.12`?** Only the HPC path needs it. Globus Compute's
+> serializer is fragile across Python minor versions — a 3.13 submitter
+> against a 3.12 endpoint worker raises `WorkerLost` on non-trivial payloads,
+> and HPC sites broadly ship 3.12 conda stacks today. Local-only use works on
+> 3.11–3.13. Tracking removal of this constraint at
+> [globus/globus-compute#2139](https://github.com/globus/globus-compute/issues/2139).
 > `uv` downloads 3.12 automatically if your system doesn't have it.
 
 ### Step 2 — Write a starter config
@@ -155,15 +161,31 @@ uxarray-mcp setup
 Creates `~/.config/uxarray-mcp/config.yaml` with sensible defaults. Local mode
 needs nothing more.
 
+Three environment variables adjust where the server looks and writes:
+`UXARRAY_MCP_CONFIG` (path to a config file, checked before
+`~/.config/uxarray-mcp/config.yaml`), `UXARRAY_MCP_STATE_DIR` (sessions,
+result handles and rendered plots; default `~/.uxarray_mcp_server`), and
+`UXARRAY_MCP_VERDICT_POLICY` (`full`, `reference_only` or `off` for the
+postcondition block on every result).
+
 ### Step 3 — Connect your AI client
 
 **Claude Desktop**
 
 ```bash
-uxarray-mcp install-claude        # merges the mcpServers block into your config
+# merges the mcpServers block into the config file you name
+uxarray-mcp install-claude --config-path ~/Library/Application\ Support/Claude/claude_desktop_config.json
 # or
 uxarray-mcp install-claude --print-only   # prints the JSON to paste manually
 ```
+
+Without `--config-path` the command only prints the block; it never guesses
+where your Claude Desktop config lives.
+
+If you installed from a clone rather than `uv tool install`, the `uxarray-mcp`
+binary lives in the project `.venv`. In every client config below, use
+`uv --directory /path/to/uxarray-mcp-server run uxarray-mcp serve` as the
+command instead of a bare `uxarray-mcp serve`.
 
 Restart Claude Desktop. The `uxarray` server should appear in Settings →
 Developer.
@@ -208,7 +230,7 @@ Add to `~/.config/opencode/opencode.json`:
 }
 ```
 
-The server registers 31 tools, which is a large tool schema to carry on every
+The server registers 33 tools, which is a large tool schema to carry on every
 request. `"enabled": false` turns it off for sessions that are not doing mesh
 analysis.
 
@@ -289,16 +311,27 @@ Intent-shaped tools, not raw UXarray bindings — all local by default:
 - `get_capabilities` — what can I do with this mesh?
 - `analyze_dataset` — deterministic first-look: inspect, validate, area, zonal mean, plots.
 - `run_analysis` — one operation at a time (gradient, curl, subset, remap, …).
-- `plot_dataset` — mesh, geographic, variable, or zonal-mean plots.
+  Remaps take `method`: `nearest_neighbor`, `inverse_distance_weighted` or
+  `bilinear` on UXarray's own engine, or `conservative`, `nnn`, `dnn`,
+  `average` on [YAC](https://dkrz-sw.gitlab-pages.dkrz.de/yac/) (equivalently
+  `backend="yac"` with `yac_method`). Only `conservative` preserves the field
+  integral, and it needs YAC importable where the remap runs — build it with
+  `scripts/build_yac_local.sh` on a laptop or `scripts/hpc_build_yac.py` on a
+  worker, and put its `site-packages` on `PYTHONPATH`.
+- `plot_dataset` — `plot_type` of `mesh`, `mesh_geo`, `variable`, or `zonal_mean`.
 - `run_workflow`, `resume_workflow`, `get_status`, `get_result`, `manage_session` —
   persisted sessions and multi-step workflows.
 
-Full schema: [docs/tools.md](docs/tools.md).
+Helper namespaces also appear in `tools/list`: `session/*`, `hpc/*`,
+`io/list_datasets`, `contract/*` and `prompt/*`.
+
+Full schema and every `run_analysis` parameter: [docs/tools.md](docs/tools.md).
 
 **Protocol version.** We do not implement MCP directly; servers are built
 through `toolregistry-server`, which depends on the `mcp` Python SDK. As of
 `toolregistry-server` 0.5.0 and `toolregistry` 0.16.0 the SDK cap is lifted, so
-we resolve `mcp` 2.1.1 and negotiate spec **`2026-07-28`** (stateless core,
+we resolve `mcp` 1.27 or 2.x (2.1.1 at the last lock) and negotiate spec
+**`2026-07-28`** (stateless core,
 cacheable list results, MRTR). 0.16.0 also widens the recognized content-block
 set to audio, `resource_link`, and embedded resources.
 
@@ -321,10 +354,13 @@ auditable and the server actively flags common scientific pitfalls:
   the tool that ran, timestamp, input arguments, `execution_venue`
   (`local` or `hpc:<endpoint>`), and the UXarray/Python versions used.
 - **Derivative unit convention is never hidden.** `gradient`, `curl`, and
-  `divergence` echo `scale_by_radius` in both the result and provenance, so a
-  unit-sphere result can never be mistaken for a physical (per-metre) one.
-  Gradient and curl default to physical scaling, matching UXarray; pass
-  `scale_by_radius=False` explicitly for unit-sphere output.
+  `divergence` echo `scale_by_radius` and a `radius_basis` block (the radius
+  used and whether it came from the grid or the caller), so a unit-sphere
+  result can never be mistaken for a physical (per-metre) one. Most grid files
+  declare no `sphere_radius`; pass `sphere_radius=6371000` (metres) to attach
+  Earth's. Without it, or with `scale_by_radius=False`, the call is refused
+  with `outcome="input_required"` until you pass `acknowledge`. The same
+  `sphere_radius` argument turns `calculate_area` from steradians into m².
 - **Vector-calculus sanity guard.** `curl`/`divergence` warn (without blocking)
   when the two inputs are the same field, or when neither carries a
   velocity/flux-like `units` attribute — the classic "vorticity from two random
@@ -346,12 +382,14 @@ auditable and the server actively flags common scientific pitfalls:
 
 | Command | Purpose |
 |---|---|
-| `uxarray-mcp serve` | Run the MCP server (used by your AI client) |
+| `uxarray-mcp serve` | Run the MCP server (used by your AI client); `--profile core\|deferred-full`, `--transport stdio\|sse\|http` — see [docs/serving.md](docs/serving.md) |
+| `uxarray-mcp openapi` | Print the OpenAPI document for the HTTP transport |
 | `uxarray-mcp setup` | Write a starter config |
 | `uxarray-mcp endpoints add NAME UUID` | Register a Globus Compute endpoint |
-| `uxarray-mcp endpoints list` | Show configured endpoints |
+| `uxarray-mcp endpoints list` / `remove NAME` | Show or drop configured endpoints |
+| `uxarray-mcp transfer setup` | Check and fix everything a Globus Transfer needs, including the browser login an MCP server cannot open |
 | `uxarray-mcp doctor` | Validate local + (optionally) remote setup |
-| `uxarray-mcp install-claude` | Merge or print the Claude Desktop config block |
+| `uxarray-mcp install-claude --config-path FILE` | Merge (or `--print-only`) the Claude Desktop config block |
 
 ---
 
@@ -392,7 +430,7 @@ see **[SECURITY.md](SECURITY.md)**.
 ## Development
 
 ```bash
-uv sync --extra hpc --extra docs --dev
+uv sync --extra hpc --extra transfer --extra docs
 uv run pre-commit run --all-files
 uv run pytest tests/ --ignore=tests/test_remote_agent.py
 uv run sphinx-build -b html docs docs/_build/html

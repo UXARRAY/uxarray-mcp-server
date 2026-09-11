@@ -401,6 +401,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         scale_by_radius: bool = True,
         time_index: int = 0,
         level_index: int = 0,
+        sphere_radius: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Compute spatial gradient on HPC."""
         return await self._run_on_hpc(
@@ -411,6 +412,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             scale_by_radius,
             time_index,
             level_index,
+            sphere_radius,
         )
 
     @action
@@ -423,6 +425,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         scale_by_radius: bool = True,
         time_index: int = 0,
         level_index: int = 0,
+        sphere_radius: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Compute relative vorticity (curl) on HPC."""
         return await self._run_on_hpc(
@@ -434,6 +437,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             scale_by_radius,
             time_index,
             level_index,
+            sphere_radius,
         )
 
     @action
@@ -446,6 +450,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         scale_by_radius: bool = True,
         time_index: int = 0,
         level_index: int = 0,
+        sphere_radius: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Compute horizontal divergence on HPC."""
         return await self._run_on_hpc(
@@ -457,6 +462,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             scale_by_radius,
             time_index,
             level_index,
+            sphere_radius,
         )
 
     @action

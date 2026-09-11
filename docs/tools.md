@@ -59,7 +59,7 @@ Supported operations:
 | `gradient`, `curl`, `divergence`, `azimuthal_mean` | Vector/radial diagnostics |
 | `subset_bbox`, `subset_polygon`, `cross_section` | Spatial selections |
 | `compare_fields`, `bias`, `rmse`, `pattern_correlation` | Same-grid comparisons |
-| `remap_variable`, `regrid_dataset` | UXarray-backed remapping |
+| `remap_variable`, `regrid_dataset` | Remap onto another unstructured grid (UXarray or YAC engine) |
 | `remap_to_rectilinear` | Remap a variable onto a regular lon/lat grid |
 | `temporal_mean`, `anomaly` | Time-dimension summaries |
 | `ensemble_mean`, `ensemble_spread` | Multi-file ensemble summaries |
@@ -67,15 +67,43 @@ Supported operations:
 
 Common parameters include `grid_path`, `data_path`, `variable_name`,
 `target_grid_path`, `data_path_a`, `data_path_b`, `data_paths`, `lon_bounds`,
-`lat_bounds`, `method`, `session_id`, and `dataset_handle`. Each operation
-validates the parameters it requires and returns a clear error if one is
-missing.
+`lat_bounds`, `method`, `backend`, `yac_method`, `remap_to`, `target_lon`,
+`target_lat`, `sphere_radius`, `lat_spec`, `lat_step`, `time_index`,
+`level_index`, `session_id`, and `dataset_handle`. Each operation validates the
+parameters it requires and returns a clear error if one is missing.
 
-`gradient`, `curl`, and `divergence` echo the `scale_by_radius` convention in
-their result and provenance, and all three accept `scale_by_radius`
-(default `True`, matching UXarray). When `True`, results are divided by
-`uxgrid.sphere_radius` for physical units; the grid must define
-`sphere_radius`. Pass `False` explicitly to keep unit-sphere results.
+**Remap methods and backends.** The three remap operations take `method`.
+`nearest_neighbor`, `inverse_distance_weighted` and `bilinear` run on
+UXarray's own engine. `conservative`, `nnn`, `dnn` and `average` run on
+[YAC](https://dkrz-sw.gitlab-pages.dkrz.de/yac/) through UXarray's
+`backend="yac"`; naming one of them as `method` selects YAC on its own, and
+`backend="yac"` with `yac_method` is the explicit spelling. Results report
+`method` as `yac:conservative` and so on, plus `backend` and `yac_method`.
+YAC must be importable where the remap executes: locally (build with
+`scripts/build_yac_local.sh`, then put its `site-packages` on `PYTHONPATH`)
+or on the worker (`scripts/hpc_build_yac.py`; `diagnose_endpoint(action=
+"check_yac")` confirms it). A missing install fails with a message naming
+both repairs rather than a bare `ModuleNotFoundError`. Only `conservative`
+preserves the field integral; every other method carries
+`REMAP_METHOD_NOT_CONSERVATIVE`, worded with the method actually used. One
+known UXarray limitation: `remap_to_rectilinear` with the YAC backend fails
+when `target_lon` spans the full 360°; use a regional target or
+`backend="uxarray"` for a global one.
+
+**Latitude bands.** `lat_spec` follows UXarray: a number is one latitude, a
+list is explicit latitudes (band edges when `conservative=True`). JSON has no
+tuple, so to ask for a regular range pass `lat_step` together with
+`lat_spec=[start, stop]`, or `lat_step` alone for -90..90.
+
+`gradient`, `curl`, and `divergence` echo `scale_by_radius` and a
+`radius_basis` block (`sphere_radius` and `radius_source`: `grid`, `argument`
+or `none`) in their result. When `scale_by_radius` is `True` (the default,
+matching UXarray) results are divided by `uxgrid.sphere_radius` for physical
+units. Most grid files declare no radius; pass `sphere_radius=6371000`
+(metres) to attach Earth's for the call. Without one, or with
+`scale_by_radius=False`, the `radius_scaling` precondition fails and the call
+is refused until `acknowledge` is passed -- the unit-sphere number is never
+returned as if it were physical.
 
 `gradient`, `curl` and `divergence` declare **refusable preconditions** (#86)
 rather than warning and computing anyway. Each operation states, as data, what
@@ -462,7 +490,12 @@ Supported `plot_type` values:
 - `zonal_mean`
 
 Common parameters include `grid_path`, `data_path`, `variable_name`, `width`,
-`height`, `cmap`, `vmin`, `vmax`, `title`, `session_id`, and `dataset_handle`.
+`height`, `cmap`, `vmin`, `vmax`, `title`, `time_index`, `level_index`,
+`lat_spec`, `lat_step`, `conservative`, `session_id`, and `dataset_handle`.
+`mesh_geo` additionally takes `lon_bounds`, `lat_bounds`, `show_mesh_boundary`,
+`coastlines`, `borders`, `rivers`, `lakes`, `cities` and `basemap` (`basemap`
+fetches tiles over the network). The `plot_note` in a `mesh_geo` result names
+these parameters when it suggests what to change next.
 
 ### `run_workflow` and `resume_workflow`
 

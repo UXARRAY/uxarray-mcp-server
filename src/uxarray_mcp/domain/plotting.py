@@ -451,7 +451,7 @@ def render_variable(
     if title is not None:
         fig.axes[0].set_title(title)
 
-    fig.tight_layout()
+    _layout_with_colorbar(fig)
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
@@ -464,6 +464,26 @@ def render_variable(
             "no plottable data."
         )
     return png_bytes
+
+
+def _layout_with_colorbar(fig: Any) -> None:
+    """Place the map and its colorbar side by side after a figure resize.
+
+    HoloViews positions the colorbar axes in figure coordinates for the
+    figure size it chose. Resizing to the requested width/height leaves
+    that axes where it was, on top of the map, and ``tight_layout`` does
+    not manage axes it did not create -- the colorbar sat inside the plot
+    area over the right-hand third of the data. Laying the two out by hand
+    is the only arrangement that survives the resize.
+    """
+    axes = list(fig.axes)
+    if len(axes) < 2:
+        fig.tight_layout()
+        return
+    main, *colorbars = axes
+    main.set_position([0.08, 0.12, 0.76, 0.80])
+    for cax in colorbars:
+        cax.set_position([0.87, 0.12, 0.025, 0.80])
 
 
 def render_zonal_mean(

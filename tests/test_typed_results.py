@@ -117,6 +117,7 @@ class TestAnalysisEnvelope:
         assert set(pre["properties"]["status"]["enum"]) == {
             "satisfied",
             "failed",
+            "overridden",
             "not_evaluated",
         }
 

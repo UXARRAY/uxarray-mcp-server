@@ -78,7 +78,7 @@ def compute_target_coverage(
     dict
         Keys: ``n_target_points``, ``points_in_source``, ``coverage_fraction``,
         ``source_bbox``, ``test`` (``"point_in_cell"`` or ``"bounding_box"``),
-        ``method_is_conservative``, and ``warning_codes``.
+        ``method``, ``method_is_conservative``, and ``warning_codes``.
     """
     lon = _wrap_lon(np.asarray(list(target_lon), dtype=float))
     lat = np.asarray(list(target_lat), dtype=float)
@@ -162,6 +162,7 @@ def _coverage_of_points(
         "coverage_fraction": fraction,
         "source_bbox": bbox,
         "test": test,
+        "method": method,
         "method_is_conservative": conservative,
         "warning_codes": warning_codes,
     }

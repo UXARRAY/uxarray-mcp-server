@@ -6,6 +6,36 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
 ### Added
+- YAC remapping is reachable. `docs/ucar.md` has said since the endpoint was
+  named `ucar-uxarray-yac` that YAC "enables conservative remapping", and the
+  `backend` argument existed on `remap_to_rectilinear`, but `run_analysis`
+  never forwarded it and the mesh-to-mesh remaps had no such argument, so the
+  only conservative method the server knew about was unreachable from any
+  client. `run_analysis` now takes `backend` and `yac_method`, and `method`
+  accepts YAC's `conservative`, `nnn`, `dnn` and `average` directly, since a
+  caller who wants a conservative remap asks for one by that name rather than
+  by engine. One resolver (`domain/remap_backend.py`) turns either spelling
+  into the same plan; the worker copies inline the same rules under a test that
+  compares them. Verified on the UCAR worker: `remap_variable` with
+  `method="conservative"` returns the same field mean to sixteen digits as the
+  local YAC 3.20 build. YAC missing where the remap runs fails with a message
+  naming both repairs. Coverage now records the method it judged, so the
+  not-conservative warning names inverse-distance when that is what ran; it
+  said "nearest-neighbor" for every method.
+- `sphere_radius` reaches `gradient`, `curl` and `divergence`, locally and on
+  the worker. The argument existed for `calculate_area` only, so a derivative
+  on a grid without a `sphere_radius` attribute -- which is nearly every grid
+  file -- could not be scaled at all. The radius is attached to the grid for
+  the call and reported in a `radius_basis` block with where it came from.
+- `lat_step` for the zonal operations. UXarray reads a tuple as
+  `(start, stop, step)` and a list as explicit latitudes, and JSON has no
+  tuple, so `[-90, 90, 30]` from an MCP client always meant three latitudes and
+  there was no way to ask for a step. `lat_step` with `lat_spec=[start, stop]`
+  (or alone, for the globe) builds the tuple.
+- `plot_dataset(plot_type="mesh_geo")` takes `show_mesh_boundary`,
+  `coastlines`, `borders`, `rivers`, `lakes`, `cities` and `basemap`. The plot
+  note had been telling callers to "ask" for those, naming options the front
+  door did not expose; it now names the parameters.
 - `transfer_ls`, `transfer_put`, `transfer_get` and `transfer_status` expose
   data movement as tools, in the deferred pool; the core surface stays at 33.
   Three verbs rather than one `transfer(op=...)` dispatcher, because a model
@@ -101,6 +131,47 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   issue, and a human merge is what reaches PyPI.
 
 ### Fixed
+- A gradient could not be obtained on a grid without a `sphere_radius`
+  attribute. The refusal for the missing attribute told the caller to pass
+  `scale_by_radius=False`; doing so was refused in turn with the advice to
+  set `scale_by_radius=True`. Both repairs now name `sphere_radius` and
+  `acknowledge`, the two things that actually end the loop.
+- Acknowledging a refused derivative crashed the envelope. The override path
+  set `preconditions.status` to `"overridden"`, a value the published output
+  schema did not list, so every acknowledged `gradient`, `curl` or
+  `divergence` failed with `MCP error -32602` after the number was computed.
+  The enum now admits it, under a test that validates an acknowledged result
+  against the schema.
+- Every azimuthal profile reported partial coverage. The ring at radius zero
+  is a point, holds no face centres and is NaN by construction, and was
+  counted as a bin that missed the mesh, so a correct profile carried
+  `PROFILE_COVERAGE_PARTIAL` and `physically_interpretable: false`. The
+  degenerate ring is excluded from the count and reported as such.
+- The colorbar of a `variable` plot sat on top of the map. HoloViews positions
+  the colorbar axes for the figure size it chose; resizing to the requested
+  width and height left it where it was, over the right-hand third of the
+  data, and `tight_layout` does not move axes it did not create. Map and
+  colorbar are laid out by hand after the resize, locally and on the worker.
+- `analyze_dataset` embedded the variable plot as 82 KB of base64 inside a
+  JSON object no client can render an image from, while the larger mesh plot
+  correctly came back as a link. A figure written to the artifact store is now
+  referenced by URI in the summary and the bytes are left out; they stay only
+  when nothing was stored.
+- `remote_remap_variable` and `remote_regrid_dataset` returned no
+  `source_coverage`, so the same remap answered with a coverage block and a
+  not-conservative warning locally and with neither on the worker. The worker
+  now measures coverage of the target mesh the same way.
+- `analyze_dataset` with `use_remote=True` recommended `subset_bbox` and
+  `cross_section` as next steps, both of which refuse `use_remote`. The
+  remote summary now suggests operations that have a remote implementation.
+- README: the clone install did not mention the `hpc`/`transfer` extras or
+  that a later plain `uv sync` removes them (which is how the endpoint check
+  comes to report `No module named 'globus_compute_sdk'`); `install-claude`
+  was described as merging a config it only prints without `--config-path`;
+  the tool count said 31 where the core profile registers 33; the CLI table
+  omitted `openapi`, `endpoints remove` and `transfer setup`; and the
+  derivative note still recommended `scale_by_radius=False`, which is now
+  refused. `docs/tools.md` gained the remap backends and every new parameter.
 - A directory of SCRIP meshes was classified as nothing and advised nothing.
   `_GRID_HINTS` held `grid`, `mesh`, `topo`, `coord` and `geo` but not
   `scrip` or `esmf`, and E3SM names half its meshes with the convention

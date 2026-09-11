@@ -55,21 +55,23 @@ def _png_meta(items: list[Any]) -> dict[str, Any]:
             image_size_bytes = len(base64.b64decode(png_b64))
         except Exception:
             image_size_bytes = None
+    uri = meta.get("image_uri") or block_uri(img)
+    # This summary is a JSON object, not a content-block list, so a client
+    # cannot render base64 embedded in it; it only costs context. When the
+    # figure was written to the artifact store, hand back the path and drop
+    # the bytes. The bytes stay only when nothing was stored, so a caller
+    # who cannot reach the filesystem still gets a picture.
+    inline = png_b64 if uri is None else None
     out = {
-        "png_b64": png_b64,
+        "png_b64": inline,
         "image_size_bytes": image_size_bytes,
         "grid_info": meta.get("grid_info"),
         "variable_name": meta.get("variable_name"),
         "_provenance": meta.get("_provenance", {}),
     }
-    # A large figure is a resource_link rather than inline bytes, so pass
-    # the URI along; otherwise the summary reports no image at all for
-    # exactly the meshes big enough to be interesting.
-    if png_b64 is None:
-        uri = meta.get("image_uri") or block_uri(img)
-        if uri is not None:
-            out["image_uri"] = str(uri)
-            out["image_delivery"] = "resource_link"
+    if uri is not None:
+        out["image_uri"] = str(uri)
+        out["image_delivery"] = "resource_link"
     return out
 
 
@@ -326,26 +328,53 @@ def analyze_dataset(
                 note="render the zonal profile",
             )
         )
-        next_steps.append(
-            call(
-                "extract_cross_section",
-                latitude="0.0",
-                grid_path="grid_path",
-                data_path="data_path",
-                variable_name=literal(selected_variable),
+        if use_remote:
+            # Subsetting and cross-sections have no remote implementation and
+            # would be refused with use_remote=True; the profile operations do,
+            # so suggest those instead of a call the caller cannot make.
+            next_steps.append(
+                call(
+                    "zonal_anomaly",
+                    grid_path="grid_path",
+                    data_path="data_path",
+                    variable_name=literal(selected_variable),
+                    use_remote="True",
+                    note="eddy component on the worker",
+                )
             )
-        )
-        next_steps.append(
-            call(
-                "subset_bbox",
-                lon_bounds="[-180, 180]",
-                lat_bounds="[-90, 90]",
-                grid_path="grid_path",
-                data_path="data_path",
-                variable_name=literal(selected_variable),
-                note="focus on a region",
+            next_steps.append(
+                call(
+                    "remap_variable",
+                    target_grid_path=needed("target_grid_path"),
+                    method=literal("conservative"),
+                    grid_path="grid_path",
+                    data_path="data_path",
+                    variable_name=literal(selected_variable),
+                    use_remote="True",
+                    note="YAC conservative remap on the worker",
+                )
             )
-        )
+        else:
+            next_steps.append(
+                call(
+                    "extract_cross_section",
+                    latitude="0.0",
+                    grid_path="grid_path",
+                    data_path="data_path",
+                    variable_name=literal(selected_variable),
+                )
+            )
+            next_steps.append(
+                call(
+                    "subset_bbox",
+                    lon_bounds="[-180, 180]",
+                    lat_bounds="[-90, 90]",
+                    grid_path="grid_path",
+                    data_path="data_path",
+                    variable_name=literal(selected_variable),
+                    note="focus on a region",
+                )
+            )
     if not next_steps:
         next_steps.append(
             call(
