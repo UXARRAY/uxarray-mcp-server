@@ -39,6 +39,32 @@ hpc:
       path_prefixes:
         - "/lcrc/"
         - "/home/<user>/"
+      # Optional: where this endpoint's files live, in Globus Transfer's terms.
+      # Omit the block entirely and the endpoint runs code but moves no files --
+      # the transfer tools are not registered at all. A Compute endpoint UUID
+      # says nothing about which collection serves that filesystem, so the
+      # collection is named explicitly rather than inferred.
+      globus_transfer:
+        # The Globus collection that serves this cluster's filesystem.
+        remote_collection_id: "00000000-0000-0000-0000-000000000000"
+        # This machine's collection (Globus Connect Personal). Without it
+        # nothing here is one end of a transfer.
+        local_collection_id: "00000000-0000-0000-0000-000000000000"
+        # Uploads must resolve inside this. It is a boundary, not a default
+        # directory: a path that escapes it is refused, not relocated.
+        remote_write_root: "/lcrc/group/e3sm/<user>"
+        # Optional: widens where downloads may read from without widening
+        # where uploads may write. The write root stays readable either way.
+        remote_read_root: "/lcrc/group/e3sm"
+        # Optional: a collection that exposes a subtree calls that subtree "/".
+        # Longest match wins; a path under none of these is passed to Globus
+        # unchanged, because a wrong translation names a real file nobody
+        # asked for while an unrecognized one is merely rejected.
+        collection_roots:
+          - "/lcrc/group/e3sm"
+        # Optional: bounds where downloads may land on this machine, checked
+        # after symlinks are resolved.
+        local_root: "/Users/<user>/Downloads"
 
   # ---- Legacy single-endpoint form (still supported) ----
   # Keep ``hpc.endpoints`` empty and set this if you only ever submit to one

@@ -6,6 +6,26 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
 ### Added
+- `transfer_ls`, `transfer_put`, `transfer_get` and `transfer_status` expose
+  data movement as tools, in the deferred pool; the core surface stays at 33.
+  Three verbs rather than one `transfer(op=...)` dispatcher, because a model
+  picks better from schemas that name their own arguments and an upload is not
+  the same authorization decision as a download. `transfer_status` is the
+  fourth because the other two return as soon as Globus accepts the task, and
+  without it the returned `task_id` names something nothing can read back. They
+  register only when some endpoint declares a `globus_transfer` block: a tool
+  whose only possible answer is "not configured" is still a tool the model can
+  call, so an install that moves no files shows no sign of them, and the
+  namespace-coverage check excuses exactly those four names rather than
+  whatever happens to be unregistered. A refused path comes back as a result
+  with its reason rather than a traceback, and nothing is submitted before the
+  paths are checked, so a rejected request costs no network and leaves no
+  half-made task. `validate_hpc_setup` (behind `doctor`) gains a transfer
+  check: it passes when nothing is configured, since transfers are opt-in the
+  way HPC is, and fails on a configured transfer that cannot work -- no write
+  root, no SDK, no consent, or a write root the collection will not list. The
+  write root is readable as well as writable, which the doctor probe found the
+  hard way: somewhere you may put a file is somewhere you may look at one.
 - Files can now move between this machine and an HPC collection. Compute has
   always run there and nothing could get a file there or back: a mesh had to be
   staged by hand before a remote tool could see it, and a subset or export a

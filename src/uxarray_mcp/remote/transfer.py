@@ -276,9 +276,22 @@ class TransferService:
             )
         return root
 
-    def _read_root(self) -> str:
-        """Reads fall back to the write root, never to the whole filesystem."""
-        return self.profile.remote_read_root or self._write_root()
+    def _read_roots(self) -> tuple[str, ...]:
+        """Where reads may come from, in the order a relative path resolves.
+
+        The write root is always readable: somewhere you may put a file is
+        somewhere you may look at one, and a config that could write to
+        `/scratch` but not list it would fail on the first download of
+        something it had just uploaded. With no read root configured, reads
+        fall back to the write root -- never to the whole filesystem.
+        """
+        write_root = self.profile.remote_write_root
+        read_root = self.profile.remote_read_root
+        if not read_root:
+            return (self._write_root(),)
+        if write_root and write_root != read_root:
+            return (read_root, write_root)
+        return (read_root,)
 
     def remote_write_path(self, path: str) -> str:
         return to_collection_path(
@@ -286,9 +299,18 @@ class TransferService:
         )
 
     def remote_read_path(self, path: str) -> str:
-        return to_collection_path(
-            join_under(self._read_root(), path), self.profile.collection_roots
-        )
+        roots = self._read_roots()
+        last: PathOutsideRoot | None = None
+        for root in roots:
+            try:
+                resolved = join_under(root, path)
+            except PathOutsideRoot as exc:
+                last = exc
+                continue
+            return to_collection_path(resolved, self.profile.collection_roots)
+        raise PathOutsideRoot(
+            f"{path!r} is outside every readable root ({', '.join(roots)})."
+        ) from last
 
     def _local_collection_id(self) -> str:
         if not self.profile.local_collection_id:
