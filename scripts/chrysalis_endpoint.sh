@@ -299,8 +299,17 @@ _status() {
 
 _check_yac() {
   _export_yac_runtime
-  local smoke
-  smoke="$(mktemp "${TMPDIR:-/tmp}/uxmcp-yac-smoke.XXXXXX.py")"
+  local smoke smoke_dir
+  # The smoke script has to live somewhere the *compute* node can read. /tmp is
+  # node-local on Chrysalis, so a script written here on the login node is
+  # simply absent under srun ("can't open file ... No such file or directory").
+  # Deliberately not TMPDIR: on this cluster it points at exactly the
+  # node-local path that causes the failure. $HOME is shared; override with
+  # YAC_SMOKE_DIR if some other site needs a different shared filesystem.
+  smoke_dir="${YAC_SMOKE_DIR:-$HOME/.cache/uxarray-mcp}"
+  mkdir -p "$smoke_dir"
+  smoke="$(mktemp "$smoke_dir/uxmcp-yac-smoke.XXXXXX.py")"
+  trap 'rm -f "$smoke"' RETURN
   cat > "$smoke" <<'PY'
 import json
 import sys
