@@ -253,6 +253,20 @@ class TestTheRootsAreEnforcedOnEveryTransfer:
         plan = service.plan_get("cases/out.nc", tmp_path / "out.nc")
         assert plan.source_path == "/lcrc/group/e3sm/cases/out.nc"
 
+    def test_the_write_root_is_readable_too(self, tmp_path):
+        # Somewhere you may put a file is somewhere you may look at one: a
+        # download of what was just uploaded must not fail on the read root.
+        service = TransferService(_profile(), FakeTransferClient())
+        plan = service.plan_get("/scratch/rjain/out.nc", tmp_path / "out.nc")
+        assert plan.source_path == "/scratch/rjain/out.nc"
+
+    def test_a_path_under_no_readable_root_names_them_all(self, tmp_path):
+        service = TransferService(_profile(), FakeTransferClient())
+        with pytest.raises(PathOutsideRoot) as excinfo:
+            service.plan_get("/home/rjain/out.nc", tmp_path / "out.nc")
+        assert "/scratch/rjain" in str(excinfo.value)
+        assert "/lcrc/group/e3sm" in str(excinfo.value)
+
     def test_a_read_root_does_not_widen_writes(self, tmp_path):
         source = tmp_path / "mesh.nc"
         source.write_text("x")

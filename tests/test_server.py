@@ -15,6 +15,7 @@ import pytest
 
 from uxarray_mcp.app import make_mcp_server, make_registry
 from uxarray_mcp.registry import (
+    _CONDITIONAL_TOOLS,
     _CONTROL_TOOLS,
     _CORE_EXTRA_TOOLS,
     _DEFERRED_TOOLS,
@@ -29,6 +30,18 @@ EXPECTED_CORE_EXTRA = 3  # list_datasets + 2 response-contract tools
 EXPECTED_PROMPTS = 7  # first_look, vorticity_analysis, cyclone_structure,
 # eddy_activity, model_evaluation, climatology_anomaly, hpc_diagnose
 EXPECTED_DEFERRED = 33  # +zonal_anomaly, +remap_to_rectilinear, +check_remote_yac
+
+
+@pytest.fixture(autouse=True)
+def _no_transfer_tools(monkeypatch):
+    """Pin the conditional transfer tools off for the count assertions.
+
+    They register only when an endpoint declares a ``globus_transfer`` block,
+    which is a property of whoever is running the tests, not of the code. The
+    counts below are about the tool plan; ``test_transfer_tools.py`` is where
+    the conditional registration is exercised in both states.
+    """
+    monkeypatch.setattr("uxarray_mcp.registry._transfers_are_configured", lambda: False)
 
 
 # ---------------------------------------------------------------------------
@@ -57,8 +70,9 @@ def test_namespace_plan_covers_every_public_tool():
     control = {n for v in _CONTROL_TOOLS.values() for n in v}
     core_extra = {n for v in _CORE_EXTRA_TOOLS.values() for n in v}
     deferred = {n for v in _DEFERRED_TOOLS.values() for n in v}
+    conditional = {n for v in _CONDITIONAL_TOOLS.values() for n in v}
 
-    covered = FRONTDOOR_NAMES | control | core_extra | deferred
+    covered = FRONTDOOR_NAMES | control | core_extra | deferred | conditional
     missing = set(tools_mod.__all__) - covered
     assert not missing, f"uncovered public tools: {sorted(missing)}"
 
