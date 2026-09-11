@@ -133,7 +133,11 @@ refuses. All three need a browser, which an MCP server does not have, so they
 surface as one error telling you to run `uxarray-mcp transfer setup` in a
 terminal.
 
-A task that reaches `nice_status: TIMEOUT` on `STOR` is usually neither: Globus
-negotiates data channels on ports separate from the control connection, and a
-corporate VPN commonly blocks them. Retry off the VPN before looking anywhere
-else.
+A task that reaches `nice_status: TIMEOUT` on `STOR` is usually neither, and
+usually not dead either. Globus negotiates data channels on ports separate from
+the control connection, retries them on its own, and reports `TIMEOUT` while it
+is still trying; a task that sat there for twenty minutes has been observed to
+finish `SUCCEEDED`. Poll `transfer_status` before concluding anything. A
+corporate VPN is the usual reason for the retries — it degrades the data
+channel without blocking it — so if the duration is wildly out of proportion to
+the file, compare one transfer off the VPN.
