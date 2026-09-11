@@ -35,6 +35,56 @@ else:
     import xarray as xr
 
 
+@pytest.fixture(scope="session")
+def _offline_config_file(tmp_path_factory):
+    """A config with no endpoints in it, for the whole session to point at."""
+    root = tmp_path_factory.mktemp("offline-config")
+    path = root / "config.yaml"
+    path.write_text(
+        "hpc:\n  execution_mode: local\n  default_endpoint: null\n  endpoints: {}\n"
+    )
+    # Never created. Named to match the documented location so the test that
+    # pins the docs against USER_CONFIG_PATH still sees the right shape.
+    absent_user = root / "home" / ".config" / "uxarray-mcp" / "config.yaml"
+    return path, absent_user
+
+
+@pytest.fixture(autouse=True)
+def offline_config(_offline_config_file, monkeypatch):
+    """Cut every test off from the developer's real endpoint config.
+
+    Without this, config discovery finds ``~/.config/uxarray-mcp/config.yaml``,
+    a machine that has one gets a real ``endpoint_id``, and any tool called
+    with ``use_remote=True`` makes a live Globus round-trip that stalls to the
+    SDK's 60 s default before falling back. One test paid that four times --
+    ``test_requested_remote_with_local_stages_reports_actual_venue`` was 60 s
+    of a 100 s suite, and its runtime and its outcome both depended on a file
+    that is not in the repository and on whether Globus was up.
+
+    Both discovery paths are closed, not just the environment variable: a test
+    that points ``UXARRAY_MCP_CONFIG`` at a file that does not exist falls
+    through to the user config, which is how this leaked in the first place.
+    Tests that need real discovery override these the ordinary way, since
+    monkeypatch applies theirs after ours.
+    """
+    config_path, absent_user = _offline_config_file
+    from uxarray_mcp.remote import config as config_module
+    from uxarray_mcp.remote import health
+
+    monkeypatch.setenv("UXARRAY_MCP_CONFIG", str(config_path))
+    monkeypatch.setattr(config_module, "USER_CONFIG_PATH", absent_user)
+
+    # Caches one layer up would otherwise hand back objects built from
+    # whatever config was live when they were first populated.
+    agent_module = sys.modules.get("uxarray_mcp.remote.agent")
+    if agent_module is not None:
+        monkeypatch.setattr(agent_module, "_agent_instance", None)
+        monkeypatch.setattr(agent_module, "_agent_instances", {})
+    health.invalidate_cache()
+    yield
+    health.invalidate_cache()
+
+
 @pytest.fixture
 def base_grid():
     """Returns a basic mocked uxarray Grid object."""
