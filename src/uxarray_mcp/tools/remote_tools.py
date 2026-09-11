@@ -16,7 +16,7 @@ from uxarray_mcp.content_blocks import (
     resource_link_block,
     text_block,
 )
-from uxarray_mcp.domain.mesh import is_healpix_spec
+from uxarray_mcp.domain.mesh import is_healpix_spec, parse_healpix_zoom
 from uxarray_mcp.json_safe import json_text
 from uxarray_mcp.state import OperationTracker
 
@@ -97,6 +97,16 @@ def _run_with_optional_hpc(
     remote_call: Callable[[Any], Dict[str, Any]],
 ) -> Dict[str, Any]:
     """Run a tool locally or remotely with a consistent fallback path."""
+    # Validate a HEALPix spec here, at the venue boundary, because the 21
+    # inlined worker copies of the grid-open dispatch do a bare
+    # `int(path.split(":")[1])` with no range check. Locally
+    # `parse_healpix_zoom` refuses a zoom above MAX_HEALPIX_ZOOM; remotely the
+    # same argument used to reach `Grid.from_healpix` on an HPC node and ask
+    # for 12 * 4**zoom faces, which is where the limit was worth having in the
+    # first place. One check on the way in beats 21 copies of it on the wire.
+    if is_healpix_spec(path_hint):
+        parse_healpix_zoom(str(path_hint))
+
     tracker = OperationTracker(tool_name, session_id=session_id)
     if not use_remote:
         tracker.stage("running", f"Running {tool_name} locally.")
