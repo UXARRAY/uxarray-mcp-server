@@ -14,7 +14,11 @@ VENV_GC="${VENV_GC:-$HOME/venvs/globus-compute-py313}"
 TMUX_SESSION="uxarray-endpoint"
 
 YAC_SHIM_LIB="$HOME/local/yac-runtime-shims/lib"
-YAC_LOCAL_PREFIX="$HOME/local/yac-3.18"
+# Override to test a freshly built YAC without editing this file:
+#   YAC_VERSION=3.20.2 chrysalis_endpoint.sh restart
+# Bump the default only once that build is verified on the endpoint.
+YAC_VERSION="${YAC_VERSION:-3.18}"
+YAC_LOCAL_PREFIX="$HOME/local/yac-$YAC_VERSION"
 UXARRAY_YAC_SRC="/lcrc/group/e3sm/jain/uxarray-yac-src"
 MKL_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/oneapi-2022.1.0/intel-oneapi-mkl-2022.1.0-iwhfz52/mkl/2022.1.0/lib/intel64"
 MPICH_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/gcc-11.3.0/mpich-4.3.2-dp2ycaq/lib"
@@ -58,9 +62,17 @@ _load_modules() {
   # site's `miniforge3` module. Load it explicitly rather than assuming the
   # calling shell already has it (a fresh `ssh` session, a shell already
   # inside another venv, or a non-login shell commonly won't).
-  if command -v conda &>/dev/null; then
+  #
+  # Test that conda *works*, not merely that the name resolves. A parent shell
+  # exports `conda` as a bash function but does not export its `__conda_exe`
+  # helper, so a child `bash` inherits a function that dies with
+  # `__conda_exe: command not found` (bash labels it `environment: line 5`).
+  # `command -v conda` finds that corpse and used to return early here, which
+  # left `conda activate` calling the broken function. Drop it and reload.
+  if conda info --base &>/dev/null; then
     return 0
   fi
+  unset -f conda 2>/dev/null || true
   if ! command -v module &>/dev/null 2>&1; then
     for _init in \
       /etc/profile.d/lmod.sh \
@@ -74,8 +86,18 @@ _load_modules() {
 _activate_env() {
   # Activate the conda uxarray env, then layer globus-compute-endpoint on top
   _load_modules
+  # Fail loudly. The old form swallowed both the `conda info` failure and the
+  # missing `conda.sh`, then hit `conda activate` three lines later with no
+  # working conda -- reporting the symptom instead of the cause.
+  local conda_base
+  conda_base="$(conda info --base 2>/dev/null || true)"
+  if [[ -z "$conda_base" || ! -f "$conda_base/etc/profile.d/conda.sh" ]]; then
+    echo "ERROR: no usable conda after loading '${CHRYSALIS_CONDA_MODULE:-miniforge3}'." >&2
+    echo "  Try by hand:  module load ${CHRYSALIS_CONDA_MODULE:-miniforge3}" >&2
+    return 1
+  fi
   # shellcheck disable=SC1091
-  source "$(conda info --base 2>/dev/null || echo "$HOME/.conda")/etc/profile.d/conda.sh" 2>/dev/null || true
+  source "$conda_base/etc/profile.d/conda.sh"
   conda activate "$CONDA_ENV"
   # Add the globus-compute venv bin so globus-compute-endpoint is on PATH
   export PATH="$VENV_GC/bin:$PATH"
@@ -217,6 +239,14 @@ _do_start() {
     echo "==> Refusing to start: workers would accept tasks and fail on each one." >&2
     return 1
   fi
+  # `globus-compute-endpoint start` against a profile that is already Running
+  # takes the live endpoint down rather than no-opping, and reports success
+  # while doing it. Refuse, and name the verb that actually works.
+  if globus-compute-endpoint list 2>/dev/null | grep -q "Running.*$ENDPOINT_NAME"; then
+    echo "ERROR: '$ENDPOINT_NAME' is already Running -- starting again would stop it." >&2
+    echo "  Use: $(basename "$0") restart" >&2
+    return 1
+  fi
   echo "==> Starting endpoint: $ENDPOINT_NAME"
   globus-compute-endpoint start "$ENDPOINT_NAME"
 }
@@ -230,9 +260,18 @@ _start() {
     echo "Launching tmux session '$TMUX_SESSION'..."
     exec tmux new-session -A -s "$TMUX_SESSION" \
       "bash -l \"$0\" _do_start; exec bash -l"
-  else
-    _do_start
   fi
+  # Already inside tmux. Only run in place when this *is* the endpoint session.
+  # Running from some other session leaves the endpoint owned by whatever shell
+  # happened to be attached, and invites a second copy started from elsewhere.
+  local current
+  current="$(tmux display-message -p '#S' 2>/dev/null || echo '')"
+  if [[ "$current" != "$TMUX_SESSION" ]]; then
+    echo "ERROR: inside tmux session '$current', not '$TMUX_SESSION'." >&2
+    echo "  Detach with Ctrl-b d, then re-run from a plain shell." >&2
+    return 1
+  fi
+  _do_start
 }
 
 # ---------------------------------------------------------------------------
