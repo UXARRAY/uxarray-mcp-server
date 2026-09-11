@@ -31,6 +31,15 @@ def main() -> int:
         type=int,
         default=180,
     )
+    parser.add_argument(
+        "--yac-prefix",
+        default="",
+        help=(
+            "Probe this YAC install instead of the one the endpoint's "
+            "worker_init sets up, e.g. ~/local/yac-3.20.2. Use it to confirm a "
+            "fresh build before reconfiguring the endpoint to use it."
+        ),
+    )
     args = parser.parse_args()
 
     cfg = load_config().for_endpoint(endpoint=args.endpoint)
@@ -60,7 +69,7 @@ def main() -> int:
                 message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
                 category=UserWarning,
             )
-            future = executor.submit(remote_yac_remap_smoke)
+            future = executor.submit(remote_yac_remap_smoke, yac_prefix=args.yac_prefix)
             result = future.result(timeout=args.timeout_seconds)
     finally:
         executor.shutdown(wait=False)
