@@ -4,6 +4,29 @@ All notable changes are recorded here. Dates are ISO 8601 (UTC). The project
 uses Semantic Versioning for public releases.
 
 ## Unreleased
+### Added
+- Files can now move between this machine and an HPC collection. Compute has
+  always run there and nothing could get a file there or back: a mesh had to be
+  staged by hand before a remote tool could see it, and a subset or export a
+  remote tool wrote stayed on the cluster. `remote/transfer.py` adds a
+  `TransferService` with `ls`, `put`, `get` and `status` over an injectable
+  Globus Transfer client, configured per endpoint by a new `globus_transfer`
+  block (`remote_collection_id`, `local_collection_id`, `remote_write_root`,
+  optional `remote_read_root`, `collection_roots`, `local_root`) behind a new
+  `transfer` extra; an endpoint without the block moves no files. A transfer
+  takes two paths and gets no second chance to be wrong, so the containment
+  rules are the substance and each has its own test: an absolute second
+  argument is checked rather than silently discarding the root the way
+  `os.path.join` does, prefixes compare component-wise so `/work/ab` is not
+  inside `/work/a`, `..` is collapsed before containment rather than after,
+  local paths are checked after `realpath` so a symlink cannot leave the root,
+  a read root widens reads without widening writes, collection roots translate
+  longest-match-first and pass unmatched paths through to Globus rather than
+  rewriting them, and previews are bounded at both ends with the omitted byte
+  count stated. The service builds its submission payload as a plain dict after
+  an explicit `get_submission_id()`, which keeps the wire shape in one place and
+  lets all 44 tests run against a fake client with no credentials in CI.
+
 ### Fixed
 - A directory of SCRIP meshes was classified as nothing and advised nothing.
   `_GRID_HINTS` held `grid`, `mesh`, `topo`, `coord` and `geo` but not
