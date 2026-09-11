@@ -29,13 +29,19 @@ _DATA = os.environ.get("UXMCP_LIVE_DATA")
 _TARGET_GRID = os.environ.get("UXMCP_LIVE_TARGET_GRID")
 _VARIABLE = os.environ.get("UXMCP_LIVE_VARIABLE")
 
-pytestmark = pytest.mark.skipif(
-    not all([_ENDPOINT, _GRID, _DATA, _TARGET_GRID, _VARIABLE]),
-    reason=(
-        "live HPC remap test skipped; set UXMCP_LIVE_ENDPOINT, UXMCP_LIVE_GRID, "
-        "UXMCP_LIVE_DATA, UXMCP_LIVE_TARGET_GRID, UXMCP_LIVE_VARIABLE to run."
+# The `live` marker is what keeps these out of CI, which selects
+# `-m "not live"`. The skipif is the second gate: even when someone asks for
+# `-m live`, the tests need five paths on a real cluster to mean anything.
+pytestmark = [
+    pytest.mark.live,
+    pytest.mark.skipif(
+        not all([_ENDPOINT, _GRID, _DATA, _TARGET_GRID, _VARIABLE]),
+        reason=(
+            "live HPC remap test skipped; set UXMCP_LIVE_ENDPOINT, UXMCP_LIVE_GRID, "
+            "UXMCP_LIVE_DATA, UXMCP_LIVE_TARGET_GRID, UXMCP_LIVE_VARIABLE to run."
+        ),
     ),
-)
+]
 
 
 def _assert_remote(result: dict) -> None:

@@ -95,7 +95,7 @@ jobs:
         # 6.0.3 (the locked version) while `uv run --no-sync` reported 6.0.1.
         # Every green run of this workflow before this change proved only that
         # the lockfile passes its own test suite.
-        run: uv run --no-sync pytest tests/ --ignore=tests/test_remote_agent.py -v --tb=long
+        run: uv run --no-sync pytest tests/ -m "not hpc and not live" -v --tb=long
 
       - name: Report failure
         if: failure()
@@ -139,4 +139,4 @@ jobs:
         # --no-sync for the same reason as the job above: a bare `uv run`
         # re-syncs to `uv.lock` and would install the newest compatible
         # versions over the floor this job just resolved.
-        run: uv run --no-sync pytest tests/ --ignore=tests/test_remote_agent.py -v --tb=long
+        run: uv run --no-sync pytest tests/ -m "not hpc and not live" -v --tb=long
