@@ -5,9 +5,15 @@ Mirrors the uxarray CI recipe (see uxarray/.github/workflows/yac-optional.yml):
   1. Clone YAXT, autoreconf if needed, configure with --without-regard-for-quality
   2. Clone YAC, configure with --disable-mci/utils/examples/tools/netcdf
      and --disable-mpi-checks, build python bindings against worker venv
-  3. Verify by importing yac.core directly (bypasses the broken upstream
-     yac/__init__.py which does `from ._yac import *` even though the
-     extension installs as core.cpython-<abi>.so)
+  3. Verify that the libraries, headers and extension modules landed. This
+     stops short of importing yac: the extension calls MPI_Init, and a Globus
+     Compute worker is not an MPI rank, so the import aborts regardless of
+     build quality. Confirm the build under a launcher instead, with
+     remote_yac_remap_smoke.
+
+Toolchains reach this two ways. Sites with a readable spack prefix pass
+--mpi-root/--gcc-lib; Lmod sites that publish MPI only through modules pass
+--module-loads and let the compiler wrappers name themselves.
 
 Defaults are tuned for the Improv endpoint at Argonne (ALCF/LCRC):
   * MPI: spack-built openmpi-5.0.1-g3zfkn6 (gcc-13.2.0)
@@ -42,9 +48,11 @@ def remote_build_yac(
     venv_python: str = "~/venvs/globus-compute/bin/python",
     mpi_root: str = "/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/openmpi-5.0.1-g3zfkn6",
     gcc_lib: str = "/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-x86_64/gcc-8.5.0/gcc-13.2.0-iyqxotb/lib64",
-    yac_version: str = "v3.14.0_p1",
+    yac_version: str = "v3.20.2",
     yaxt_version: str = "v0.11.5.1",
     make_jobs: int = 8,
+    module_loads: str = "",
+    timeout_seconds: int = 1800,
 ) -> Dict[str, Any]:
     """Build YAXT + YAC python bindings on the worker, mirroring uxarray CI."""
     import os
@@ -57,13 +65,36 @@ def remote_build_yac(
     prefix = os.path.expanduser(prefix)
     venv_python = os.path.expanduser(venv_python)
     venv_bin = os.path.dirname(venv_python)
-    script = f"""
-set -euxo pipefail
+
+    if module_loads:
+        # Lmod sites (Casper) publish MPI only through modules; there is no
+        # readable spack prefix to point --mpi-root at, and any path guessed
+        # from one moves at the next site upgrade. Load the modules and let
+        # the compiler wrappers name themselves.
+        loads = "\n".join(f"module load {shlex.quote(m)}" for m in module_loads.split())
+        toolchain = f"""
+for _init in /usr/share/lmod/lmod/init/bash /etc/profile.d/lmod.sh \\
+             /glade/u/apps/opt/lmod/init/bash; do
+  [ -f "$_init" ] && . "$_init" && break
+done
+module purge
+{loads}
+export PATH={shlex.quote(venv_bin)}:$PATH
+export MPICC=$(command -v mpicc)
+export MPIF90=$(command -v mpif90)
+"""
+    else:
+        toolchain = f"""
 export PATH={shlex.quote(venv_bin)}:{shlex.quote(mpi_root + "/bin")}:$PATH
 export LD_LIBRARY_PATH={shlex.quote(mpi_root + "/lib")}:{shlex.quote(gcc_lib)}:${{LD_LIBRARY_PATH:-}}
-export PREFIX={shlex.quote(prefix)}
 export MPICC={shlex.quote(mpi_root + "/bin/mpicc")}
 export MPIF90={shlex.quote(mpi_root + "/bin/mpif90")}
+"""
+
+    script = f"""
+set -euxo pipefail
+{toolchain}
+export PREFIX={shlex.quote(prefix)}
 export FCFLAGS="-fallow-argument-mismatch -O2"
 which python && python --version
 which $MPICC && $MPICC --version | head -1
@@ -101,29 +132,19 @@ mkdir -p build && cd build
 make -j{int(make_jobs)}
 make install
 
-# --- runtime + verify ---
+# --- verify the install, as far as this host can ---
+# Deliberately does NOT `import yac`. The extension calls MPI_Init, and a
+# Globus Compute worker is not started under a launcher, so the import aborts
+# with `PMI_Get_appnum returned -1` however good the build is -- reporting a
+# clean build as a failure. Same reason remote_runtime_probe skips its own
+# native import check. Confirm the artifacts here; confirm the import under
+# srun with remote_yac_remap_smoke.
 PY_VER=$(python -c 'import sys;print(f"{{sys.version_info.major}}.{{sys.version_info.minor}}")')
-export LD_LIBRARY_PATH="$PREFIX/lib:$LD_LIBRARY_PATH"
-export PYTHONPATH="$PREFIX/lib/python${{PY_VER}}/site-packages:$PREFIX/lib/python${{PY_VER}}/dist-packages:${{PYTHONPATH:-}}"
-echo "PYTHONPATH=$PYTHONPATH"
-python - <<'PY'
-import sys
-from pathlib import Path
-hits = []
-for entry in sys.path:
-    p = Path(entry) / "yac"
-    hits.extend(p.glob("core*.so"))
-print("yac.core extension:", hits[:3])
-import yac
-print("yac module file:", getattr(yac, "__file__", None))
-try:
-    from uxarray.remap.yac import _import_yac
-    yc = _import_yac()
-    print("uxarray helper module:", yc.__name__, "file:", yc.__file__)
-    print("has BasicGrid:", hasattr(yc, "BasicGrid"))
-except Exception as e:
-    print("uxarray helper error:", type(e).__name__, e)
-PY
+echo "PY_VER=$PY_VER"
+ls -1 "$PREFIX/lib" | head -20
+find "$PREFIX" \\( -name 'core*.so' -o -name '_yac*.so' \\) -print
+find "$PREFIX" -name 'yac-core.pc' -print
+echo "BUILD_AND_INSTALL_OK prefix=$PREFIX"
 """
 
     t0 = time.perf_counter()
@@ -131,7 +152,7 @@ PY
         ["bash", "-lc", script],
         capture_output=True,
         text=True,
-        timeout=1800,
+        timeout=timeout_seconds,
     )
     elapsed = time.perf_counter() - t0
 
@@ -160,8 +181,16 @@ def main() -> int:
         "--gcc-lib",
         default="/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-x86_64/gcc-8.5.0/gcc-13.2.0-iyqxotb/lib64",
     )
-    p.add_argument("--yac-version", default="v3.14.0_p1")
+    p.add_argument("--yac-version", default="v3.20.2")
     p.add_argument("--yaxt-version", default="v0.11.5.1")
+    p.add_argument(
+        "--module-loads",
+        default="",
+        help=(
+            "Space-separated Lmod modules to load instead of using "
+            "--mpi-root/--gcc-lib, e.g. 'ncarenv/24.12 gcc/12.4.0 openmpi/5.0.6'"
+        ),
+    )
     p.add_argument("--make-jobs", type=int, default=8)
     p.add_argument("--timeout-seconds", type=int, default=1800)
     args = p.parse_args()
@@ -192,6 +221,11 @@ def main() -> int:
             yac_version=args.yac_version,
             yaxt_version=args.yaxt_version,
             make_jobs=args.make_jobs,
+            module_loads=args.module_loads,
+            # Give the worker-side kill a margin under the client-side wait,
+            # so a hung build returns a captured tail instead of a bare
+            # TimeoutError with no output.
+            timeout_seconds=max(60, args.timeout_seconds - 120),
         )
         result = future.result(timeout=args.timeout_seconds)
     finally:
