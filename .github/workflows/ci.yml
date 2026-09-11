@@ -56,8 +56,13 @@ jobs:
         uv sync --dev
 
     - name: Run core tests
+      # Select by marker, not by filename. This job installs no optional
+      # extras, so it runs everything except `hpc` (needs the extra, run by
+      # test-hpc below) and `live` (needs a real cluster, never in CI). The
+      # old --ignore=tests/test_remote_agent.py was too blunt: that file
+      # imports fine without academy-py and most of it was runnable here.
       run: |
-        uv run pytest tests/ -v --ignore=tests/test_remote_agent.py
+        uv run pytest tests/ -v -m "not hpc and not live"
 
   cli-smoke:
     # Smoke-tests the installed `uxarray-mcp` CLI against the user-home config
@@ -167,8 +172,11 @@ jobs:
         uv sync --extra hpc --dev
 
     - name: Run HPC tests
+      # The other half of the partition: everything marked `hpc`, wherever it
+      # lives. Naming the two files meant a new hpc-marked test in a third
+      # file would never run.
       run: |
-        uv run pytest tests/test_remote_agent.py tests/test_hpc_safety.py -v
+        uv run pytest tests/ -v -m "hpc"
 
   docs:
     runs-on: ubuntu-latest

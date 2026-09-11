@@ -14,9 +14,19 @@ try:
 except ImportError:
     HAS_ACADEMY = False
 
-skip_no_academy = pytest.mark.skipif(
-    not HAS_ACADEMY, reason="academy-py not installed (HPC optional dep)"
-)
+
+def skip_no_academy(fn):
+    """Mark a test as needing academy-py from the optional `hpc` extra.
+
+    See the same helper in tests/test_hpc_safety.py: the `hpc` marker is what
+    CI selects on, so the test is deselected where the dependency is absent
+    instead of skipping green; the skipif is only for a local run without the
+    extra.
+    """
+    skip = pytest.mark.skipif(
+        not HAS_ACADEMY, reason="academy-py not installed (HPC optional dep)"
+    )
+    return pytest.mark.hpc(skip(fn))
 
 
 class TestHPCConfig:

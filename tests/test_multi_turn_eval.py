@@ -12,6 +12,11 @@ from evals.multi_turn.run import make_fixtures, run_suite, summarize
 from evals.multi_turn.scripted import disciplined, naive
 from evals.multi_turn.tasks import build_tasks
 
+# The cost in this file is the two module-scoped fixtures below: each runs the
+# whole scripted suite once, together the slowest thing in the tests that are
+# not the network. Every test that asks for a report carries `slow` so a local
+# `-m "not slow"` loop drops them; the two tests that build nothing do not.
+
 
 @pytest.fixture(scope="module")
 def disciplined_report():
@@ -31,6 +36,7 @@ def test_every_task_needs_more_than_one_call(tmp_path):
     assert all(len(task["requires"]) >= 2 for task in tasks)
 
 
+@pytest.mark.slow
 def test_disciplined_run_chains_every_task(disciplined_report):
     summary = disciplined_report["summary"]
 
@@ -38,6 +44,7 @@ def test_disciplined_run_chains_every_task(disciplined_report):
     assert summary["finished"] == summary["tasks"]
 
 
+@pytest.mark.slow
 def test_disciplined_run_keeps_handle_discipline(disciplined_report):
     summary = disciplined_report["summary"]
 
@@ -46,6 +53,7 @@ def test_disciplined_run_keeps_handle_discipline(disciplined_report):
     assert summary["overrides_used"] == 0
 
 
+@pytest.mark.slow
 def test_disciplined_run_recovers_from_every_injected_fault(disciplined_report):
     summary = disciplined_report["summary"]
 
@@ -53,6 +61,7 @@ def test_disciplined_run_recovers_from_every_injected_fault(disciplined_report):
     assert summary["recovered"] == summary["fault_tasks"]
 
 
+@pytest.mark.slow
 def test_refusal_is_repaired_rather_than_overridden(disciplined_report):
     run = next(
         r for r in disciplined_report["runs"] if r["task_id"] == "refusal_then_repair"
@@ -63,6 +72,7 @@ def test_refusal_is_repaired_rather_than_overridden(disciplined_report):
     assert run["recovered"] is True
 
 
+@pytest.mark.slow
 def test_interruption_is_resumed_not_restarted(disciplined_report):
     run = next(
         r
@@ -75,6 +85,7 @@ def test_interruption_is_resumed_not_restarted(disciplined_report):
     assert run["recovered"] is True
 
 
+@pytest.mark.slow
 def test_naive_run_is_scored_worse_on_every_axis(disciplined_report, naive_report):
     good = disciplined_report["summary"]
     bad = naive_report["summary"]
@@ -85,6 +96,7 @@ def test_naive_run_is_scored_worse_on_every_axis(disciplined_report, naive_repor
     assert bad["recovered"] < good["recovered"]
 
 
+@pytest.mark.slow
 def test_forcing_the_override_does_not_count_as_recovery(naive_report):
     """The failure mode #86 exists to prevent must not score as success."""
     run = next(r for r in naive_report["runs"] if r["task_id"] == "refusal_then_repair")

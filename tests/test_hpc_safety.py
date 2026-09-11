@@ -24,9 +24,22 @@ from uxarray_mcp.tools.remote_tools import (
 )
 
 globus_available = importlib.util.find_spec("globus_compute_sdk") is not None
-requires_globus = pytest.mark.skipif(
-    not globus_available, reason="globus_compute_sdk not installed (HPC extra required)"
-)
+
+
+def requires_globus(fn):
+    """Mark a test as needing globus-compute-sdk from the optional `hpc` extra.
+
+    The `hpc` marker is the CI gate: one job installs the extra and selects
+    `-m hpc`, every other job selects `-m "not hpc"`. That deselects the test
+    where the dependency is absent, and a deselection shows up in the count.
+    The skipif underneath only covers a developer running the whole suite
+    without the extra installed.
+    """
+    skip = pytest.mark.skipif(
+        not globus_available,
+        reason="globus_compute_sdk not installed (HPC extra required)",
+    )
+    return pytest.mark.hpc(skip(fn))
 
 
 @pytest.fixture(autouse=True)
