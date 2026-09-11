@@ -22,15 +22,27 @@ wrong in a way that still looks right in a test:
 * a local symlink resolves to somewhere else entirely, so the local side is
   checked after ``realpath``, not before.
 
-The service builds its own request payloads rather than using
-``globus_sdk.TransferData``. That keeps the wire shape visible in one place and
-lets the tests drive a fake client with no ``globus-sdk`` installed at all,
-which is the only way this is testable without credentials in CI.
+The service builds its own request payloads rather than assembling calls inline.
+That keeps the wire shape visible in one place and lets the tests drive a fake
+client with nothing Globus installed at all, which is the only way this is
+testable without credentials in CI.
+
+Nothing here authenticates. The four calls this module makes are handed to the
+``globus`` command-line client, which already owns the user's tokens, consents
+and sessions; see ``CliTransferClient``. Holding no auth code is the point, not
+an omission -- Globus auth has scopes that exist on one kind of collection and
+not another, and session policies a local consent check cannot see, and every
+one of those rules is a rule the CLI already implements and we would otherwise
+have to track.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
@@ -38,6 +50,7 @@ from typing import Any, Protocol
 from uxarray_mcp.remote.config import GlobusTransferProfile
 
 __all__ = [
+    "CliTransferClient",
     "PathOutsideRoot",
     "TransferError",
     "TransferNotConfigured",
@@ -45,6 +58,7 @@ __all__ = [
     "TransferService",
     "bounded_preview",
     "collapse",
+    "find_globus_cli",
     "is_within",
     "join_under",
     "resolve_local",
@@ -61,7 +75,13 @@ class TransferNotConfigured(TransferError):
 
 
 class TransferLoginRequired(TransferError):
-    """Globus has no usable token for Transfer on this machine."""
+    """Globus will not act for this user until they log in again.
+
+    Covers the three failures that look unrelated and are not: no tokens, no
+    consent for a collection's ``data_access`` scope, and a session identity a
+    collection's policy refuses. Each needs a browser, so each needs a
+    terminal, which is the one thing an MCP server does not have.
+    """
 
 
 class PathOutsideRoot(TransferError):
@@ -135,8 +155,17 @@ def resolve_local(path: str | os.PathLike[str], root: str | None = None) -> Path
     made before resolution and fails one made after. Resolution is
     non-strict, so a download destination that does not exist yet still
     resolves -- what exists is followed, the rest is appended.
+
+    A relative path resolves against ``root`` when there is one, matching what
+    the remote side already does with ``remote_write_root``. The alternative is
+    the process working directory, which for a server started by an MCP client
+    is wherever that client happened to be launched from -- a different
+    directory per client, invisible to the caller, and never the one they meant.
     """
-    resolved = Path(path).expanduser().resolve()
+    given = Path(path).expanduser()
+    if root is not None and not given.is_absolute():
+        given = Path(root).expanduser() / given
+    resolved = given.resolve()
     if root is None:
         return resolved
     root_resolved = Path(root).expanduser().resolve()
@@ -431,56 +460,178 @@ def _value_of(response: Any, key: str) -> Any:
         return getattr(response, key, None)
 
 
+CLI_TIMEOUT_SECONDS = 120
+
+# Text the CLI prints when the problem is who you are rather than what you
+# asked for. Globus has several such failures and they read nothing alike: no
+# tokens at all, tokens without consent for a collection's ``data_access``
+# scope, and a session whose identity the collection's own policy rejects. All
+# three are fixed by logging in again, in a terminal, so all three are one
+# exception here -- and the CLI's own words go along with it, because those are
+# the words in the Globus documentation and in any support ticket that follows.
+_LOGIN_MARKERS = (
+    "MissingLoginError",
+    "globus login",
+    "globus session",
+    "ConsentRequired",
+    "consent_required",
+    "session_required",
+    "AuthenticationFailed",
+    "PermissionDenied",
+)
+
+
+def find_globus_cli() -> str:
+    """Locate the ``globus`` executable, or say how to get one.
+
+    ``shutil.which`` alone is not enough. A server started by a desktop MCP
+    client inherits the launcher's environment rather than a login shell's, so
+    a CLI that works when the user types it can be missing here; the two
+    directories pip actually drops console scripts into are checked by hand
+    before giving up.
+    """
+    found = shutil.which("globus")
+    if found:
+        return found
+    for candidate in (
+        Path(sys.prefix) / "bin" / "globus",
+        Path.home() / ".local" / "bin" / "globus",
+    ):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    raise TransferError(
+        "The globus command-line client is not installed, or is not on this "
+        "process's PATH. Install it with `pip install globus-cli`, then run "
+        "`uxarray-mcp transfer setup`."
+    )
+
+
+class CliTransferClient:
+    """The four Transfer calls, made by running the ``globus`` CLI.
+
+    The CLI holds the user's tokens, consents and session, so this class holds
+    none: there is no login flow here, no token store, no scope arithmetic, and
+    nothing that expires. A failure comes back as the CLI's own stderr, which
+    is what the user will paste into a search box or a support ticket anyway.
+
+    ``runner`` is injected so the whole thing can be tested against a fake
+    without a binary, a network, or credentials.
+    """
+
+    def __init__(
+        self,
+        executable: str | None = None,
+        *,
+        timeout_seconds: int = CLI_TIMEOUT_SECONDS,
+        runner: Any = None,
+    ) -> None:
+        self._runner = runner or subprocess.run
+        self._executable = executable or find_globus_cli()
+        self._timeout = timeout_seconds
+
+    # -- running it ----------------------------------------------------
+
+    def _run(self, *argv: str) -> str:
+        printable = "globus " + " ".join(argv)
+        try:
+            proc = self._runner(
+                [self._executable, *argv],
+                capture_output=True,
+                text=True,
+                timeout=self._timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise TransferError(
+                f"`{printable}` did not finish within {self._timeout} seconds."
+            ) from exc
+        if proc.returncode != 0:
+            message = (proc.stderr or proc.stdout or "").strip()[-4000:]
+            detail = f"`{printable}` failed:\n{message}" if message else printable
+            if any(marker in message for marker in _LOGIN_MARKERS):
+                raise TransferLoginRequired(
+                    f"{detail}\n\nThis is a Globus login, consent or identity "
+                    f"problem, which only a terminal can fix. Run "
+                    f"`uxarray-mcp transfer setup` and follow what it asks."
+                )
+            raise TransferError(detail)
+        return proc.stdout
+
+    def _run_json(self, *argv: str) -> Any:
+        raw = self._run(*argv)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise TransferError(
+                f"`globus {' '.join(argv)}` did not return JSON:\n{raw.strip()[:4000]}"
+            ) from exc
+
+    def whoami(self) -> str:
+        """The logged-in identity, or ``TransferLoginRequired``."""
+        return self._run("whoami").strip()
+
+    # -- the protocol --------------------------------------------------
+
+    def operation_ls(self, collection_id: str, **kwargs: Any) -> Any:
+        path = kwargs.get("path") or "/"
+        return self._run_json(
+            "ls", "--long", "--format", "json", f"{collection_id}:{path}"
+        )
+
+    def get_submission_id(self) -> Any:
+        """A sentinel: ``globus transfer`` mints and consumes its own.
+
+        The id exists so a retried submission cannot run twice, and the CLI
+        already handles that end to end. Returning a placeholder keeps
+        ``TransferService.submit`` written against one shape.
+        """
+        return {"value": "globus-cli"}
+
+    def submit_transfer(self, data: Any) -> Any:
+        items = data.get("DATA") or []
+        if len(items) != 1:
+            raise TransferError(
+                f"The CLI backend submits one path pair at a time; this "
+                f"payload has {len(items)}. Use `globus transfer --batch` for "
+                f"more."
+            )
+        item = items[0]
+        argv = ["transfer"]
+        if item.get("recursive"):
+            argv.append("--recursive")
+        argv += [
+            f"{data['source_endpoint']}:{item['source_path']}",
+            f"{data['destination_endpoint']}:{item['destination_path']}",
+            "--notify",
+            "off",
+            "--format",
+            "json",
+        ]
+        # Checksum verification is the CLI's default, so only its absence is
+        # worth saying out loud.
+        if data.get("verify_checksum") is False:
+            argv.append("--no-verify-checksum")
+        if data.get("label"):
+            argv += ["--label", str(data["label"])]
+        return self._run_json(*argv)
+
+    def get_task(self, task_id: str) -> Any:
+        return self._run_json("task", "show", "--format", "json", task_id)
+
+
 def default_transfer_client(
     profile: GlobusTransferProfile,
 ) -> TransferClientLike:
-    """Build a real client from the login Globus Compute already made.
+    """Hand the work to the ``globus`` CLI, after checking it can do it.
 
-    Same native client as `globus-compute-sdk`, same token storage, so a user
-    who has run a remote tool has already logged in and only needs to consent
-    to the Transfer scope. That consent is an interactive browser flow, and an
-    MCP server has no terminal to run it in, so a missing token raises with the
-    command to run rather than blocking on a prompt nobody will see.
-
-    Mapped collections need a per-collection ``data_access`` scope on top of
-    the base Transfer scope; both configured collections are declared before
-    the login state is checked, so a user who consented to one and not the
-    other is told to log in again rather than failing later on a path.
+    ``profile`` is unused, and that is the change: the previous client read the
+    collection UUIDs off it to request a ``data_access`` scope for each. Only
+    Globus Connect Server v5 collections have that scope -- a Globus Connect
+    Personal collection does not, so asking for one on the local end left the
+    login permanently incomplete and every transfer refused. Which collections
+    need which scopes is the CLI's problem now.
     """
-    try:
-        import globus_sdk
-        from globus_compute_sdk.sdk.auth.globus_app import get_globus_app
-    except ImportError as exc:  # pragma: no cover - exercised by install shape
-        raise TransferError(
-            "Globus Transfer needs the transfer extra: "
-            "pip install 'uxarray-mcp[transfer]'."
-        ) from exc
-
-    app = get_globus_app()
-    client = globus_sdk.TransferClient(app=app)
-    for collection_id in (
-        profile.remote_collection_id,
-        profile.local_collection_id,
-    ):
-        if collection_id:
-            client.add_app_data_access_scope(collection_id)
-    if app.login_required():
-        raise TransferLoginRequired(
-            "Globus has no Transfer consent for these collections on this "
-            "machine. Run `uxarray-mcp transfer-login` in a terminal, which "
-            "opens the browser flow an MCP server cannot."
-        )
+    del profile  # the CLI resolves collections and scopes for itself
+    client = CliTransferClient()
+    client.whoami()
     return client
-
-
-def transfer_service_for(profile: Any) -> TransferService:
-    """Build a service from an endpoint profile, or say why there is none."""
-    transfer_profile = getattr(profile, "globus_transfer", None)
-    if transfer_profile is None:
-        name = getattr(profile, "name", "this endpoint")
-        raise TransferNotConfigured(
-            f"{name} has no globus_transfer block in config.yaml, so it moves "
-            f"no files. Add remote_collection_id and remote_write_root to "
-            f"enable transfers for it."
-        )
-    return TransferService(transfer_profile)

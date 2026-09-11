@@ -71,13 +71,13 @@ hpc = [
     "academy-py>=0.3.1",
     "globus-compute-sdk>=4.5.0",
 ]
-# Moving files is separate from running code on them: an install that only
-# needs remote compute should not pull a second Globus SDK, and a transfer
-# client is useless without the Compute login it reuses, so this extra is
-# additive to `hpc` rather than a replacement for it.
+# Moving files is separate from running code on them, and is done by running
+# the `globus` command-line client rather than by linking a second SDK. The CLI
+# owns the tokens, the consents and the session, so this package holds no auth
+# code at all -- which is the only reason a two-person project can offer data
+# movement without also signing up to track Globus's scope rules.
 transfer = [
-    "globus-compute-sdk>=4.5.0",
-    "globus-sdk>=3.40.0",
+    "globus-cli>=3.30",
 ]
 docs = [
     "sphinx>=7.0",

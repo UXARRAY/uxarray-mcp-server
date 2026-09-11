@@ -24,6 +24,7 @@ HTTP clients) from a single install.
    :caption: Running on HPC (optional)
 
    remote-hpc
+   data-transfer
    operating-an-endpoint
    improv
    ucar

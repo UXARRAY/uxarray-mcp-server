@@ -23,7 +23,9 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   half-made task. `validate_hpc_setup` (behind `doctor`) gains a transfer
   check: it passes when nothing is configured, since transfers are opt-in the
   way HPC is, and fails on a configured transfer that cannot work -- no write
-  root, no SDK, no consent, or a write root the collection will not list. The
+  root, no `globus` CLI, no login or consent, or a write root the collection
+  will not list, and it reports whether this machine's Globus Connect Personal
+  share is writable, since that is invisible from the Globus side. The
   write root is readable as well as writable, which the doctor probe found the
   hard way: somewhere you may put a file is somewhere you may look at one.
 - Files can now move between this machine and an HPC collection. Compute has
@@ -47,6 +49,41 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   count stated. The service builds its submission payload as a plain dict after
   an explicit `get_submission_id()`, which keeps the wire shape in one place and
   lets all 44 tests run against a fake client with no credentials in CI.
+- The client behind that service runs the `globus` command-line client rather
+  than linking `globus-sdk`, so this package holds no authentication code and
+  stores no tokens. Written against the SDK first, and every one of the three
+  defects hand-verification found was in the ~40 lines of auth: it requested a
+  `data_access` scope for the *local* collection, which Globus Connect Personal
+  collections do not have, so adding a local collection ID made every transfer
+  fail permanently; it modelled one credential failure, so a collection refusing
+  a session identity died with a raw 40-line `TransferAPIError` instead of
+  saying which identity to link; and it directed users to a `transfer-login`
+  command that did not exist. Which collections need which scopes, and what a
+  session policy will accept, are rules the CLI already implements and a
+  two-person project would otherwise have to track. Failures now carry the CLI's
+  own words -- the same text the Globus documentation and a facility support
+  ticket already use -- and the three that need a browser are told apart from
+  the ones that do not, because sending someone to a browser to fix a missing
+  directory wastes the trip.
+- `uxarray-mcp transfer setup` is the command that error message now names. It
+  walks the seven things that must be true before a file can move -- the CLI, a
+  login, Globus Connect Personal running with a writable share, both collection
+  UUIDs, consent for the remote collection, and the config block -- reports
+  which already hold, and offers to fix the rest; `--check` reports without
+  asking or changing anything. Facility collection UUIDs for NCAR, ALCF Polaris,
+  ALCF Aurora and NERSC are a table rather than a name search, which returns a
+  page of look-alikes. The share check is the reason for the command: Globus
+  Connect Personal shares `$HOME` read-only by default and says nothing about
+  it, so uploads work, downloads fail on the destination write hours later with
+  `PERMISSION_DENIED`, and it reads like a network problem. Checked on macOS
+  (the `org.globusonline.Globus-Connect` preferences domain) as well as Linux
+  (`~/.globusonline/lta/config-paths`).
+- Relative local paths resolve against `local_root` when one is configured,
+  matching what the remote side has always done with `remote_write_root`. They
+  previously resolved against the process working directory, which for a server
+  started by an MCP client is wherever that client was launched from: a
+  different directory per client, invisible to the caller, and never the one
+  they meant.
 
 ### Changed
 - Releases now follow upstream instead of the calendar. The workflow polled on

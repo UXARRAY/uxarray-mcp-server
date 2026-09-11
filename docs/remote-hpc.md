@@ -265,7 +265,9 @@ uxarray-mcp diagnose-endpoint --endpoint NAME --action validate
 Use **remote** when:
 
 - The data lives on the HPC filesystem and is large (GB+).
-- You'd otherwise need to Globus Transfer files to your laptop first.
+- You'd otherwise need to Globus Transfer files to your laptop first. (If you do
+  need to move files, that is a separate service with a separate login — see
+  [data-transfer.md](data-transfer.md).)
 - The analysis benefits from cluster CPU/memory.
 
 Use **local** when:

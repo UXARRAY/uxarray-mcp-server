@@ -62,6 +62,33 @@ def _make_check(
     return result
 
 
+def _local_share_details(transfer_profile: Any) -> Dict[str, Any]:
+    """What Globus Connect Personal is willing to do with this machine's files.
+
+    Reported rather than failed on, because it only matters in one direction: a
+    read-only share uploads fine and refuses every download, and which of those
+    the user needs is not something the doctor knows. Saying so here is enough
+    to turn a PERMISSION_DENIED on the destination into an obvious cause.
+    """
+    if not getattr(transfer_profile, "local_collection_id", None):
+        return {}
+    from uxarray_mcp.remote import gcp
+
+    local_root = getattr(transfer_profile, "local_root", None) or str(Path.home())
+    share = gcp.share_for(local_root)
+    if share is None:
+        return {
+            "local_path": local_root,
+            "local_share": None,
+            "local_writable": None,
+        }
+    return {
+        "local_path": local_root,
+        "local_share": share.path,
+        "local_writable": share.writable,
+    }
+
+
 def _transfer_check(
     base_config: Any, endpoint: str | None, run_probe: bool
 ) -> Dict[str, Any]:
@@ -70,8 +97,8 @@ def _transfer_check(
     Passing when nothing is configured is deliberate: transfers are opt-in the
     way HPC itself is, and a doctor that goes red for a feature the user never
     asked for teaches people to ignore it. What is worth failing on is a
-    configured transfer that cannot work -- SDK absent, no consent, or a write
-    root the collection will not show.
+    configured transfer that cannot work -- no globus CLI, no login or consent,
+    or a write root the collection will not show.
 
     The reachability probe rides on ``run_remote_probe`` because it is a real
     network call, and it lists the write root rather than transferring
@@ -105,6 +132,7 @@ def _transfer_check(
         "remote_read_root": transfer_profile.remote_read_root,
         "collection_roots": list(transfer_profile.collection_roots),
     }
+    details.update(_local_share_details(transfer_profile))
 
     if not transfer_profile.remote_write_root:
         return _make_check(
@@ -125,12 +153,13 @@ def _transfer_check(
         return _make_check(
             "transfer",
             False,
-            "Globus Transfer is configured but no client could be built.",
+            "Globus Transfer is configured but the globus CLI could not act.",
             details={**details, **_exception_details(exc)},
             guidance=(
-                "Install the transfer extra (`uv sync --extra transfer`) and "
-                "complete the Globus login in a terminal; an MCP server cannot "
-                "open a browser consent flow."
+                "Run `uxarray-mcp transfer setup`, which installs the globus "
+                "CLI if it is missing, logs in, and consents to this "
+                "collection. Those steps need a terminal; an MCP server cannot "
+                "open a browser."
             ),
         )
 
