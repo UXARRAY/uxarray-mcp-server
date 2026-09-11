@@ -262,7 +262,17 @@ def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
     validation on a null payload, which is exactly what happens on the
     biggest meshes.
     """
+    # An inline figure was still written to the artifact store; say where.
+    # Callers that compose plots into a JSON summary (analyze_dataset) can
+    # then reference the file instead of carrying the bytes.
+    if result.get("image_uri") is None:
+        for artifact in (result.get("_provenance") or {}).get("artifacts") or []:
+            if artifact.get("type") == "plot" and artifact.get("uri"):
+                result["image_uri"] = artifact["uri"]
+                break
     metadata = {key: value for key, value in result.items() if key != "png_b64"}
+    if result.get("png_b64") is not None:
+        metadata.setdefault("image_delivery", "inline")
     text = text_block(json_text(metadata))
 
     b64 = result.get("png_b64")

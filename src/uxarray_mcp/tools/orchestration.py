@@ -56,6 +56,11 @@ def _png_meta(items: list[Any]) -> dict[str, Any]:
         except Exception:
             image_size_bytes = None
     uri = meta.get("image_uri") or block_uri(img)
+    if uri is None:
+        for artifact in (meta.get("_provenance") or {}).get("artifacts") or []:
+            if artifact.get("type") == "plot" and artifact.get("uri"):
+                uri = artifact["uri"]
+                break
     # This summary is a JSON object, not a content-block list, so a client
     # cannot render base64 embedded in it; it only costs context. When the
     # figure was written to the artifact store, hand back the path and drop
