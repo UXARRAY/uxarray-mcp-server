@@ -244,3 +244,11 @@ artifacts/facility_matrix/native_paths.json
 # Heavy benchmark artifacts (generated meshes + run reports)
 benchmarks/heavy/meshes/
 benchmarks/heavy/results/
+
+# Work in progress kept on disk but deliberately not tracked: a parked feature
+# branch's patch plus one-off analysis scripts that read evals/results/, which
+# is itself ignored. They are notes to a future reader, not part of the package.
+artifacts/parked-cache-tier/
+artifacts/payload_audit/
+artifacts/repair_ablation/
+evals/tool_retrieval/compare_retrievers.py
