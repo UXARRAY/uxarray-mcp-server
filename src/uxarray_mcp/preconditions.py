@@ -171,12 +171,19 @@ def _radius_scaling_check(
     """The condition that decides whether a derivative has physical units."""
     requested = bool(scale_by_radius)
     if not requested:
+        # Both repairs below must lead somewhere that passes. Pointing this
+        # branch at scale_by_radius=False and the next at scale_by_radius=True
+        # sent callers in a circle on any grid without a sphere_radius attribute;
+        # the way out of both is the sphere_radius argument.
         return _check(
             "radius_scaling",
             False,
-            "scale_by_radius=False.",
-            "Set scale_by_radius=True so the result carries physical units "
-            "instead of unit-sphere units.",
+            "scale_by_radius=False, so the result is a per-radian quantity on "
+            "the unit sphere.",
+            "Set scale_by_radius=True so the result carries physical units. "
+            "If the grid declares no sphere_radius, also pass "
+            "sphere_radius=6371000 (metres, Earth). To keep the unit-sphere "
+            "number anyway, pass acknowledge.",
         )
     if scaling_applied is False:
         # Requested and refused by the data, not by the caller. Naming the
@@ -188,10 +195,9 @@ def _radius_scaling_check(
             "scale_by_radius=True was requested but the grid carries no "
             "'sphere_radius' attribute, so UXarray left the result on the "
             "unit sphere.",
-            "Set uxgrid.sphere_radius on the source grid (6371000.0 m for "
-            "Earth) so the scaling can be applied, or pass "
-            "scale_by_radius=False and read the result as a per-radian "
-            "quantity.",
+            "Pass sphere_radius=6371000 (metres, Earth) so the scaling can "
+            "be applied; the value is attached to the grid for this call. "
+            "To keep the unit-sphere number anyway, pass acknowledge.",
         )
     return _check(
         "radius_scaling",

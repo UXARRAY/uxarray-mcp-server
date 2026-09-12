@@ -91,6 +91,7 @@ def calculate_gradient(
     use_remote: bool = False,
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
+    sphere_radius: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Compute the spatial gradient of a face-centered scalar field.
 
@@ -157,6 +158,7 @@ def calculate_gradient(
         "data_path": data_path,
         "variable_name": variable_name,
         "scale_by_radius": scale_by_radius,
+        "sphere_radius": sphere_radius,
         "time_index": time_index,
         "level_index": level_index,
     }
@@ -170,6 +172,7 @@ def calculate_gradient(
                 scale_by_radius=scale_by_radius,
                 time_index=time_index,
                 level_index=level_index,
+                sphere_radius=sphere_radius,
             ),
             tool="calculate_gradient",
             inputs=inputs,
@@ -190,6 +193,7 @@ def calculate_gradient(
                 scale_by_radius,
                 time_index,
                 level_index,
+                sphere_radius,
             )
         ),
     )
@@ -206,6 +210,7 @@ def calculate_curl(
     use_remote: bool = False,
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
+    sphere_radius: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Compute the curl (relative vorticity) of a 2-D wind or vector field.
 
@@ -281,6 +286,7 @@ def calculate_curl(
         "u_variable": u_variable,
         "v_variable": v_variable,
         "scale_by_radius": scale_by_radius,
+        "sphere_radius": sphere_radius,
         "time_index": time_index,
         "level_index": level_index,
     }
@@ -294,6 +300,7 @@ def calculate_curl(
             scale_by_radius=scale_by_radius,
             time_index=time_index,
             level_index=level_index,
+            sphere_radius=sphere_radius,
         )
         return attach_provenance(
             result,
@@ -318,6 +325,7 @@ def calculate_curl(
                 scale_by_radius,
                 time_index,
                 level_index,
+                sphere_radius,
             )
         ),
     )
@@ -334,6 +342,7 @@ def calculate_divergence(
     use_remote: bool = False,
     endpoint: Optional[str] = None,
     session_id: Optional[str] = None,
+    sphere_radius: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Compute the horizontal divergence of a 2-D vector field.
 
@@ -401,6 +410,7 @@ def calculate_divergence(
         "u_variable": u_variable,
         "v_variable": v_variable,
         "scale_by_radius": scale_by_radius,
+        "sphere_radius": sphere_radius,
         "time_index": time_index,
         "level_index": level_index,
     }
@@ -414,6 +424,7 @@ def calculate_divergence(
             scale_by_radius=scale_by_radius,
             time_index=time_index,
             level_index=level_index,
+            sphere_radius=sphere_radius,
         )
         return attach_provenance(
             result,
@@ -438,6 +449,7 @@ def calculate_divergence(
                 scale_by_radius,
                 time_index,
                 level_index,
+                sphere_radius,
             )
         ),
     )

@@ -3,9 +3,8 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# USER CONFIG — change these to match your account before running
-# ---------------------------------------------------------------------------
-USERNAME="jain"   # your Chrysalis username
+# Everything below has a default that works for any LCRC account. Override in
+# the environment; nothing needs editing in this file.
 # ---------------------------------------------------------------------------
 
 ENDPOINT_NAME="${ENDPOINT_NAME:-uxarray-chrysalis}"
@@ -23,7 +22,10 @@ YAC_SHIM_LIB="$HOME/local/yac-runtime-shims/lib"
 # time, so changing this needs `configure <mode>` again, then `restart`.
 YAC_VERSION="${YAC_VERSION:-3.20.2}"
 YAC_LOCAL_PREFIX="$HOME/local/yac-$YAC_VERSION"
-UXARRAY_YAC_SRC="/lcrc/group/e3sm/jain/uxarray-yac-src"
+# A uxarray checkout carrying the YAC accessor, put on the worker's PYTHONPATH
+# ahead of the installed package. Only needed while that support is unreleased;
+# a path that does not exist is simply ignored by Python.
+UXARRAY_YAC_SRC="${UXARRAY_YAC_SRC:-/lcrc/group/e3sm/$USER/uxarray-yac-src}"
 MKL_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/oneapi-2022.1.0/intel-oneapi-mkl-2022.1.0-iwhfz52/mkl/2022.1.0/lib/intel64"
 MPICH_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/gcc-11.3.0/mpich-4.3.2-dp2ycaq/lib"
 HWLOC_LIB="/gpfs/fs1/soft/chrysalis/spack-latest/opt/spack/linux-rhel8-x86_64/gcc-11.3.0/hwloc-2.12.2-5vqrpw7/lib"
@@ -379,7 +381,7 @@ _logs() {
   sed -n '1,120p' "$ep_dir/user_environment.yaml" 2>/dev/null || true
   echo
   echo "==> Running endpoint-related processes"
-  ps -fu "$USER" | grep -E 'globus|parsl|process_worker|interchange|uxarray-chrysalis' | grep -v grep || true
+  ps -fu "$USER" | grep -E "globus|parsl|process_worker|interchange|$ENDPOINT_NAME" | grep -v grep || true
   echo
   echo "==> Latest submit scripts"
   find "$ep_dir" -path '*/submit_scripts/*' \

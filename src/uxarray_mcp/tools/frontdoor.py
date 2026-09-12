@@ -161,6 +161,40 @@ def _suggest_operations(requested: str) -> list[str]:
     return ranked[:3]
 
 
+def _resolve_lat_spec(lat_spec: Any, lat_step: float | None) -> Any:
+    """Turn the JSON-reachable spelling of a latitude range into UXarray's.
+
+    UXarray reads a tuple as ``(start, stop, step)`` and a list as explicit
+    latitudes (or band edges). JSON has no tuple, so ``[-90, 90, 30]`` from
+    an MCP client always meant three latitudes and there was no way to ask
+    for a step. ``lat_step`` supplies it: with ``lat_spec=[start, stop]`` (or
+    omitted, for the whole globe) the three become the tuple UXarray wants.
+    """
+    if lat_step is None:
+        return lat_spec
+    if lat_step <= 0:
+        raise ValueError("lat_step must be a positive number of degrees.")
+    if lat_spec is None:
+        start, stop = -90.0, 90.0
+    elif isinstance(lat_spec, (int, float)):
+        raise ValueError(
+            "lat_step needs a range: pass lat_spec=[start, stop] with it, "
+            "or omit lat_spec for -90..90."
+        )
+    else:
+        bounds = list(lat_spec)
+        if len(bounds) != 2:
+            raise ValueError(
+                "With lat_step, lat_spec must be [start, stop]; got "
+                f"{len(bounds)} values. Without lat_step a list is read as "
+                "explicit latitudes."
+            )
+        start, stop = float(bounds[0]), float(bounds[1])
+    if stop <= start:
+        raise ValueError(f"lat_spec range must increase; got [{start}, {stop}].")
+    return (start, stop, float(lat_step))
+
+
 def _require(value: Any, name: str, operation: str) -> Any:
     if value is None:
         raise ValueError(f"{operation!r} requires {name}.")
@@ -588,6 +622,8 @@ def run_analysis(
     radius_step: float | None = None,
     method: str = "nearest_neighbor",
     remap_to: str = "faces",
+    backend: str = "uxarray",
+    yac_method: str | None = None,
     groupby: str | None = None,
     baseline: str = "temporal_mean",
     output_path: str | None = None,
@@ -601,6 +637,7 @@ def run_analysis(
     time_index: int = 0,
     level_index: int = 0,
     lat_spec: tuple | float | list[Any] | None = None,
+    lat_step: float | None = None,
     conservative: bool = False,
     target_lon: list[float] | None = None,
     target_lat: list[float] | None = None,
@@ -611,44 +648,43 @@ def run_analysis(
 ) -> dict[str, Any]:
     """Run one analysis operation by intent instead of exposing many tools.
 
-    Supported operations:
-    ``inspect_mesh``, ``inspect_variable``, ``validate_dataset``,
+    Operations: ``inspect_mesh``, ``inspect_variable``, ``validate_dataset``,
     ``calculate_area``, ``calculate_zonal_mean``, ``zonal_anomaly``,
     ``gradient``, ``curl``, ``divergence``, ``azimuthal_mean``,
     ``subset_bbox``, ``subset_polygon``, ``cross_section``, ``compare_fields``,
     ``bias``, ``rmse``, ``pattern_correlation``, ``remap_variable``,
     ``regrid_dataset``, ``remap_to_rectilinear``, ``temporal_mean``,
-    ``anomaly``, ``ensemble_mean``, ``ensemble_spread``, and ``export``.
+    ``anomaly``, ``ensemble_mean``, ``ensemble_spread``, ``export``.
 
-    ``gradient`` and ``curl`` accept ``scale_by_radius`` (default True matches
-    UXarray and returns physical units when sphere-radius metadata exists).
-    ``gradient``, ``curl``, ``divergence``, ``calculate_zonal_mean``, and
-    ``azimuthal_mean``
-    also accept ``time_index``/``level_index`` to select a single time/level
-    slice when the input variable(s) carry those extra dimensions (e.g. real
-    model output shaped ``(time, lev, n_face)``); both default to 0 and are
-    ignored for variables that are already face-centered only. The two are
-    never interchangeable: ``time_index`` reaches only time-like axes and
-    ``level_index`` only vertical ones, so neither can silently return the
-    other's slice.
-    ``zonal_anomaly`` accepts ``lat_spec`` and
-    ``conservative``. ``remap_to_rectilinear`` accepts ``target_lon`` and
-    ``target_lat`` (1-D coordinate arrays). ``calculate_area`` accepts
-    ``sphere_radius`` in metres, and refuses without one unless the grid
-    declares its own: UXarray integrates on the unit sphere, so the
-    unscaled numbers are steradians rather than areas.
+    ``sphere_radius`` (metres; 6371000 for Earth) gives ``calculate_area``,
+    ``gradient``, ``curl`` and ``divergence`` a radius when the grid declares
+    none. Without one, areas are steradians and derivatives are per radian,
+    so those calls are refused rather than returned. ``scale_by_radius``
+    (default True) is the UXarray flag the refusal guards.
 
-    ``curl`` and ``divergence`` declare preconditions and refuse rather than
-    return an unphysical number: if the components are not verifiably a
-    vector field, the call returns ``outcome='input_required'`` with the
-    failed checks and the repairs that would fix them. Pass ``acknowledge``
-    with the token named in that response to run it anyway; the result is
-    then marked ``unverified``.
+    ``time_index``/``level_index`` select one slice of a ``(time, lev,
+    n_face)`` variable for the derivative and profile operations; each
+    reaches only its own kind of axis.
 
-    ``verdict_policy`` controls the ``postconditions`` block: ``"full"``
-    (default) returns reference, residual, tolerance, and verdict;
-    ``"reference_only"`` returns reference and tolerance and requires the
-    caller to compute the comparison itself; ``"off"`` evaluates nothing.
+    ``lat_spec`` for the zonal operations: a number is one latitude, a list
+    is explicit latitudes (band edges when ``conservative``). For a regular
+    range pass ``lat_step`` with ``lat_spec=[start, stop]`` (or none for the
+    globe); JSON cannot spell UXarray's ``(start, stop, step)`` tuple.
+
+    Remaps take ``method``: ``nearest_neighbor``, ``inverse_distance_weighted``
+    or ``bilinear`` on UXarray's engine; ``nnn``, ``dnn``, ``average`` or
+    ``conservative`` on YAC, which must be importable where the remap runs.
+    ``backend="yac"`` with ``yac_method`` is the explicit spelling. Only
+    ``conservative`` preserves the field integral. ``remap_to_rectilinear``
+    takes ``target_lon``/``target_lat`` (1-D arrays).
+
+    Failed preconditions return ``outcome='input_required'`` with the
+    checks and repairs instead of a number; pass ``acknowledge`` with the
+    token named there to run anyway, marked ``unverified``.
+
+    ``verdict_policy``: ``"full"`` (default) returns reference, residual,
+    tolerance and verdict; ``"reference_only"`` omits the verdict; ``"off"``
+    evaluates nothing.
     """
     from uxarray_mcp.tools.advanced import (
         calculate_anomaly,
@@ -685,6 +721,7 @@ def run_analysis(
     # Accept hyphen- and space-separated spellings of an operation name;
     # an agent that writes "zonal mean" means calculate_zonal_mean.
     op = "_".join(operation.strip().lower().replace("-", "_").split())
+    lat_spec = _resolve_lat_spec(lat_spec, lat_step)
     session_id = _resolve_optional_session(session_id, dataset_handle)
     grid_path, data_path = _paths_from_handle(
         session_id, dataset_handle, grid_path, data_path
@@ -757,6 +794,7 @@ def run_analysis(
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
+            sphere_radius=sphere_radius,
         )
     if op == "curl":
         return calculate_curl(
@@ -770,6 +808,7 @@ def run_analysis(
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
+            sphere_radius=sphere_radius,
         )
     if op == "divergence":
         return calculate_divergence(
@@ -783,6 +822,7 @@ def run_analysis(
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
+            sphere_radius=sphere_radius,
         )
     if op == "azimuthal_mean":
         return calculate_azimuthal_mean(
@@ -876,6 +916,8 @@ def run_analysis(
             data_path=data_path,
             method=method,
             remap_to=remap_to,
+            backend=backend,
+            yac_method=yac_method,
             session_id=session_id,
             dataset_handle=dataset_handle,
             result_name=result_name,
@@ -890,6 +932,8 @@ def run_analysis(
             variable_names=[variable_name] if variable_name else None,
             method=method,
             remap_to=remap_to,
+            backend=backend,
+            yac_method=yac_method,
             session_id=session_id,
             dataset_handle=dataset_handle,
             result_name=result_name,
@@ -897,12 +941,19 @@ def run_analysis(
             endpoint=endpoint,
         )
     if op == "remap_to_rectilinear":
+        from uxarray_mcp.domain.remap_backend import YAC_METHODS
+
+        # method="conservative" means the same here as for the mesh remaps.
+        if yac_method is None and method and method.strip().lower() in YAC_METHODS:
+            yac_method = method.strip().lower()
         return remap_to_rectilinear(
             variable_name=_require(variable_name, "variable_name", op),
             target_lon=_require(target_lon, "target_lon", op),
             target_lat=_require(target_lat, "target_lat", op),
             grid_path=grid_path,
             data_path=data_path,
+            backend=backend,
+            yac_method=yac_method,
             session_id=session_id,
             dataset_handle=dataset_handle,
             result_name=result_name,
@@ -971,7 +1022,11 @@ def plot_dataset(
     plot_type: str,
     grid_path: str | None = None,
     data_path: str | None = None,
+    data_paths: list[str] | None = None,
     variable_name: str | None = None,
+    scale_factor: float = 1.0,
+    units_label: str | None = None,
+    region_name: str = "",
     width: int = 800,
     height: int = 400,
     cmap: str = "viridis",
@@ -981,10 +1036,18 @@ def plot_dataset(
     time_index: int = 0,
     level_index: int = 0,
     lat_spec: tuple | float | list[Any] | None = None,
+    lat_step: float | None = None,
     conservative: bool = False,
     line_color: str = "#1f77b4",
     lon_bounds: list[float] | None = None,
     lat_bounds: list[float] | None = None,
+    show_mesh_boundary: bool = False,
+    coastlines: bool = True,
+    borders: bool = True,
+    rivers: bool = False,
+    lakes: bool = True,
+    cities: bool = False,
+    basemap: bool = False,
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
@@ -992,15 +1055,34 @@ def plot_dataset(
 ) -> list[Any]:
     """Render mesh, geographic mesh, variable, or zonal-mean plots.
 
+    ``plot_type`` is one of ``mesh``, ``mesh_geo``, ``variable``,
+    ``zonal_mean``, ``temporal_mean``.
+
+    ``temporal_mean`` averages ``variable_name`` over every time step in
+    ``data_paths`` and draws the result, optionally cut to
+    ``lon_bounds``/``lat_bounds`` first and scaled by ``scale_factor`` into
+    ``units_label``. It is the only plot type that reads more than one data
+    file, and the only one whose box is honored, so it is what a decadal
+    regional mean on facility-only paths goes through. Longitudes follow
+    uxarray's -180..180 convention, not 0..360.
+
     ``time_index`` and ``level_index`` are separate selectors, applied only
     to time-like and level-like dimensions respectively. Results carry a
     ``reduced_dims`` entry naming every dimension that was collapsed to make
     the picture, because the PNG cannot say so itself.
+
+    ``mesh_geo`` (local only) draws the cell outlines over Natural Earth
+    features and takes ``show_mesh_boundary``, ``coastlines``, ``borders``,
+    ``rivers``, ``lakes``, ``cities`` and ``basemap`` (``basemap`` needs a
+    network connection). ``temporal_mean`` reads ``coastlines`` as well, and
+    draws coastlines, borders and state lines under the field. The remaining
+    plot types ignore all of these.
     """
     from uxarray_mcp.tools.plotting import plot_mesh_geo
     from uxarray_mcp.tools.remote_tools import plot_mesh, plot_variable, plot_zonal_mean
 
     kind = plot_type.strip().lower().replace("-", "_")
+    lat_spec = _resolve_lat_spec(lat_spec, lat_step)
     if kind == "mesh":
         return plot_mesh(
             grid_path=grid_path,
@@ -1019,10 +1101,57 @@ def plot_dataset(
             height=height,
             lon_bounds=lon_bounds,
             lat_bounds=lat_bounds,
+            coastlines=coastlines,
+            borders=borders,
+            rivers=rivers,
+            lakes=lakes,
+            show_mesh_boundary=show_mesh_boundary,
+            basemap=basemap,
+            cities=cities,
+            session_id=session_id,
+            dataset_handle=dataset_handle,
+        )
+    if kind in ("temporal_mean", "mean_map"):
+        from uxarray_mcp.tools.remote_tools import temporal_mean_map
+
+        paths = data_paths if data_paths else ([data_path] if data_path else None)
+        if not paths:
+            raise ValueError(
+                "plot_type='temporal_mean' requires data_paths (the files to "
+                "average over), or a single data_path."
+            )
+        return temporal_mean_map(
+            grid_path=grid_path,
+            data_paths=paths,
+            variable_name=variable_name,
+            lon_bounds=lon_bounds,
+            lat_bounds=lat_bounds,
+            level_index=level_index,
+            scale_factor=scale_factor,
+            units_label=units_label,
+            region_name=region_name,
+            width=width,
+            height=height,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            title=title,
+            geography=coastlines,
+            use_remote=use_remote,
+            endpoint=endpoint,
             session_id=session_id,
             dataset_handle=dataset_handle,
         )
     if kind == "variable":
+        # A box handed to this plot type used to be accepted and dropped, so
+        # a regional request came back as a global picture that looked like
+        # an answer. Name the plot type that honors it instead.
+        if lon_bounds is not None or lat_bounds is not None:
+            raise ValueError(
+                "plot_type='variable' draws the whole mesh and cannot honor "
+                "lon_bounds/lat_bounds. Use plot_type='temporal_mean' for a "
+                "regional map, or 'mesh_geo' for a regional wireframe."
+            )
         return plot_variable(
             grid_path=grid_path,
             data_path=data_path,
@@ -1058,7 +1187,9 @@ def plot_dataset(
             session_id=session_id,
             dataset_handle=dataset_handle,
         )
-    raise ValueError("plot_type must be one of: mesh, mesh_geo, variable, zonal_mean.")
+    raise ValueError(
+        "plot_type must be one of: mesh, mesh_geo, variable, zonal_mean, temporal_mean."
+    )
 
 
 def diagnose_endpoint(

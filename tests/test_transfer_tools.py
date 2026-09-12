@@ -217,7 +217,7 @@ class TestDoctorReportsOnDataMovement:
         from uxarray_mcp.remote import transfer as transfer_mod
 
         def boom(profile):
-            raise transfer_mod.TransferError("globus-sdk is not installed")
+            raise transfer_mod.TransferError("globus-cli is not installed")
 
         monkeypatch.setattr(transfer_mod, "default_transfer_client", boom)
         check = _transfer_check(_config(_transfer_profile()), None, False)

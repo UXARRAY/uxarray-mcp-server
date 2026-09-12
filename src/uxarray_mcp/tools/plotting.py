@@ -437,10 +437,7 @@ def _build_plot_note(
             "This mesh has no real geographic cutout boundary."
         )
     elif status == "disabled":
-        lines.append(
-            "Mesh boundary not shown (off by default). "
-            'Ask "show the mesh boundary" to enable it.'
-        )
+        lines.append("Mesh boundary not shown (show_mesh_boundary=false by default).")
 
     # ── Seam faces note ───────────────────────────────────────────────────────
     skipped = render_info["seam_faces_skipped"]
@@ -468,23 +465,23 @@ def _build_plot_note(
         lines.append("Terrain basemap: NASA stock image (contextily not installed).")
 
     # ── What the user can ask for next ────────────────────────────────────────
+    # Named as the parameters that select them, so a caller reaching this
+    # through plot_dataset can act on the note without guessing the API.
     suggestions = []
     if lon_bounds is None:
-        suggestions.append('zoom to a region (e.g. "show North America")')
+        suggestions.append("lon_bounds/lat_bounds to zoom to a region")
     if "rivers" not in feats:
-        suggestions.append("add rivers")
+        suggestions.append("rivers=true")
     if not cities:
-        suggestions.append("add city labels")
+        suggestions.append("cities=true for city labels")
     if basemap == "none":
-        suggestions.append("add terrain background")
+        suggestions.append("basemap=true for a terrain background (network)")
     if status == "disabled":
-        suggestions.append("show the mesh boundary in red")
+        suggestions.append("show_mesh_boundary=true to trace the mesh edge in red")
     if "borders" in feats:
-        suggestions.append("remove borders")
-    suggestions.append("make cells more transparent")
-    suggestions.append("show mesh-only without geographic features")
+        suggestions.append("borders=false")
 
-    lines.append("You can ask to: " + "; ".join(suggestions[:5]) + ".")
+    lines.append("Options: " + "; ".join(suggestions[:5]) + ".")
 
     return "\n".join(lines)
 

@@ -877,7 +877,16 @@ def remote_plot_variable(
     fig.set_dpi(dpi)
     if title is not None:
         fig.axes[0].set_title(title)
-    fig.tight_layout()
+    # Mirrors domain.plotting._layout_with_colorbar: after the resize the
+    # HoloViews colorbar axes sits over the map and tight_layout does not
+    # move it, so the two are laid out by hand.
+    _axes = list(fig.axes)
+    if len(_axes) < 2:
+        fig.tight_layout()
+    else:
+        _axes[0].set_position([0.08, 0.12, 0.76, 0.80])
+        for _cax in _axes[1:]:
+            _cax.set_position([0.87, 0.12, 0.025, 0.80])
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
@@ -896,6 +905,378 @@ def remote_plot_variable(
             "n_face": int(uxds.uxgrid.n_face),
             "n_node": int(uxds.uxgrid.n_node),
             "n_edge": int(uxds.uxgrid.n_edge),
+        },
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
+    }
+
+
+def remote_temporal_mean_map(
+    grid_path: str,
+    data_paths: list,
+    variable_name: str,
+    lon_bounds: Optional[list] = None,
+    lat_bounds: Optional[list] = None,
+    level_index: int = 0,
+    scale_factor: float = 1.0,
+    units_label: Optional[str] = None,
+    region_name: str = "",
+    width: int = 900,
+    height: int = 520,
+    cmap: str = "viridis",
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    title: Optional[str] = None,
+    geography: bool = True,
+) -> Dict[str, Any]:
+    """Average a variable over time across many files, cut to a box, and draw it.
+
+    The three steps are one function because splitting them defeats the
+    point. ``temporal_mean`` alone cannot reach a facility-only path, and a
+    mean computed on the submitter would have to pull every input file over
+    the wire; here the whole reduction happens on the worker and only the
+    PNG plus a few summary numbers come back.
+
+    The bounding box is applied *before* the time average, so a regional
+    request reads the faces it asked for rather than the globe. On a mesh
+    where the region is a small fraction of the faces this is the
+    difference between a demo that finishes and one that does not.
+
+    Parameters
+    ----------
+    grid_path : str
+        Mesh file on the worker filesystem (or ``healpix:<zoom>``).
+    data_paths : list
+        One or more data files to average across, in time order. A bare
+        string is accepted and treated as a single-element list.
+    variable_name : str
+        Face-centered variable to average.
+    lon_bounds, lat_bounds : list | None
+        ``[min, max]`` degrees. Both must be given to subset; either alone
+        is refused rather than half-applied.
+    level_index : int
+        Index along a vertical dimension. Never applied to a time axis.
+    scale_factor : float
+        Multiplied into the mean after averaging, for unit conversion
+        (CAM ``PRECT`` is m/s; 86400000.0 gives mm/day).
+    units_label : str | None
+        Units for the colorbar. Records what ``scale_factor`` converted to,
+        since the number alone cannot say.
+    region_name : str
+        Human-readable region label for the default title.
+    width, height : int
+        PNG size in pixels.
+    cmap : str
+        Matplotlib colormap name.
+    vmin, vmax : float | None
+        Color limits, in the units produced by ``scale_factor``.
+    title : str | None
+        Overrides the generated title.
+    geography : bool
+        Draw coastlines, national borders and state lines under the data.
+        The axes are plain degrees, which is what Natural Earth's geometries
+        are in, so they overlay without a projection. Skipped without
+        comment if cartopy or its data are missing on the worker; the
+        result says which happened.
+
+    Returns
+    -------
+    dict
+        - png_b64, image_size_bytes: the rendered map
+        - geography: how many coastline/border/state paths were drawn, or
+          why none were
+        - variable_name, units, scale_factor: what was drawn, in what units
+        - n_files, n_time_steps, time_start, time_end: what was averaged
+        - reduced_dims: the time dims collapsed and the level index held
+        - n_face_total, n_face_subset, fraction_of_mesh: subset coverage
+        - value_stats: min/mean/max of the mean field, for sanity checks
+        - grid_info: n_face, n_node, n_edge of the *subset* grid
+    """
+    import base64
+    import io
+    import os
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import uxarray as ux
+
+    if isinstance(data_paths, str):
+        data_paths = [data_paths]
+    data_paths = [str(p) for p in (data_paths or [])]
+    if not data_paths:
+        raise ValueError("remote_temporal_mean_map requires at least one data path.")
+    missing = [p for p in data_paths if not os.path.exists(p)]
+    if missing:
+        raise FileNotFoundError(
+            f"{len(missing)} of {len(data_paths)} data paths are not readable "
+            f"on the worker; first missing: {missing[0]}"
+        )
+    if (lon_bounds is None) != (lat_bounds is None):
+        raise ValueError(
+            "Subsetting needs both lon_bounds and lat_bounds; got only one. "
+            "Pass both, or neither for the whole mesh."
+        )
+
+    # open_mfdataset takes a grid *path*, not a Grid object -- handing it one
+    # fails with the Grid's repr as the error message. Only the two synthetic
+    # grid spellings need the object, and those get the dataset attached by
+    # hand, exactly as remote_plot_variable does.
+    _spec = grid_path.lower()
+    if _spec.startswith("healpix:") or os.path.splitext(_spec)[1] in [
+        ".shp",
+        ".geojson",
+    ]:
+        import xarray as xr
+
+        if _spec.startswith("healpix:"):
+            _grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        else:
+            _grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.UxDataset(
+            xr.open_mfdataset(data_paths, combine="by_coords"), uxgrid=_grid
+        )
+    else:
+        uxds = ux.open_mfdataset(grid_path, data_paths, combine="by_coords")
+    n_face_total = int(uxds.uxgrid.n_face)
+
+    if variable_name not in uxds.data_vars:
+        raise ValueError(
+            f"Variable '{variable_name}' not found. "
+            f"Available: {list(uxds.data_vars.keys())}"
+        )
+    uxda = uxds[variable_name]
+
+    face_dims = {"n_face", "nCells"}
+    if not any(d in face_dims for d in uxda.dims):
+        raise ValueError(f"Variable '{variable_name}' is not face-centered.")
+
+    # Same split as remote_plot_variable: a time index and a level index
+    # reach different axes, and mixing them silently averages the wrong one.
+    _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
+    _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
+    level_sel = {}
+    time_dims = []
+    reduced_dims: Dict[str, Any] = {}
+    for dim in uxda.dims:
+        if dim in face_dims:
+            continue
+        size = int(uxda.sizes[dim])
+        name = str(dim).lower()
+        if "time" in name:
+            time_dims.append(str(dim))
+            reduced_dims[str(dim)] = {"kind": "time", "how": "mean", "size": size}
+            continue
+        if size == 1:
+            level_sel[dim] = 0
+            continue
+        if name in _LEVEL_EXACT or any(s in name for s in _LEVEL_SUBSTR):
+            level_sel[dim] = level_index
+            reduced_dims[str(dim)] = {
+                "kind": "level",
+                "index": level_index,
+                "size": size,
+            }
+        else:
+            level_sel[dim] = 0
+            reduced_dims[str(dim)] = {"kind": "other", "index": 0, "size": size}
+    if not time_dims:
+        raise ValueError(
+            f"Variable '{variable_name}' has no time dimension to average; "
+            f"dims are {list(uxda.dims)}."
+        )
+    if level_sel:
+        uxda = uxda.isel(**level_sel)
+
+    n_time_steps = 1
+    for d in time_dims:
+        n_time_steps *= int(uxda.sizes[d])
+    time_start = time_end = None
+    for d in time_dims:
+        if d in uxda.coords:
+            _tv = uxda[d].values
+            if len(_tv):
+                time_start, time_end = str(_tv[0]), str(_tv[-1])
+            break
+
+    # Cut to the region before averaging: the mean then touches only the
+    # faces that end up in the picture.
+    subset_applied = False
+    if lon_bounds is not None and lat_bounds is not None:
+        uxda = uxda.subset.bounding_box(
+            lon_bounds=[float(v) for v in lon_bounds],
+            lat_bounds=[float(v) for v in lat_bounds],
+        )
+        subset_applied = True
+        if int(uxda.uxgrid.n_face) == 0:
+            raise ValueError(
+                f"Bounding box lon={lon_bounds} lat={lat_bounds} selects no "
+                f"faces of this {n_face_total}-face mesh. Longitudes here may "
+                f"use a different convention (0..360 vs -180..180)."
+            )
+
+    mean_da = uxda.mean(dim=time_dims)
+    if hasattr(mean_da, "compute"):
+        mean_da = mean_da.compute()
+    if scale_factor != 1.0:
+        _scaled = mean_da * float(scale_factor)
+        # Arithmetic can hand back a plain xarray object; the grid has to be
+        # reattached or .plot.polygons has no mesh to draw on.
+        if not hasattr(_scaled, "uxgrid") or _scaled.uxgrid is None:
+            _scaled = ux.UxDataArray(_scaled, uxgrid=mean_da.uxgrid)
+        mean_da = _scaled
+    sub_grid = mean_da.uxgrid
+    n_face_subset = int(sub_grid.n_face)
+
+    label = variable_name if not units_label else f"{variable_name} ({units_label})"
+    mean_da = mean_da.rename(label)
+
+    vals = np.asarray(mean_da.values, dtype="float64")
+    finite = vals[np.isfinite(vals)]
+    value_stats = {
+        "min": float(finite.min()) if finite.size else None,
+        "mean": float(finite.mean()) if finite.size else None,
+        "max": float(finite.max()) if finite.size else None,
+        "n_faces": int(vals.size),
+        "n_nonfinite": int(vals.size - finite.size),
+    }
+
+    import holoviews as hv
+
+    hv.extension("matplotlib")
+
+    dpi = 100
+    kwargs: Dict[str, Any] = {"backend": "matplotlib", "cmap": cmap}
+    if vmin is not None or vmax is not None:
+        kwargs["clim"] = (
+            float(vmin) if vmin is not None else float(np.nanmin(vals)),
+            float(vmax) if vmax is not None else float(np.nanmax(vals)),
+        )
+
+    element = mean_da.plot.polygons(**kwargs)
+    renderer = hv.Store.renderers["matplotlib"]
+    plot = renderer.get_plot(element)
+    fig = plot.state
+    fig.set_size_inches(width / dpi, height / dpi)
+    fig.set_dpi(dpi)
+
+    if title is None:
+        _span = ""
+        if time_start and time_end:
+            _span = f" {time_start[:10]} to {time_end[:10]}"
+        _where = f" over {region_name}" if region_name else ""
+        title = f"Mean {label}{_where},{_span} ({n_time_steps} steps)"
+    fig.axes[0].set_title(title)
+
+    # Geography, drawn as plain paths rather than through a projection: the
+    # polygons were plotted in degrees, and Natural Earth's geometries are in
+    # degrees, so the two line up without cartopy owning the axes. A map of a
+    # region with no coastline on it is hard to check and easy to misread.
+    geo_info: Dict[str, Any] = {"drawn": False}
+    if geography:
+        try:
+            import cartopy.feature as cfeature
+            from matplotlib.collections import LineCollection
+
+            _ax = fig.axes[0]
+            _xlim, _ylim = _ax.get_xlim(), _ax.get_ylim()
+            counts = {}
+            for key, category, feature_name, lw, color in (
+                ("coastlines", "physical", "coastline", 0.8, "#111111"),
+                (
+                    "borders",
+                    "cultural",
+                    "admin_0_boundary_lines_land",
+                    0.6,
+                    "#333333",
+                ),
+                (
+                    "states",
+                    "cultural",
+                    "admin_1_states_provinces_lines",
+                    0.4,
+                    "#555555",
+                ),
+            ):
+                segments = []
+                for geom in cfeature.NaturalEarthFeature(
+                    category, feature_name, "50m"
+                ).geometries():
+                    parts = getattr(geom, "geoms", None) or [geom]
+                    for part in parts:
+                        coords = getattr(part, "coords", None)
+                        if coords is None:
+                            continue
+                        pts = list(coords)
+                        if len(pts) > 1:
+                            segments.append(pts)
+                if segments:
+                    _ax.add_collection(
+                        LineCollection(
+                            segments,
+                            linewidths=lw,
+                            colors=color,
+                            zorder=5,
+                        )
+                    )
+                counts[key] = len(segments)
+            # add_collection re-autoscales to the whole world; the box the
+            # caller asked for is the view that matters.
+            _ax.set_xlim(_xlim)
+            _ax.set_ylim(_ylim)
+            geo_info = {"drawn": True, **counts}
+        except Exception as exc:  # cartopy absent, or its data not cached
+            geo_info = {"drawn": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+    # Mirrors remote_plot_variable: after the resize the HoloViews colorbar
+    # sits over the map and tight_layout will not move it.
+    _axes = list(fig.axes)
+    if len(_axes) < 2:
+        fig.tight_layout()
+    else:
+        _axes[0].set_position([0.08, 0.12, 0.76, 0.80])
+        for _cax in _axes[1:]:
+            _cax.set_position([0.87, 0.12, 0.025, 0.80])
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    png_bytes = buf.read()
+    if not png_bytes:
+        raise ValueError("Rendered temporal mean map is empty.")
+
+    return {
+        "png_b64": base64.b64encode(png_bytes).decode("utf-8"),
+        "image_size_bytes": len(png_bytes),
+        "variable_name": variable_name,
+        "units": units_label,
+        "scale_factor": float(scale_factor),
+        "n_files": len(data_paths),
+        "n_time_steps": int(n_time_steps),
+        "time_start": time_start,
+        "time_end": time_end,
+        "reduced_dims": reduced_dims,
+        "subset_applied": subset_applied,
+        "lon_bounds": list(lon_bounds) if lon_bounds is not None else None,
+        "lat_bounds": list(lat_bounds) if lat_bounds is not None else None,
+        "n_face_total": n_face_total,
+        "n_face_subset": n_face_subset,
+        "fraction_of_mesh": (n_face_subset / n_face_total) if n_face_total else None,
+        "value_stats": value_stats,
+        "geography": geo_info,
+        "grid_info": {
+            "n_face": n_face_subset,
+            "n_node": int(sub_grid.n_node),
+            "n_edge": int(sub_grid.n_edge),
         },
         "_worker_runtime": {
             "hostname": __import__("socket").gethostname(),
@@ -1596,6 +1977,7 @@ def remote_calculate_gradient(
     scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
+    sphere_radius: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Compute the spatial gradient of a face-centered scalar field on HPC."""
     import inspect as _inspect
@@ -1667,6 +2049,26 @@ def remote_calculate_gradient(
     # structured result and _provenance.warnings, not just worker stderr.
     import warnings as _warnings_module
 
+    # Mirrors domain.vector_calc._apply_sphere_radius: a caller-supplied radius
+    # is attached to the grid so UXarray can scale, and where the radius came
+    # from is reported. Inlined because the worker has no uxarray_mcp.
+    _declared = "sphere_radius" in uxds.uxgrid._ds.attrs
+    if sphere_radius is not None:
+        if float(sphere_radius) <= 0:
+            raise ValueError("sphere_radius must be a positive number of metres.")
+        uxds.uxgrid.sphere_radius = float(sphere_radius)
+        _radius_basis = {
+            "sphere_radius": float(sphere_radius),
+            "radius_source": "argument",
+        }
+    elif _declared:
+        _radius_basis = {
+            "sphere_radius": float(uxds.uxgrid.sphere_radius),
+            "radius_source": "grid",
+        }
+    else:
+        _radius_basis = {"sphere_radius": None, "radius_source": "none"}
+
     applied_scale = False
     with _warnings_module.catch_warnings(record=True) as _caught:
         _warnings_module.simplefilter("always")
@@ -1701,6 +2103,7 @@ def remote_calculate_gradient(
         "component_stats": {name: _stats(grad[name]) for name in comp_names},
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": applied_scale,
+        "radius_basis": _radius_basis,
         "interpretation": "zonal (d/dx) and meridional (d/dy) components of the gradient",
         "component_warnings": uxarray_warnings,
         "reduced_dims": _reduced,
@@ -1731,6 +2134,7 @@ def remote_calculate_curl(
     scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
+    sphere_radius: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Compute relative vorticity (curl) of a 2-D wind field on HPC.
 
@@ -1834,6 +2238,26 @@ def remote_calculate_curl(
     # structured result and _provenance.warnings, not just worker stderr.
     import warnings as _warnings_module
 
+    # Mirrors domain.vector_calc._apply_sphere_radius: a caller-supplied radius
+    # is attached to the grid so UXarray can scale, and where the radius came
+    # from is reported. Inlined because the worker has no uxarray_mcp.
+    _declared = "sphere_radius" in uxds.uxgrid._ds.attrs
+    if sphere_radius is not None:
+        if float(sphere_radius) <= 0:
+            raise ValueError("sphere_radius must be a positive number of metres.")
+        uxds.uxgrid.sphere_radius = float(sphere_radius)
+        _radius_basis = {
+            "sphere_radius": float(sphere_radius),
+            "radius_source": "argument",
+        }
+    elif _declared:
+        _radius_basis = {
+            "sphere_radius": float(uxds.uxgrid.sphere_radius),
+            "radius_source": "grid",
+        }
+    else:
+        _radius_basis = {"sphere_radius": None, "radius_source": "none"}
+
     applied_scale = False
     with _warnings_module.catch_warnings(record=True) as _caught:
         _warnings_module.simplefilter("always")
@@ -1874,6 +2298,7 @@ def remote_calculate_curl(
         "interpretation": "relative vorticity zeta = dv/dx - du/dy",
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": applied_scale,
+        "radius_basis": _radius_basis,
         "stats": stats,
         "component_warnings": component_warnings,
         "reduced_dims": _reduced,
@@ -1904,6 +2329,7 @@ def remote_calculate_divergence(
     scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
+    sphere_radius: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Compute horizontal divergence of a 2-D vector field on HPC.
 
@@ -2004,6 +2430,26 @@ def remote_calculate_divergence(
 
     import warnings as _warnings_module
 
+    # Mirrors domain.vector_calc._apply_sphere_radius: a caller-supplied radius
+    # is attached to the grid so UXarray can scale, and where the radius came
+    # from is reported. Inlined because the worker has no uxarray_mcp.
+    _declared = "sphere_radius" in uxds.uxgrid._ds.attrs
+    if sphere_radius is not None:
+        if float(sphere_radius) <= 0:
+            raise ValueError("sphere_radius must be a positive number of metres.")
+        uxds.uxgrid.sphere_radius = float(sphere_radius)
+        _radius_basis = {
+            "sphere_radius": float(sphere_radius),
+            "radius_source": "argument",
+        }
+    elif _declared:
+        _radius_basis = {
+            "sphere_radius": float(uxds.uxgrid.sphere_radius),
+            "radius_source": "grid",
+        }
+    else:
+        _radius_basis = {"sphere_radius": None, "radius_source": "none"}
+
     applied_scale = False
     with _warnings_module.catch_warnings(record=True) as _caught:
         _warnings_module.simplefilter("always")
@@ -2042,6 +2488,7 @@ def remote_calculate_divergence(
         "interpretation": "horizontal divergence du/dx + dv/dy",
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": applied_scale,
+        "radius_basis": _radius_basis,
         "stats": stats,
         "component_warnings": component_warnings,
         "reduced_dims": _reduced,
@@ -2142,7 +2589,13 @@ def remote_calculate_azimuthal_mean(
     # worker cannot import uxarray_mcp. Bins the caller chose need not touch
     # the mesh, and an all-NaN profile is shaped exactly like an answer.
     _np = __import__("numpy")
-    _profile = _np.asarray(values, dtype=float)
+    # The ring at radius zero is a point, not a circle, and is NaN by
+    # construction; it is left out of the count as in the local path.
+    _radii_arr = _np.asarray(radii, dtype=float)
+    _degenerate = [i for i, r in enumerate(_radii_arr) if r == 0.0]
+    _profile = _np.asarray(
+        [v for i, v in enumerate(values) if i not in _degenerate], dtype=float
+    )
     _src = _np.asarray(var.values, dtype=float)
     _n_bins = int(_profile.size)
     _n_filled = int(_np.isfinite(_profile).sum())
@@ -2158,6 +2611,7 @@ def remote_calculate_azimuthal_mean(
         "n_bins_filled": _n_filled,
         "source_has_missing": _src_missing,
         "cause": _cause,
+        "degenerate_bins_excluded": len(_degenerate),
     }
 
     return {
@@ -2271,6 +2725,8 @@ def remote_remap_variable(
     variable_name: str,
     method: str = "nearest_neighbor",
     remap_to: str = "faces",
+    backend: str = "uxarray",
+    yac_method: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Remap a face-centered variable onto a target grid on HPC.
 
@@ -2308,13 +2764,116 @@ def remote_remap_variable(
             f"Variable '{variable_name}' not found. Available: {list(uxds.data_vars)}"
         )
     uxda = uxds[variable_name]
-    if not hasattr(uxda.remap, method):
+    # Mirrors domain.remap_backend.resolve_remap_plan; inlined because the
+    # worker has no uxarray_mcp. Change both together.
+    _YAC_METHODS = ("nnn", "dnn", "average", "conservative")
+    _UX_METHODS = ("nearest_neighbor", "inverse_distance_weighted", "bilinear")
+    _method = (method or "nearest_neighbor").strip().lower()
+    _backend = (backend or "uxarray").strip().lower()
+    _yac = yac_method.strip().lower() if yac_method else None
+    if _method in _YAC_METHODS:
+        _backend, _yac = "yac", _yac or _method
+    if _backend == "yac":
+        _yac = _yac or "nnn"
+        if _yac not in _YAC_METHODS:
+            raise ValueError(
+                f"Unsupported yac_method {yac_method!r}. Choose from {_YAC_METHODS}."
+            )
+    elif _backend != "uxarray":
         raise ValueError(
-            f"Unsupported remap method '{method}'. Choose from "
-            "'nearest_neighbor', 'inverse_distance_weighted', or 'bilinear'."
+            f"Unsupported remap backend {backend!r}. Choose 'uxarray' or 'yac'."
         )
+    elif _method not in _UX_METHODS:
+        raise ValueError(
+            f"Unsupported remap method {method!r}. Choose from {_UX_METHODS} "
+            f"(uxarray backend) or {_YAC_METHODS} (YAC backend)."
+        )
+    _label = f"yac:{_yac}" if _backend == "yac" else _method
+    _coverage_method = _yac if _backend == "yac" else _method
 
-    remapped = getattr(uxda.remap, method)(target_grid, remap_to=remap_to)
+    def _remap_one(_uxda):
+        if _backend == "yac":
+            try:
+                return _uxda.remap.nearest_neighbor(
+                    target_grid, remap_to=remap_to, backend="yac", yac_method=_yac
+                )
+            except Exception as exc:
+                if "yac" in type(exc).__name__.lower() or "yac.core" in str(exc):
+                    raise RuntimeError(
+                        "backend='yac' was requested but the 'yac' Python package "
+                        "could not be imported on the HPC worker. Build YAC with "
+                        "scripts/hpc_build_yac.py and put its site-packages on the "
+                        "worker's PYTHONPATH, or use backend='uxarray'."
+                    ) from exc
+                raise
+        return getattr(_uxda.remap, _method)(target_grid, remap_to=remap_to)
+
+    # Coverage of the target mesh by the source, measured before remapping.
+    # Mirrors domain.remap_coverage.compute_scattered_coverage.
+    def _coverage(_src_grid):
+        _lon_attr, _lat_attr = (
+            ("node_lon", "node_lat")
+            if remap_to == "nodes"
+            else ("face_lon", "face_lat")
+        )
+        try:
+            _tl = np.asarray(getattr(target_grid, _lon_attr), dtype=float)
+            _tla = np.asarray(getattr(target_grid, _lat_attr), dtype=float)
+        except (AttributeError, ValueError, TypeError):
+            return None
+        if _tl.size == 0 or _tl.shape != _tla.shape:
+            return None
+        _tl = (_tl + 180.0) % 360.0 - 180.0
+        _sl = (np.asarray(_src_grid.node_lon, dtype=float) + 180.0) % 360.0 - 180.0
+        _sla = np.asarray(_src_grid.node_lat, dtype=float)
+        _bbox = {
+            "lon_min": float(_sl.min()),
+            "lon_max": float(_sl.max()),
+            "lat_min": float(_sla.min()),
+            "lat_max": float(_sla.max()),
+        }
+        _pts = np.column_stack([_tl, _tla])
+        _in = (
+            (_pts[:, 0] >= _bbox["lon_min"])
+            & (_pts[:, 0] <= _bbox["lon_max"])
+            & (_pts[:, 1] >= _bbox["lat_min"])
+            & (_pts[:, 1] <= _bbox["lat_max"])
+        )
+        _n = int(_pts.shape[0])
+        _inside = int(_in.sum())
+        _test = "bounding_box"
+        if _inside and _n <= 20000:
+            try:
+                _f, _counts = _src_grid.get_faces_containing_point(_pts[_in])
+                _inside = int(np.count_nonzero(np.asarray(_counts) > 0))
+                _test = "point_in_cell"
+            except Exception:
+                _test = "bounding_box"
+        _conservative = _coverage_method in (
+            "conservative",
+            "conservative_normed",
+            "first_order_conservative",
+        )
+        _codes = []
+        if _inside == 0:
+            _codes.append("REMAP_COVERAGE_ZERO")
+        elif _inside < _n:
+            _codes.append("REMAP_COVERAGE_PARTIAL")
+        if not _conservative:
+            _codes.append("REMAP_METHOD_NOT_CONSERVATIVE")
+        return {
+            "n_target_points": _n,
+            "points_in_source": _inside,
+            "coverage_fraction": (float(_inside) / _n) if _n else 0.0,
+            "source_bbox": _bbox,
+            "test": _test,
+            "method": _coverage_method,
+            "method_is_conservative": _conservative,
+            "warning_codes": _codes,
+        }
+
+    coverage = _coverage(source_grid)
+    remapped = _remap_one(uxda)
     vals = np.asarray(remapped.values, dtype=float)
     finite = vals[np.isfinite(vals)]
     stats = (
@@ -2328,9 +2887,11 @@ def remote_remap_variable(
         else {"min": None, "max": None, "mean": None, "std": None}
     )
 
-    return {
+    out = {
         "variable_name": variable_name,
-        "method": method,
+        "method": _label,
+        "backend": _backend,
+        "yac_method": _yac,
         "remap_to": remap_to,
         "source_grid": {
             "n_face": int(source_grid.n_face),
@@ -2353,6 +2914,9 @@ def remote_remap_variable(
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
     }
+    if coverage is not None:
+        out["source_coverage"] = coverage
+    return out
 
 
 def remote_regrid_dataset(
@@ -2362,6 +2926,8 @@ def remote_regrid_dataset(
     variable_names: Optional[list] = None,
     method: str = "nearest_neighbor",
     remap_to: str = "faces",
+    backend: str = "uxarray",
+    yac_method: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Remap all selected face-centered variables onto a target grid on HPC.
 
@@ -2399,16 +2965,118 @@ def remote_regrid_dataset(
     if not variables:
         raise ValueError("No face-centered variables available for remapping.")
 
-    first = uxds[variables[0]]
-    if not hasattr(first.remap, method):
+    # Mirrors domain.remap_backend.resolve_remap_plan; inlined because the
+    # worker has no uxarray_mcp. Change both together.
+    _YAC_METHODS = ("nnn", "dnn", "average", "conservative")
+    _UX_METHODS = ("nearest_neighbor", "inverse_distance_weighted", "bilinear")
+    _method = (method or "nearest_neighbor").strip().lower()
+    _backend = (backend or "uxarray").strip().lower()
+    _yac = yac_method.strip().lower() if yac_method else None
+    if _method in _YAC_METHODS:
+        _backend, _yac = "yac", _yac or _method
+    if _backend == "yac":
+        _yac = _yac or "nnn"
+        if _yac not in _YAC_METHODS:
+            raise ValueError(
+                f"Unsupported yac_method {yac_method!r}. Choose from {_YAC_METHODS}."
+            )
+    elif _backend != "uxarray":
         raise ValueError(
-            f"Unsupported remap method '{method}'. Choose from "
-            "'nearest_neighbor', 'inverse_distance_weighted', or 'bilinear'."
+            f"Unsupported remap backend {backend!r}. Choose 'uxarray' or 'yac'."
         )
+    elif _method not in _UX_METHODS:
+        raise ValueError(
+            f"Unsupported remap method {method!r}. Choose from {_UX_METHODS} "
+            f"(uxarray backend) or {_YAC_METHODS} (YAC backend)."
+        )
+    _label = f"yac:{_yac}" if _backend == "yac" else _method
+    _coverage_method = _yac if _backend == "yac" else _method
 
+    def _remap_one(_uxda):
+        if _backend == "yac":
+            try:
+                return _uxda.remap.nearest_neighbor(
+                    target_grid, remap_to=remap_to, backend="yac", yac_method=_yac
+                )
+            except Exception as exc:
+                if "yac" in type(exc).__name__.lower() or "yac.core" in str(exc):
+                    raise RuntimeError(
+                        "backend='yac' was requested but the 'yac' Python package "
+                        "could not be imported on the HPC worker. Build YAC with "
+                        "scripts/hpc_build_yac.py and put its site-packages on the "
+                        "worker's PYTHONPATH, or use backend='uxarray'."
+                    ) from exc
+                raise
+        return getattr(_uxda.remap, _method)(target_grid, remap_to=remap_to)
+
+    # Coverage of the target mesh by the source, measured before remapping.
+    # Mirrors domain.remap_coverage.compute_scattered_coverage.
+    def _coverage(_src_grid):
+        _lon_attr, _lat_attr = (
+            ("node_lon", "node_lat")
+            if remap_to == "nodes"
+            else ("face_lon", "face_lat")
+        )
+        try:
+            _tl = np.asarray(getattr(target_grid, _lon_attr), dtype=float)
+            _tla = np.asarray(getattr(target_grid, _lat_attr), dtype=float)
+        except (AttributeError, ValueError, TypeError):
+            return None
+        if _tl.size == 0 or _tl.shape != _tla.shape:
+            return None
+        _tl = (_tl + 180.0) % 360.0 - 180.0
+        _sl = (np.asarray(_src_grid.node_lon, dtype=float) + 180.0) % 360.0 - 180.0
+        _sla = np.asarray(_src_grid.node_lat, dtype=float)
+        _bbox = {
+            "lon_min": float(_sl.min()),
+            "lon_max": float(_sl.max()),
+            "lat_min": float(_sla.min()),
+            "lat_max": float(_sla.max()),
+        }
+        _pts = np.column_stack([_tl, _tla])
+        _in = (
+            (_pts[:, 0] >= _bbox["lon_min"])
+            & (_pts[:, 0] <= _bbox["lon_max"])
+            & (_pts[:, 1] >= _bbox["lat_min"])
+            & (_pts[:, 1] <= _bbox["lat_max"])
+        )
+        _n = int(_pts.shape[0])
+        _inside = int(_in.sum())
+        _test = "bounding_box"
+        if _inside and _n <= 20000:
+            try:
+                _f, _counts = _src_grid.get_faces_containing_point(_pts[_in])
+                _inside = int(np.count_nonzero(np.asarray(_counts) > 0))
+                _test = "point_in_cell"
+            except Exception:
+                _test = "bounding_box"
+        _conservative = _coverage_method in (
+            "conservative",
+            "conservative_normed",
+            "first_order_conservative",
+        )
+        _codes = []
+        if _inside == 0:
+            _codes.append("REMAP_COVERAGE_ZERO")
+        elif _inside < _n:
+            _codes.append("REMAP_COVERAGE_PARTIAL")
+        if not _conservative:
+            _codes.append("REMAP_METHOD_NOT_CONSERVATIVE")
+        return {
+            "n_target_points": _n,
+            "points_in_source": _inside,
+            "coverage_fraction": (float(_inside) / _n) if _n else 0.0,
+            "source_bbox": _bbox,
+            "test": _test,
+            "method": _coverage_method,
+            "method_is_conservative": _conservative,
+            "warning_codes": _codes,
+        }
+
+    coverage = _coverage(uxds.uxgrid)
     per_variable = {}
     for name in variables:
-        remapped = getattr(uxds[name].remap, method)(target_grid, remap_to=remap_to)
+        remapped = _remap_one(uxds[name])
         vals = np.asarray(remapped.values, dtype=float)
         finite = vals[np.isfinite(vals)]
         per_variable[name] = (
@@ -2422,8 +3090,10 @@ def remote_regrid_dataset(
             else {"min": None, "max": None, "mean": None, "shape": list(vals.shape)}
         )
 
-    return {
-        "method": method,
+    out = {
+        "method": _label,
+        "backend": _backend,
+        "yac_method": _yac,
         "remap_to": remap_to,
         "variables": list(variables),
         "target_grid": {
@@ -2441,6 +3111,9 @@ def remote_regrid_dataset(
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
     }
+    if coverage is not None:
+        out["source_coverage"] = coverage
+    return out
 
 
 def remote_remap_to_rectilinear(
@@ -2450,6 +3123,7 @@ def remote_remap_to_rectilinear(
     target_lon: list,
     target_lat: list,
     backend: str = "uxarray",
+    yac_method: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Remap a face-centered variable onto a rectilinear lon/lat grid on HPC.
 
@@ -2484,6 +3158,26 @@ def remote_remap_to_rectilinear(
 
     lon = list(target_lon)
     lat = list(target_lat)
+    # Mirrors domain.remap_backend.resolve_remap_plan for the rectilinear case.
+    _YAC_METHODS = ("nnn", "dnn", "average", "conservative")
+    _backend = (backend or "uxarray").strip().lower()
+    _yac = yac_method.strip().lower() if yac_method else None
+    if _yac in _YAC_METHODS:
+        _backend = "yac"
+    if _backend == "yac":
+        _yac = _yac or "nnn"
+        if _yac not in _YAC_METHODS:
+            raise ValueError(
+                f"Unsupported yac_method {yac_method!r}. Choose from {_YAC_METHODS}."
+            )
+    elif _backend != "uxarray":
+        raise ValueError(
+            f"Unsupported remap backend {backend!r}. Choose 'uxarray' or 'yac'."
+        )
+    elif _yac:
+        raise ValueError(f"yac_method={yac_method!r} requires backend='yac'.")
+    _coverage_method = _yac if _backend == "yac" else "nearest_neighbor"
+    _conservative = _coverage_method == "conservative"
     # Same coverage screen as the local path, inlined because the worker does
     # not have uxarray_mcp installed.
     grid_lon = (np.asarray(uxda.uxgrid.node_lon, dtype=float) + 180.0) % 360.0 - 180.0
@@ -2518,18 +3212,40 @@ def remote_remap_to_rectilinear(
         coverage_codes.append("REMAP_COVERAGE_ZERO")
     elif n_inside < n_points:
         coverage_codes.append("REMAP_COVERAGE_PARTIAL")
-    coverage_codes.append("REMAP_METHOD_NOT_CONSERVATIVE")
+    if not _conservative:
+        coverage_codes.append("REMAP_METHOD_NOT_CONSERVATIVE")
     coverage = {
         "n_target_points": n_points,
         "points_in_source": n_inside,
         "coverage_fraction": (float(n_inside) / n_points) if n_points else 0.0,
         "source_bbox": bbox,
         "test": coverage_test,
-        "method_is_conservative": False,
+        "method": _coverage_method,
+        "method_is_conservative": _conservative,
         "warning_codes": coverage_codes,
     }
 
-    remapped = uxda.remap.to_rectilinear(lon, lat, backend=backend)
+    try:
+        remapped = uxda.remap.to_rectilinear(
+            lon, lat, backend=_backend, yac_method=_yac
+        )
+    except Exception as exc:
+        if _backend == "yac" and (
+            "yac" in type(exc).__name__.lower() or "yac.core" in str(exc)
+        ):
+            raise RuntimeError(
+                "backend='yac' was requested but the 'yac' Python package could "
+                "not be imported on the HPC worker. Build YAC with "
+                "scripts/hpc_build_yac.py and put its site-packages on the "
+                "worker's PYTHONPATH, or use backend='uxarray'."
+            ) from exc
+        if _backend == "yac" and "Cannot reshape remapped data" in str(exc):
+            raise RuntimeError(
+                f"{exc} This is a known UXarray limitation of backend='yac' when "
+                "target_lon spans the full 360 degrees. Use a regional "
+                "target_lon, or backend='uxarray' for a global one."
+            ) from exc
+        raise
     vals = np.asarray(remapped.values, dtype=float)
     finite = vals[np.isfinite(vals)]
     stats = (
@@ -2544,7 +3260,9 @@ def remote_remap_to_rectilinear(
 
     return {
         "variable_name": variable_name,
-        "backend": backend,
+        "backend": _backend,
+        "method": f"yac:{_yac}" if _backend == "yac" else "nearest_neighbor",
+        "yac_method": _yac,
         "target_shape": [len(lat), len(lon)],
         "stats": stats,
         "source_coverage": coverage,

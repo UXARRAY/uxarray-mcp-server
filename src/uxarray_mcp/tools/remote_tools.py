@@ -262,7 +262,17 @@ def _plot_result_to_mcp_contents(result: Dict[str, Any]) -> list[Any]:
     validation on a null payload, which is exactly what happens on the
     biggest meshes.
     """
+    # An inline figure was still written to the artifact store; say where.
+    # Callers that compose plots into a JSON summary (analyze_dataset) can
+    # then reference the file instead of carrying the bytes.
+    if result.get("image_uri") is None:
+        for artifact in (result.get("_provenance") or {}).get("artifacts") or []:
+            if artifact.get("type") == "plot" and artifact.get("uri"):
+                result["image_uri"] = artifact["uri"]
+                break
     metadata = {key: value for key, value in result.items() if key != "png_b64"}
+    if result.get("png_b64") is not None:
+        metadata.setdefault("image_delivery", "inline")
     text = text_block(json_text(metadata))
 
     b64 = result.get("png_b64")
@@ -813,6 +823,179 @@ def plot_variable(
             result,
             plot_type="variable_polygons",
             variable=result.get("variable_name") or variable_name,
+        )
+    )
+
+
+def temporal_mean_map(
+    grid_path: str | None = None,
+    data_paths: List[str] | None = None,
+    variable_name: str | None = None,
+    lon_bounds: Optional[List[float]] = None,
+    lat_bounds: Optional[List[float]] = None,
+    level_index: int = 0,
+    scale_factor: float = 1.0,
+    units_label: Optional[str] = None,
+    region_name: str = "",
+    width: int = 900,
+    height: int = 520,
+    cmap: str = "viridis",
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    title: Optional[str] = None,
+    geography: bool = True,
+    use_remote: bool = False,
+    endpoint: str | None = None,
+    session_id: str | None = None,
+    dataset_handle: str | None = None,
+) -> list[Any]:
+    """Average a variable over time across files, cut to a box, and map it.
+
+    Unlike ``temporal_mean``, this runs on the HPC worker, so the inputs
+    may live only on the facility filesystem. The box is applied before
+    the average, so a regional request does not pay for the globe.
+
+    Parameters
+    ----------
+    grid_path : str | None
+        Mesh file (local or HPC filesystem). Optional with a session
+        dataset.
+    data_paths : list[str] | None
+        Data files to average across, in time order. A single path is
+        accepted.
+    variable_name : str
+        Face-centered variable to average.
+    lon_bounds, lat_bounds : list[float] | None
+        ``[min, max]`` degrees. Longitudes follow uxarray's convention,
+        -180..180, not 0..360. Pass both or neither.
+    level_index : int
+        Index along a vertical dimension; never applied to time.
+    scale_factor : float
+        Multiplied into the mean, for unit conversion.
+    units_label : str | None
+        Units after ``scale_factor``, for the colorbar.
+    region_name : str
+        Region label for the default title.
+    width, height : int
+        PNG size in pixels.
+    cmap : str
+        Matplotlib colormap name.
+    vmin, vmax : float | None
+        Color limits, in converted units.
+    title : str | None
+        Overrides the generated title.
+    geography : bool
+        Draw coastlines, borders and state lines under the data when the
+        worker has cartopy and its Natural Earth cache.
+    use_remote : bool
+        If True and HPC is configured, run on the remote endpoint.
+    session_id, dataset_handle : str | None
+        When both are given, the grid path is looked up from the
+        registered session dataset.
+
+    Returns
+    -------
+    dict
+        - png_b64 / image_uri, image_size_bytes: the map
+        - n_files, n_time_steps, time_start, time_end: what was averaged
+        - n_face_total, n_face_subset, fraction_of_mesh: subset coverage
+        - value_stats: min/mean/max of the mean field
+        - execution_venue: "local" or "hpc:<endpoint-name>"
+    """
+    from uxarray_mcp.provenance import attach_provenance
+
+    from .plotting import _resolve_plot_paths
+
+    if isinstance(data_paths, str):
+        data_paths = [data_paths]
+    first_path: str | None = data_paths[0] if data_paths else None
+    resolved_grid, resolved_first = _resolve_plot_paths(
+        grid_path, first_path, session_id, dataset_handle
+    )
+    resolved_paths = list(data_paths) if data_paths else [resolved_first]
+    if not variable_name:
+        raise ValueError("temporal_mean_map requires variable_name.")
+
+    inputs = {
+        "grid_path": resolved_grid,
+        "data_paths": resolved_paths,
+        "variable_name": variable_name,
+        "lon_bounds": lon_bounds,
+        "lat_bounds": lat_bounds,
+        "level_index": level_index,
+        "scale_factor": scale_factor,
+    }
+
+    def _local() -> Dict[str, Any]:
+        from uxarray_mcp.remote.compute_functions import remote_temporal_mean_map
+
+        result = remote_temporal_mean_map(
+            resolved_grid,
+            resolved_paths,
+            variable_name,
+            lon_bounds,
+            lat_bounds,
+            level_index,
+            scale_factor,
+            units_label,
+            region_name,
+            width,
+            height,
+            cmap,
+            vmin,
+            vmax,
+            title,
+            geography,
+        )
+        result["execution_venue"] = "local"
+        return attach_provenance(
+            result,
+            tool="temporal_mean_map",
+            inputs=inputs,
+            venue="local",
+            selected_variable=variable_name,
+        )
+
+    result = _run_with_optional_hpc(
+        tool_name="temporal_mean_map",
+        use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=resolved_grid,
+        session_id=session_id,
+        local_call=_local,
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.temporal_mean_map_remote(
+                resolved_grid,
+                resolved_paths,
+                variable_name,
+                lon_bounds,
+                lat_bounds,
+                level_index,
+                scale_factor,
+                units_label,
+                region_name,
+                width,
+                height,
+                cmap,
+                vmin,
+                vmax,
+                title,
+                geography,
+                use_remote,
+            )
+        ),
+    )
+    # The remote branch records the venue only in provenance; mirror it up so
+    # both venues answer "where did this run" in the same place.
+    if result.get("execution_venue") is None:
+        result["execution_venue"] = (result.get("_provenance") or {}).get(
+            "execution_venue"
+        )
+    return _plot_result_to_mcp_contents(
+        _ensure_plot_artifact(
+            result,
+            plot_type="temporal_mean_map",
+            variable=variable_name,
         )
     )
 

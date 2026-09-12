@@ -1131,6 +1131,22 @@ wheels = [
 ]
 
 [[package]]
+name = "globus-cli"
+version = "3.43.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "globus-sdk" },
+    { name = "jmespath" },
+    { name = "packaging" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/19/1833aec39218b69088b94b047aa96ce03b1b29edae0cb49ae005c946820e/globus_cli-3.43.0.tar.gz", hash = "sha256:f6926bac91ce2d84d1317fd84d9d94f3b4e6e5054102740f9bf7bb22bbf42efc", size = 216458, upload-time = "2026-08-12T15:23:45.86Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/93/78/67d4e5a7eee8d15a921b6fdada584e4d3838ecaae9e770e685ce55600e75/globus_cli-3.43.0-py3-none-any.whl", hash = "sha256:1e6c9a55ce5f02e2824b2d485a7327d49f6c41bed2a50b8443ce895f6869305a", size = 334332, upload-time = "2026-08-12T15:23:44.421Z" },
+]
+
+[[package]]
 name = "globus-compute-common"
 version = "0.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1166,16 +1182,16 @@ wheels = [
 
 [[package]]
 name = "globus-sdk"
-version = "4.7.0"
+version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a5/b2/c05a7042344ebbf9f85df259374e08a0deb5437a6a816e92976f5612c122/globus_sdk-4.7.0.tar.gz", hash = "sha256:69c27e1e5035f732d29dcdb9983ed282e5bf9c9c75691399b7d51ce3aea94504", size = 281838, upload-time = "2026-05-20T16:20:29.992Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a9/78/9d61118c9aa81b29779ab8f2101cd9fc9f2fc00d240bf626ba6d5d305b7a/globus_sdk-4.9.0.tar.gz", hash = "sha256:41cdc8611e6d48133fc75e20162068c8ad583a63f33245bd2e2d64edd6425a71", size = 288856, upload-time = "2026-08-10T19:38:25.314Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/f0/67d4b279d5a19324792e29499856160d3a478e864cfec3919d23ebc88268/globus_sdk-4.7.0-py3-none-any.whl", hash = "sha256:6f2a15cff130c93ca70ddc25a8156ae636865850d9a9c9dbb7ffc365e70930e2", size = 439273, upload-time = "2026-05-20T16:20:27.683Z" },
+    { url = "https://files.pythonhosted.org/packages/87/1d/99a84a391b06865bcef2653203b6a353fcd00acd65b75c42c2afafaf5c57/globus_sdk-4.9.0-py3-none-any.whl", hash = "sha256:7bbc33745b2daa0bfc080bd588be1643288ebb76949c410daae79ed29b2920b0", size = 449312, upload-time = "2026-08-10T19:38:23.472Z" },
 ]
 
 [[package]]
@@ -1386,6 +1402,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67", size = 134899, upload-time = "2025-03-05T20:05:00.369Z" },
+]
+
+[[package]]
+name = "jmespath"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/59/322338183ecda247fb5d1763a6cbe46eff7222eaeebafd9fa65d4bf5cb11/jmespath-1.1.0.tar.gz", hash = "sha256:472c87d80f36026ae83c6ddd0f1d05d4e510134ed462851fd5f754c8c3cbb88d", size = 27377, upload-time = "2026-01-22T16:35:26.279Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/2f/967ba146e6d58cf6a652da73885f52fc68001525b4197effc174321d70b4/jmespath-1.1.0-py3-none-any.whl", hash = "sha256:a5663118de4908c91729bea0acadca56526eb2698e83de10cd116ae0f4e97c64", size = 20419, upload-time = "2026-01-22T16:35:24.919Z" },
 ]
 
 [[package]]
@@ -4129,8 +4154,7 @@ openapi = [
     { name = "toolregistry-server", extra = ["openapi"] },
 ]
 transfer = [
-    { name = "globus-compute-sdk" },
-    { name = "globus-sdk" },
+    { name = "globus-cli" },
 ]
 
 [package.dev-dependencies]
@@ -4147,9 +4171,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "academy-py", marker = "extra == 'hpc'", specifier = ">=0.3.1" },
+    { name = "globus-cli", marker = "extra == 'transfer'", specifier = ">=3.30" },
     { name = "globus-compute-sdk", marker = "extra == 'hpc'", specifier = ">=4.5.0" },
-    { name = "globus-compute-sdk", marker = "extra == 'transfer'", specifier = ">=4.5.0" },
-    { name = "globus-sdk", marker = "extra == 'transfer'", specifier = ">=3.40.0" },
     { name = "holoviews", specifier = ">=1.19.0" },
     { name = "matplotlib", specifier = ">=3.9.0" },
     { name = "mcp", specifier = ">=1.27,<3" },

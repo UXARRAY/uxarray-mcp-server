@@ -176,12 +176,35 @@ def _vector_component_evidence(u: Any, v: Any) -> dict[str, Any]:
     }
 
 
+def _apply_sphere_radius(uxds: Any, sphere_radius: float | None) -> dict:
+    """Attach a caller-supplied sphere radius to the grid for this call.
+
+    UXarray scales derivatives by ``uxgrid.sphere_radius`` only when the grid
+    file declares one, and most do not. Without a way to supply it, a caller
+    on such a grid could only get the unit-sphere number, and only by
+    acknowledging it as unphysical. Setting the attribute here is what the
+    ``sphere_radius`` argument on the front door means, and it is recorded so
+    the result says where the radius came from.
+    """
+    grid = uxds.uxgrid
+    declared = "sphere_radius" in getattr(grid, "_ds").attrs
+    if sphere_radius is not None:
+        if sphere_radius <= 0:
+            raise ValueError("sphere_radius must be a positive number of metres.")
+        grid.sphere_radius = float(sphere_radius)
+        return {"sphere_radius": float(sphere_radius), "radius_source": "argument"}
+    if declared:
+        return {"sphere_radius": float(grid.sphere_radius), "radius_source": "grid"}
+    return {"sphere_radius": None, "radius_source": "none"}
+
+
 def compute_gradient(
     uxds: Any,
     variable_name: str,
     scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
+    sphere_radius: float | None = None,
 ) -> dict:
     """Compute the gradient of a face-centered scalar field.
 
@@ -206,13 +229,18 @@ def compute_gradient(
         Vertical-level index to select if the variable carries a level
         dimension (e.g. atmospheric ``lev``). Ignored if there is no level
         dimension.
+    sphere_radius : float, optional
+        Radius in metres to attach to the grid before differentiating, for
+        grids that declare none. Overrides a declared value when given.
 
     Returns
     -------
     dict
         Keys: variable_name, zonal_component_name, meridional_component_name,
         n_face, stats (min/max/mean for each component), reduced_dims (which
-        time/level axes were collapsed to reach a single face-centered slice).
+        time/level axes were collapsed to reach a single face-centered slice),
+        radius_basis (the radius used and whether it came from the grid, the
+        caller, or nowhere).
     """
     if variable_name not in uxds.data_vars:
         raise ValueError(
@@ -227,6 +255,7 @@ def compute_gradient(
     var, reduced_dims = _reduce_to_face(
         var, time_index=time_index, level_index=level_index
     )
+    radius_basis = _apply_sphere_radius(uxds, sphere_radius)
 
     import numpy as np
 
@@ -262,6 +291,7 @@ def compute_gradient(
         "component_stats": components,
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": bool(scale_by_radius),
+        "radius_basis": radius_basis,
         "interpretation": "zonal (∂/∂x) and meridional (∂/∂y) components of the gradient",
         "component_warnings": uxarray_warnings,
         "reduced_dims": reduced_dims,
@@ -290,6 +320,7 @@ def compute_curl(
     scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
+    sphere_radius: float | None = None,
 ) -> dict:
     """Compute the curl (relative vorticity) of a 2-D vector field (u, v).
 
@@ -349,6 +380,7 @@ def compute_curl(
         u_variable, v_variable, u, v, "curl"
     )
     component_evidence = _vector_component_evidence(u, v)
+    radius_basis = _apply_sphere_radius(uxds, sphere_radius)
 
     result, uxarray_warnings = _call_capturing_warnings(
         lambda: u.curl(v, scale_by_radius=scale_by_radius)
@@ -386,6 +418,7 @@ def compute_curl(
         "interpretation": "relative vorticity ζ = ∂v/∂x − ∂u/∂y",
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": bool(scale_by_radius),
+        "radius_basis": radius_basis,
         "stats": stats,
         "component_warnings": component_warnings,
         "component_evidence": component_evidence,
@@ -413,6 +446,7 @@ def compute_divergence(
     scale_by_radius: bool = True,
     time_index: int = 0,
     level_index: int = 0,
+    sphere_radius: float | None = None,
 ) -> dict:
     """Compute the horizontal divergence of a 2-D vector field (u, v).
 
@@ -473,6 +507,7 @@ def compute_divergence(
         u_variable, v_variable, u, v, "divergence"
     )
     component_evidence = _vector_component_evidence(u, v)
+    radius_basis = _apply_sphere_radius(uxds, sphere_radius)
 
     result, uxarray_warnings = _call_capturing_warnings(
         lambda: u.divergence(v, scale_by_radius=scale_by_radius)
@@ -502,6 +537,7 @@ def compute_divergence(
         "interpretation": "horizontal divergence ∂u/∂x + ∂v/∂y",
         "n_face": int(uxds.uxgrid.n_face),
         "scale_by_radius": bool(scale_by_radius),
+        "radius_basis": radius_basis,
         "stats": stats,
         "component_warnings": component_warnings,
         "component_evidence": component_evidence,
@@ -586,6 +622,20 @@ def compute_azimuthal_mean(
         result, "radius", time_index=time_index, level_index=level_index
     )
 
+    # The ring at radius zero is a point, not a circle: it contains no face
+    # centres and is NaN by construction, so it says nothing about whether
+    # the rings reach the mesh. Counting it made every azimuthal profile
+    # report partial coverage.
+    import numpy as _np
+
+    _radii = _np.asarray(radii, dtype=float)
+    _degenerate = [i for i, r in enumerate(_radii) if r == 0.0]
+    _counted = [v for i, v in enumerate(values) if i not in _degenerate]
+    # A centre the mesh does not reach still produces a profile of the
+    # requested length, every ring of it NaN.
+    coverage = compute_profile_coverage(_counted, source=var)
+    coverage["degenerate_bins_excluded"] = len(_degenerate)
+
     return {
         "variable_name": variable_name,
         "center": {"lon": center_lon, "lat": center_lat},
@@ -595,7 +645,5 @@ def compute_azimuthal_mean(
         "azimuthal_mean_values": values,
         "reduced_dims": reduced_dims,
         "n_face": int(uxds.uxgrid.n_face),
-        # A centre the mesh does not reach still produces a profile of the
-        # requested length, every ring of it NaN.
-        "profile_coverage": compute_profile_coverage(values, source=var),
+        "profile_coverage": coverage,
     }
