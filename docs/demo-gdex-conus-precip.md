@@ -4,6 +4,11 @@ Run-of-show for demonstrating the uxarray MCP server against data that never
 leaves NSF NCAR. Every number below was measured on 2026-09-11 against endpoint
 `ucar-uxarray-yac` (casper02).
 
+This page is the presenter's run-of-show. The same run written up for a reader —
+with the MCP background, the setup walkthrough, and the limitations — is the
+worked case study at
+[`case-studies/conus-precipitation-gdex/README.md`](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/case-studies/conus-precipitation-gdex/README.md).
+
 ---
 
 ## The claim being demonstrated
@@ -15,7 +20,7 @@ leaves NSF NCAR. Every number below was measured on 2026-09-11 against endpoint
 Three properties the audience should walk away with:
 
 1. **The data never moves.** 10 files x ~3.75 GB = ~37 GB of 6-hourly CAM output stays
-   on the GDEX filesystem. What crosses the wire is a ~110 KB PNG and a JSON record.
+   on the GDEX filesystem. What crosses the wire is a ~178 KB PNG and a JSON record.
 2. **The compute is where the data is.** uxarray runs on a casper worker via Globus
    Compute. The laptop has no uxarray-scale memory and never needs it.
 3. **Every answer is auditable.** Each call returns `_provenance`: tool name, argument
@@ -244,33 +249,38 @@ regression test — a longitude-convention bug would put the Sierra in Kansas.
 | capability query (Act I) | ~20 s |
 | 1 year, direct compute function | 29.1 s |
 | 1 year, full MCP front door | 51.4 s / 77.5 s |
-| 10 years, full chain | 464.4 s |
+| 10 years, direct compute function | 464.4 s |
+| 10 years, full MCP front door | 462.1 s |
 | cold worker penalty (PBS queue) | add 1-4 min if not pre-warmed |
 
-Per-year marginal cost is ~46 s, so the 10-year run is dominated by I/O over the
-~37 GB of source data, not by the mesh operation.
+The run is I/O bound on the ~37 GB of source data, not on the mesh operation.
+Do not read the two rows as a linear scaling law: one year costs 29.1 s and ten
+cost 464.4 s, so each year after the first runs about 48 s, not 29 s. The
+single-year file was read repeatedly while this demo was built and is almost
+certainly cache-warm, which is a suspicion rather than a measurement. Quote
+~48 s per year.
 
 ### Bytes over the wire
 
 | direction | payload |
 |---|---|
 | laptop → casper | the serialized function + arguments, a few KB |
-| casper → laptop | 112 KB PNG (base64: ~150 KB) + ~3 KB JSON |
+| casper → laptop | 177,737-byte PNG + ~3 KB JSON |
 | what stayed put | ~37 GB of 6-hourly CAM output |
 
-**This ratio is the demo.** ~37 GB read, ~115 KB returned — a factor of ~320,000.
+**This ratio is the demo.** ~37 GB read, ~180 KB returned — a factor of ~210,000.
 
 ### Token cost (approximate, per request)
 
 | item | tokens |
 |---|---|
-| uxarray MCP tool schema, 31 tools | ~10,600 on *every* request |
+| uxarray MCP tool schema, 33 tools | ~10,600 on *every* request |
 | returned map, 1000x560 | ~750 image tokens |
 | returned metadata + provenance JSON | ~750 |
 | the prompt you paste | ~200 |
 
 Honest framing for the room: the tool schema dominates. The interesting per-call
-cost is small; the standing cost of having 31 tools registered is not. This is a
+cost is small; the standing cost of having 33 tools registered is not. This is a
 real argument for the front-door design — `run_analysis` and `plot_dataset` cover
 most of the surface, and a narrower registered tool list would cut the standing
 cost several-fold.

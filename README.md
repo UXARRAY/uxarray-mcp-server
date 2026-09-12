@@ -48,6 +48,15 @@ You are most likely one of:
 5. **Just trying it out, or running an agent harness** — you don't want to
    install a scientific Python stack at all. → [Docker](#docker).
 
+**Want to see what this is for before installing anything?** Read the worked
+case study: [**a 10-year CONUS precipitation map from 37 GB that never
+moved**](case-studies/conus-precipitation-gdex/README.md). One paragraph of
+plain English on a laptop, ten years of 6-hourly CESM output on the NCAR
+filesystem, all the compute on a Casper worker, and a 178 KB PNG plus an
+auditable provenance record coming back. It covers what MCP is, what actually
+ran where, why it took 7.7 minutes, what it cost in tokens, and how to set the
+same thing up yourself.
+
 ---
 
 ## Docker
