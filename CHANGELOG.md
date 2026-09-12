@@ -5,6 +5,8 @@ CalVer, `<year>.<month>.<patch>`, mirroring the `uxarray` release they were
 built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
+
+## 2026.9.0 — 2026-09-12
 ### Added
 - YAC remapping is reachable. `docs/ucar.md` has said since the endpoint was
   named `ucar-uxarray-yac` that YAC "enables conservative remapping", and the

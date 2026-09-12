@@ -4127,7 +4127,7 @@ wheels = [
 
 [[package]]
 name = "uxarray-mcp"
-version = "0.3.1"
+version = "2026.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "holoviews" },
@@ -4183,7 +4183,7 @@ requires-dist = [
     { name = "toolregistry", specifier = ">=0.16.0" },
     { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.5.0" },
     { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.5.0" },
-    { name = "uxarray", specifier = ">=2026.9.0" },
+    { name = "uxarray", specifier = ">=2026.9.0,<2026.10" },
 ]
 provides-extras = ["openapi", "hpc", "transfer", "docs"]
 
