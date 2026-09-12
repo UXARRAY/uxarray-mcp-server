@@ -6,6 +6,7 @@ Subcommands
 - ``setup`` — write a minimal user config to ``~/.config/uxarray-mcp/config.yaml``
 - ``doctor`` — validate local Globus auth, endpoint health, and optional remote probes
 - ``endpoints`` — manage named Globus Compute endpoints in the user config
+- ``transfer setup`` — get Globus Transfer working: CLI, login, consent, config
 - ``install-claude`` — print or write the Claude Desktop ``mcpServers`` block
 
 The CLI is registered via the ``uxarray-mcp`` entry point in pyproject.toml.
@@ -29,6 +30,7 @@ from uxarray_mcp.remote.config import (
     discover_config_search_paths,
     load_config,
 )
+from uxarray_mcp.transfer_setup import cmd_transfer_setup
 
 
 def _read_user_config(path: Path) -> dict[str, Any]:
@@ -380,6 +382,40 @@ def build_parser() -> argparse.ArgumentParser:
     ep_remove = ep_sub.add_parser("remove", help="Remove a named endpoint.")
     ep_remove.add_argument("name")
     ep_remove.set_defaults(func=cmd_endpoints_remove)
+
+    # Globus Transfer is its own service with its own login, so it gets its own
+    # noun rather than another flag on `setup`, which configures compute.
+    transfer = sub.add_parser(
+        "transfer", help="Set up Globus Transfer (file movement)."
+    )
+    tr_sub = transfer.add_subparsers(dest="transfer_command", required=True)
+
+    tr_setup = tr_sub.add_parser(
+        "setup",
+        help="Check and fix everything a transfer needs.",
+        description=(
+            "Walk the seven things that must be true before a file can move: "
+            "the globus CLI, a login, Globus Connect Personal running with a "
+            "writable share, both collection UUIDs, consent for the remote "
+            "collection, and the config block. Offers to fix each."
+        ),
+    )
+    tr_setup.add_argument(
+        "--endpoint",
+        default=None,
+        help="Named endpoint to configure, as used by `endpoints add`.",
+    )
+    tr_setup.add_argument(
+        "--check",
+        action="store_true",
+        help="Report only; change nothing and ask nothing.",
+    )
+    tr_setup.add_argument(
+        "--yes",
+        action="store_true",
+        help="Take every default without asking. Skips anything needing a browser.",
+    )
+    tr_setup.set_defaults(func=cmd_transfer_setup)
 
     doctor = sub.add_parser(
         "doctor",

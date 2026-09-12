@@ -206,12 +206,14 @@ _ANALYSIS_ENVELOPE: dict[str, Any] = {
             "type": "object",
             "description": (
                 "Physical conditions checked before computing. Status "
-                "'not_evaluated' means no check ran -- distinct from 'failed'."
+                "'not_evaluated' means no check ran -- distinct from 'failed'. "
+                "'overridden' means a check failed and the caller acknowledged "
+                "it; the number was produced but is not interpretable."
             ),
             "properties": {
                 "status": {
                     "type": "string",
-                    "enum": ["satisfied", "failed", "not_evaluated"],
+                    "enum": ["satisfied", "failed", "overridden", "not_evaluated"],
                 },
                 "checks": {"type": "array", "items": {"type": "object"}},
                 "failed_checks": {"type": "array", "items": {"type": "string"}},

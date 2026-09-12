@@ -14,17 +14,24 @@ looking right.
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
 from uxarray_mcp.remote.config import GlobusTransferProfile
 from uxarray_mcp.remote.transfer import (
+    CliTransferClient,
     PathOutsideRoot,
     TransferError,
+    TransferLoginRequired,
     TransferNotConfigured,
     TransferService,
     bounded_preview,
     collapse,
+    find_globus_cli,
     is_within,
     join_under,
     resolve_local,
@@ -370,3 +377,252 @@ class TestTheSubmittedPayloadSaysWhatItDoes:
         assert status["status"] == "SUCCEEDED"
         assert status["files_transferred"] == 3
         assert status["fatal_error"] is None
+
+
+class FakeProcess:
+    """What ``subprocess.run`` returns, with nothing else attached."""
+
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class FakeRunner:
+    """Answers ``globus`` invocations from a table keyed on the first argument."""
+
+    def __init__(self, replies):
+        self.replies = replies
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv, **kwargs):
+        self.calls.append(list(argv))
+        for key, reply in self.replies.items():
+            if key in argv:
+                return reply
+        return FakeProcess(1, stderr=f"no fake reply for {argv}")
+
+
+def _cli(replies):
+    return CliTransferClient("/fake/globus", runner=FakeRunner(replies))
+
+
+class TestTheCliIsAskedForMachineReadableOutput:
+    """Every call parses stdout, so every call must have asked for JSON.
+
+    A missing ``--format json`` does not fail; it returns the human table,
+    which parses as nothing and surfaces as a bad-output error a long way from
+    the flag that caused it.
+    """
+
+    def test_a_listing_names_the_collection_and_path_as_one_argument(self):
+        client = _cli({"ls": FakeProcess(stdout='{"DATA": [{"name": "a.nc"}]}')})
+        result = client.operation_ls("coll-1", path="/scratch")
+        assert result == {"DATA": [{"name": "a.nc"}]}
+        argv = client._runner.calls[0]
+        assert argv[:2] == ["/fake/globus", "ls"]
+        assert "coll-1:/scratch" in argv
+        assert "--format" in argv and "json" in argv
+
+    def test_a_listing_with_no_path_asks_for_the_collection_root(self):
+        client = _cli({"ls": FakeProcess(stdout="{}")})
+        client.operation_ls("coll-1")
+        assert "coll-1:/" in client._runner.calls[0]
+
+    def test_a_task_lookup_asks_for_json(self):
+        client = _cli({"task": FakeProcess(stdout='{"status": "SUCCEEDED"}')})
+        assert client.get_task("t-1") == {"status": "SUCCEEDED"}
+        argv = client._runner.calls[0]
+        assert argv[1:3] == ["task", "show"]
+        assert argv[-1] == "t-1"
+
+
+class TestASubmissionBecomesOneTransferCommand:
+    """The payload is the wire shape; the CLI takes flags. Something translates."""
+
+    def test_the_two_endpoints_and_paths_become_two_colon_arguments(self):
+        client = _cli({"transfer": FakeProcess(stdout='{"task_id": "t-9"}')})
+        result = client.submit_transfer(
+            {
+                "source_endpoint": "src",
+                "destination_endpoint": "dst",
+                "DATA": [{"source_path": "/a/x.nc", "destination_path": "/b/x.nc"}],
+            }
+        )
+        assert result == {"task_id": "t-9"}
+        argv = client._runner.calls[0]
+        assert "src:/a/x.nc" in argv
+        assert "dst:/b/x.nc" in argv
+        assert argv[argv.index("--notify") + 1] == "off"
+
+    def test_a_recursive_item_becomes_the_recursive_flag(self):
+        client = _cli({"transfer": FakeProcess(stdout='{"task_id": "t"}')})
+        client.submit_transfer(
+            {
+                "source_endpoint": "src",
+                "destination_endpoint": "dst",
+                "DATA": [
+                    {
+                        "source_path": "/a",
+                        "destination_path": "/b",
+                        "recursive": True,
+                    }
+                ],
+            }
+        )
+        assert "--recursive" in client._runner.calls[0]
+
+    def test_checksums_are_only_mentioned_when_they_are_turned_off(self):
+        """Verifying is the CLI's default, so saying so again is noise.
+
+        Saying nothing when the payload asks for verification is only correct
+        while that stays the default, which is why the opposite case is the one
+        spelled out on the command line.
+        """
+        on = _cli({"transfer": FakeProcess(stdout="{}")})
+        on.submit_transfer(
+            {
+                "source_endpoint": "s",
+                "destination_endpoint": "d",
+                "verify_checksum": True,
+                "DATA": [{"source_path": "/a", "destination_path": "/b"}],
+            }
+        )
+        assert "--no-verify-checksum" not in on._runner.calls[0]
+
+        off = _cli({"transfer": FakeProcess(stdout="{}")})
+        off.submit_transfer(
+            {
+                "source_endpoint": "s",
+                "destination_endpoint": "d",
+                "verify_checksum": False,
+                "DATA": [{"source_path": "/a", "destination_path": "/b"}],
+            }
+        )
+        assert "--no-verify-checksum" in off._runner.calls[0]
+
+    def test_a_batch_is_refused_rather_than_silently_truncated(self):
+        """One command moves one thing. Sending the first of several is worse
+        than sending none, because the caller is told it succeeded."""
+        client = _cli({"transfer": FakeProcess(stdout="{}")})
+        with pytest.raises(TransferError):
+            client.submit_transfer(
+                {
+                    "source_endpoint": "s",
+                    "destination_endpoint": "d",
+                    "DATA": [
+                        {"source_path": "/a", "destination_path": "/b"},
+                        {"source_path": "/c", "destination_path": "/d"},
+                    ],
+                }
+            )
+
+
+class TestAnAuthFailureIsToldApartFromEveryOtherFailure:
+    """Three unrelated-looking Globus errors all mean "go to a terminal".
+
+    Missing tokens, a missing ``data_access`` consent, and an identity a
+    collection's policy refuses are reported by three different subsystems in
+    three different shapes, and the fix for all three is the same. Anything
+    else -- a path that is not there, a collection that is down -- must not be
+    dressed up as a login problem, because that sends the user to a browser to
+    fix something a browser cannot fix.
+    """
+
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "MissingLoginError: Missing login for Globus Auth.",
+            "The collection requires ConsentRequired for data_access",
+            "session_required_single_domain: ncar.edu",
+        ],
+    )
+    def test_a_credential_failure_asks_for_a_terminal(self, stderr):
+        client = _cli({"ls": FakeProcess(1, stderr=stderr)})
+        with pytest.raises(TransferLoginRequired) as caught:
+            client.operation_ls("coll-1")
+        assert "transfer setup" in str(caught.value)
+
+    def test_a_missing_path_stays_a_plain_error(self):
+        client = _cli({"ls": FakeProcess(1, stderr="Directory not found: /nope")})
+        with pytest.raises(TransferError) as caught:
+            client.operation_ls("coll-1", path="/nope")
+        assert not isinstance(caught.value, TransferLoginRequired)
+        assert "/nope" in str(caught.value)
+
+    def test_the_failing_command_is_quoted_back(self):
+        """Whatever went wrong, the user can retype the line and see it too."""
+        client = _cli({"ls": FakeProcess(1, stderr="boom")})
+        with pytest.raises(TransferError) as caught:
+            client.operation_ls("coll-1", path="/x")
+        assert "globus ls" in str(caught.value)
+        assert "coll-1:/x" in str(caught.value)
+
+
+class TestOutputThatIsNotJson:
+    def test_unparseable_output_names_the_command_rather_than_the_parser(self):
+        client = _cli({"task": FakeProcess(stdout="Task ID: t-1\nStatus: OK\n")})
+        with pytest.raises(TransferError) as caught:
+            client.get_task("t-1")
+        assert "globus task show" in str(caught.value)
+
+    def test_a_hung_command_is_given_up_on(self):
+        def hang(argv, **kwargs):
+            raise subprocess.TimeoutExpired(argv, 5)
+
+        client = CliTransferClient("/fake/globus", timeout_seconds=5, runner=hang)
+        with pytest.raises(TransferError) as caught:
+            client.whoami()
+        assert "5 seconds" in str(caught.value)
+
+
+class TestFindingTheBinary:
+    """An MCP server started from a GUI has no shell PATH.
+
+    ``shutil.which`` is the whole answer in a terminal and no answer at all in
+    Claude Desktop, which is where most of these installs run.
+    """
+
+    def test_the_path_is_used_when_it_has_one(self, monkeypatch):
+        monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/globus")
+        assert find_globus_cli() == "/usr/bin/globus"
+
+    def test_the_interpreter_prefix_is_searched_when_the_path_has_none(
+        self, monkeypatch, tmp_path
+    ):
+        binary = tmp_path / "bin" / "globus"
+        binary.parent.mkdir()
+        binary.write_text("#!/bin/sh\n")
+        binary.chmod(0o755)
+        monkeypatch.setattr(shutil, "which", lambda name: None)
+        monkeypatch.setattr(sys, "prefix", str(tmp_path))
+        assert find_globus_cli() == str(binary)
+
+    def test_an_absent_binary_says_how_to_get_one(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(shutil, "which", lambda name: None)
+        monkeypatch.setattr(sys, "prefix", str(tmp_path))
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        with pytest.raises(TransferError) as caught:
+            find_globus_cli()
+        assert "pip install globus-cli" in str(caught.value)
+
+
+class TestARelativeLocalPathHasSomewhereToStart:
+    """The remote side resolves against its root; the local side must match.
+
+    Resolving against the process working directory looks the same in a
+    terminal and is a different directory for every MCP client, none of them
+    the one the caller had in mind.
+    """
+
+    def test_a_relative_path_lands_under_the_local_root(self, tmp_path):
+        (tmp_path / "runs").mkdir()
+        resolved = resolve_local("runs/mesh.nc", str(tmp_path))
+        assert resolved == (tmp_path / "runs" / "mesh.nc").resolve()
+
+    def test_the_working_directory_is_only_used_when_there_is_no_root(self, tmp_path):
+        assert resolve_local("mesh.nc", None) == (Path.cwd() / "mesh.nc").resolve()
+
+    def test_a_relative_path_still_cannot_climb_out_of_the_root(self, tmp_path):
+        with pytest.raises(PathOutsideRoot):
+            resolve_local("../elsewhere/mesh.nc", str(tmp_path))

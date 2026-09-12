@@ -24,10 +24,12 @@ HTTP clients) from a single install.
    :caption: Running on HPC (optional)
 
    remote-hpc
+   data-transfer
    operating-an-endpoint
    improv
    ucar
    chrysalis
+   demo-gdex-conus-precip
 
 .. toctree::
    :maxdepth: 2

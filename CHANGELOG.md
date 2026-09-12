@@ -6,6 +6,36 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
 ### Added
+- YAC remapping is reachable. `docs/ucar.md` has said since the endpoint was
+  named `ucar-uxarray-yac` that YAC "enables conservative remapping", and the
+  `backend` argument existed on `remap_to_rectilinear`, but `run_analysis`
+  never forwarded it and the mesh-to-mesh remaps had no such argument, so the
+  only conservative method the server knew about was unreachable from any
+  client. `run_analysis` now takes `backend` and `yac_method`, and `method`
+  accepts YAC's `conservative`, `nnn`, `dnn` and `average` directly, since a
+  caller who wants a conservative remap asks for one by that name rather than
+  by engine. One resolver (`domain/remap_backend.py`) turns either spelling
+  into the same plan; the worker copies inline the same rules under a test that
+  compares them. Verified on the UCAR worker: `remap_variable` with
+  `method="conservative"` returns the same field mean to sixteen digits as the
+  local YAC 3.20 build. YAC missing where the remap runs fails with a message
+  naming both repairs. Coverage now records the method it judged, so the
+  not-conservative warning names inverse-distance when that is what ran; it
+  said "nearest-neighbor" for every method.
+- `sphere_radius` reaches `gradient`, `curl` and `divergence`, locally and on
+  the worker. The argument existed for `calculate_area` only, so a derivative
+  on a grid without a `sphere_radius` attribute -- which is nearly every grid
+  file -- could not be scaled at all. The radius is attached to the grid for
+  the call and reported in a `radius_basis` block with where it came from.
+- `lat_step` for the zonal operations. UXarray reads a tuple as
+  `(start, stop, step)` and a list as explicit latitudes, and JSON has no
+  tuple, so `[-90, 90, 30]` from an MCP client always meant three latitudes and
+  there was no way to ask for a step. `lat_step` with `lat_spec=[start, stop]`
+  (or alone, for the globe) builds the tuple.
+- `plot_dataset(plot_type="mesh_geo")` takes `show_mesh_boundary`,
+  `coastlines`, `borders`, `rivers`, `lakes`, `cities` and `basemap`. The plot
+  note had been telling callers to "ask" for those, naming options the front
+  door did not expose; it now names the parameters.
 - `transfer_ls`, `transfer_put`, `transfer_get` and `transfer_status` expose
   data movement as tools, in the deferred pool; the core surface stays at 33.
   Three verbs rather than one `transfer(op=...)` dispatcher, because a model
@@ -23,7 +53,9 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   half-made task. `validate_hpc_setup` (behind `doctor`) gains a transfer
   check: it passes when nothing is configured, since transfers are opt-in the
   way HPC is, and fails on a configured transfer that cannot work -- no write
-  root, no SDK, no consent, or a write root the collection will not list. The
+  root, no `globus` CLI, no login or consent, or a write root the collection
+  will not list, and it reports whether this machine's Globus Connect Personal
+  share is writable, since that is invisible from the Globus side. The
   write root is readable as well as writable, which the doctor probe found the
   hard way: somewhere you may put a file is somewhere you may look at one.
 - Files can now move between this machine and an HPC collection. Compute has
@@ -47,8 +79,68 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   count stated. The service builds its submission payload as a plain dict after
   an explicit `get_submission_id()`, which keeps the wire shape in one place and
   lets all 44 tests run against a fake client with no credentials in CI.
+- The client behind that service runs the `globus` command-line client rather
+  than linking `globus-sdk`, so this package holds no authentication code and
+  stores no tokens. Written against the SDK first, and every one of the three
+  defects hand-verification found was in the ~40 lines of auth: it requested a
+  `data_access` scope for the *local* collection, which Globus Connect Personal
+  collections do not have, so adding a local collection ID made every transfer
+  fail permanently; it modelled one credential failure, so a collection refusing
+  a session identity died with a raw 40-line `TransferAPIError` instead of
+  saying which identity to link; and it directed users to a `transfer-login`
+  command that did not exist. Which collections need which scopes, and what a
+  session policy will accept, are rules the CLI already implements and a
+  two-person project would otherwise have to track. Failures now carry the CLI's
+  own words -- the same text the Globus documentation and a facility support
+  ticket already use -- and the three that need a browser are told apart from
+  the ones that do not, because sending someone to a browser to fix a missing
+  directory wastes the trip.
+- `uxarray-mcp transfer setup` is the command that error message now names. It
+  walks the seven things that must be true before a file can move -- the CLI, a
+  login, Globus Connect Personal running with a writable share, both collection
+  UUIDs, consent for the remote collection, and the config block -- reports
+  which already hold, and offers to fix the rest; `--check` reports without
+  asking or changing anything. Facility collection UUIDs for NCAR, ALCF Polaris,
+  ALCF Aurora and NERSC are a table rather than a name search, which returns a
+  page of look-alikes. The share check is the reason for the command: Globus
+  Connect Personal shares `$HOME` read-only by default and says nothing about
+  it, so uploads work, downloads fail on the destination write hours later with
+  `PERMISSION_DENIED`, and it reads like a network problem. Checked on macOS
+  (the `org.globusonline.Globus-Connect` preferences domain) as well as Linux
+  (`~/.globusonline/lta/config-paths`).
+- Relative local paths resolve against `local_root` when one is configured,
+  matching what the remote side has always done with `remote_write_root`. They
+  previously resolved against the process working directory, which for a server
+  started by an MCP client is wherever that client was launched from: a
+  different directory per client, invisible to the caller, and never the one
+  they meant.
+
+- `plot_dataset(plot_type="temporal_mean")` reduces many files on the worker and
+  maps the result. Every other plot type reads one file and draws the whole
+  mesh, so a multi-year regional mean -- the ordinary reason to reach for an HPC
+  endpoint at all -- had no path through the server: `temporal_mean`,
+  `subset_bbox` and `anomaly` all refused `use_remote=True`, and the advice they
+  gave was to pass a locally-readable path, which is not available when the data
+  is on someone else's filesystem. `remote_temporal_mean_map` opens the files
+  with `open_mfdataset`, applies the bounding box *before* the reduction so only
+  the kept cells are carried through it, scales units, and renders a choropleth
+  with Natural Earth geography when the worker has cartopy. It reports
+  `n_time_steps`, `reduced_dims`, `n_face_subset` against `n_face_total` and
+  `n_nonfinite`, because a PNG cannot say what was averaged away. Verified on
+  the UCAR worker: ten annual files of 6-hourly CESM ne120 output, 14,600 steps
+  reduced to a CONUS map in 462 s, matching a direct call to sixteen digits.
+- `case-studies/conus-precipitation-gdex/` documents that run end to end -- the
+  prompt, the result, the provenance, the timings, and setup for both a laptop
+  and a Casper endpoint.
 
 ### Changed
+- `plot_dataset(plot_type="variable")` now refuses `lon_bounds`/`lat_bounds`
+  instead of ignoring them. It draws the whole mesh and never honored a box, but
+  it accepted one and returned a global map with nothing in the response saying
+  the box had been dropped -- so a regional request came back looking answered.
+  The refusal names `temporal_mean` and `mesh_geo`, the plot types that do honor
+  a box. Callers who passed a box and accepted the global map get an error where
+  they used to get a picture.
 - Releases now follow upstream instead of the calendar. The workflow polled on
   the 5th of every month, but upstream skipped 2026.01 and 2026.05, shipped
   twice in August, and released 2026.09.0 on the 10th, so the poll was either
@@ -64,6 +156,62 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   issue, and a human merge is what reaches PyPI.
 
 ### Fixed
+- The worker-payload drift guard read source text, so it failed on formatting
+  and could pass on real drift. `test_every_dispatch_offers_the_same_input_kinds`
+  counted the substrings `startswith("healpix:")` and `".shp", ".geojson"` and
+  required the two counts to be equal. A dispatch whose extension list the
+  formatter wrapped over three lines therefore read as zero shapefile branches,
+  and a nested `if` naming the HEALPix prefix twice read as two HEALPix
+  branches -- `remote_temporal_mean_map` is both, and was reported as offering
+  HEALPix without shapefiles while doing no such thing. Equally, a payload that
+  genuinely dropped the shapefile read would have passed whenever the miscount
+  balanced. The guard now reads the syntax tree and asserts that both input
+  kinds are *present*, which is the property the test was written to protect;
+  how many times a function spells either one is its own business. A new test
+  pins the guard's own teeth: it must flag a payload that drops the shapefile
+  read, and must judge the one-line and formatter-wrapped spellings of the
+  extension test alike.
+- A gradient could not be obtained on a grid without a `sphere_radius`
+  attribute. The refusal for the missing attribute told the caller to pass
+  `scale_by_radius=False`; doing so was refused in turn with the advice to
+  set `scale_by_radius=True`. Both repairs now name `sphere_radius` and
+  `acknowledge`, the two things that actually end the loop.
+- Acknowledging a refused derivative crashed the envelope. The override path
+  set `preconditions.status` to `"overridden"`, a value the published output
+  schema did not list, so every acknowledged `gradient`, `curl` or
+  `divergence` failed with `MCP error -32602` after the number was computed.
+  The enum now admits it, under a test that validates an acknowledged result
+  against the schema.
+- Every azimuthal profile reported partial coverage. The ring at radius zero
+  is a point, holds no face centres and is NaN by construction, and was
+  counted as a bin that missed the mesh, so a correct profile carried
+  `PROFILE_COVERAGE_PARTIAL` and `physically_interpretable: false`. The
+  degenerate ring is excluded from the count and reported as such.
+- The colorbar of a `variable` plot sat on top of the map. HoloViews positions
+  the colorbar axes for the figure size it chose; resizing to the requested
+  width and height left it where it was, over the right-hand third of the
+  data, and `tight_layout` does not move axes it did not create. Map and
+  colorbar are laid out by hand after the resize, locally and on the worker.
+- `analyze_dataset` embedded the variable plot as 82 KB of base64 inside a
+  JSON object no client can render an image from, while the larger mesh plot
+  correctly came back as a link. A figure written to the artifact store is now
+  referenced by URI in the summary and the bytes are left out; they stay only
+  when nothing was stored.
+- `remote_remap_variable` and `remote_regrid_dataset` returned no
+  `source_coverage`, so the same remap answered with a coverage block and a
+  not-conservative warning locally and with neither on the worker. The worker
+  now measures coverage of the target mesh the same way.
+- `analyze_dataset` with `use_remote=True` recommended `subset_bbox` and
+  `cross_section` as next steps, both of which refuse `use_remote`. The
+  remote summary now suggests operations that have a remote implementation.
+- README: the clone install did not mention the `hpc`/`transfer` extras or
+  that a later plain `uv sync` removes them (which is how the endpoint check
+  comes to report `No module named 'globus_compute_sdk'`); `install-claude`
+  was described as merging a config it only prints without `--config-path`;
+  the tool count said 31 where the core profile registers 33; the CLI table
+  omitted `openapi`, `endpoints remove` and `transfer setup`; and the
+  derivative note still recommended `scale_by_radius=False`, which is now
+  refused. `docs/tools.md` gained the remap backends and every new parameter.
 - A directory of SCRIP meshes was classified as nothing and advised nothing.
   `_GRID_HINTS` held `grid`, `mesh`, `topo`, `coord` and `geo` but not
   `scrip` or `esmf`, and E3SM names half its meshes with the convention

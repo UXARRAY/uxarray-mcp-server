@@ -53,12 +53,23 @@ def test_analyze_dataset_with_data_runs_full_pipeline(synthetic_mesh_with_data):
 
 
 def test_analyze_dataset_includes_plots_by_default():
-    """Plot stages should produce base64 PNGs when include_plots=True."""
+    """Plot stages run when include_plots=True and hand back a stored figure.
+
+    The summary is a JSON object, so base64 in it cannot be rendered by a
+    client and only costs context; a stored figure is referenced by URI and
+    the bytes are left out.
+    """
     result = analyze_dataset("healpix:2")
 
     assert result["mesh_plot"] is not None
-    assert result["mesh_plot"]["png_b64"]
     assert "plot_mesh" in result["stages_run"]
+    plot = result["mesh_plot"]
+    if plot.get("image_uri"):
+        assert plot["png_b64"] is None
+        assert plot["image_delivery"] == "resource_link"
+        assert plot["image_size_bytes"]
+    else:
+        assert plot["png_b64"]
 
 
 def test_analyze_dataset_resolves_session_dataset_handle(synthetic_mesh_with_data):

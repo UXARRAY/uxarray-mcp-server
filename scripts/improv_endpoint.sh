@@ -3,9 +3,8 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# USER CONFIG — change these to match your account before running
-# ---------------------------------------------------------------------------
-USERNAME="jain"   # your Improv username
+# Everything below has a default that works for any Improv account. Override in
+# the environment; nothing needs editing in this file.
 # ---------------------------------------------------------------------------
 
 ENDPOINT_NAME="${ENDPOINT_NAME:-improv-uxarray}"
@@ -16,9 +15,10 @@ ENDPOINT_NAME="${ENDPOINT_NAME:-improv-uxarray}"
 PYTHON="${PYTHON:-/usr/bin/python3.12}"
 VENV="$HOME/venvs/globus-compute"
 TMUX_SESSION="uxarray-endpoint"
-# NOTE: the MCP server repo does NOT need to be cloned on Improv. Remote
-# functions are serialised via AllCodeStrategies and only require uxarray
-# + numpy in the worker venv. Never add uxarray_mcp to PYTHONPATH.
+# NOTE: the repo is cloned on Improv only because this script lives in it. The
+# MCP server itself must never be importable by the worker: remote functions are
+# serialised via AllCodeStrategies and only require uxarray + numpy in the
+# worker venv. Never add uxarray_mcp to PYTHONPATH.
 
 usage() {
   cat <<'EOF'
@@ -62,16 +62,20 @@ _check_endpoint_dir() {
 
 _configure() {
   local mode="${1:-}"
-  local project="${2:-}"
-  local ep_name="${2:-$ENDPOINT_NAME}"  # single-host uses arg2 as ep name
+  local project=""
+  local ep_name
 
   if [[ -z "$mode" ]]; then
     usage; exit 1
   fi
 
-  # pbs-debug uses arg2 as project, arg3 as optional ep name
+  # The two modes take different positionals: single-host has no project to
+  # charge, so the endpoint name is arg2 there and arg3 under pbs-debug.
   if [[ "$mode" == "pbs-debug" ]]; then
+    project="${2:-}"
     ep_name="${3:-$ENDPOINT_NAME}"
+  else
+    ep_name="${2:-$ENDPOINT_NAME}"
   fi
 
   ENDPOINT_NAME="$ep_name"

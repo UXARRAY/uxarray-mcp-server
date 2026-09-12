@@ -99,11 +99,41 @@ def _coverage_warnings(coverage: dict[str, Any]) -> list[str]:
             "fall inside the source mesh; values outside are extrapolated."
         )
     if "REMAP_METHOD_NOT_CONSERVATIVE" in codes:
+        # Name the method that was actually used; this message once said
+        # "nearest-neighbor" for every method, including inverse-distance.
+        method = coverage.get("method") or "this"
         messages.append(
-            "REMAP_METHOD_NOT_CONSERVATIVE: nearest-neighbor remapping does "
-            "not conserve the field integral and is unsuitable for fluxes."
+            f"REMAP_METHOD_NOT_CONSERVATIVE: {method} remapping does not "
+            "conserve the field integral and is unsuitable for fluxes. "
+            "Use method='conservative' (YAC backend) when the integral matters."
         )
     return messages
+
+
+def _run_remap(uxda: Any, target_grid: Any, plan: Any, remap_to: str) -> Any:
+    """Dispatch one remap according to a resolved plan.
+
+    Both engines are reached through the same UXarray accessor; YAC is
+    selected with ``backend="yac"`` on ``nearest_neighbor``, which is the
+    entry point UXarray gives it, and the interpolation stack is chosen by
+    ``yac_method``. A missing YAC install surfaces as an ImportError-like
+    failure from inside UXarray; it is re-raised with the repair spelled out.
+    """
+    from uxarray_mcp.domain.remap_backend import yac_unavailable_message
+
+    if plan.backend == "yac":
+        try:
+            return uxda.remap.nearest_neighbor(
+                target_grid,
+                remap_to=remap_to,
+                backend="yac",
+                yac_method=plan.yac_method,
+            )
+        except Exception as exc:  # YacNotAvailableError subclasses RuntimeError
+            if "yac" in type(exc).__name__.lower() or "yac.core" in str(exc):
+                raise RuntimeError(yac_unavailable_message("local machine")) from exc
+            raise
+    return getattr(uxda.remap, plan.method)(target_grid, remap_to=remap_to)
 
 
 def _resolve_paths(
@@ -928,8 +958,17 @@ def remap_variable(
     result_name: str | None = None,
     use_remote: bool = False,
     endpoint: str | None = None,
+    backend: str = "uxarray",
+    yac_method: str | None = None,
 ) -> dict[str, Any]:
     """Remap a face-centered variable onto a target grid.
+
+    ``method`` names a UXarray method (``nearest_neighbor``,
+    ``inverse_distance_weighted``, ``bilinear``) or a YAC one (``nnn``,
+    ``dnn``, ``average``, ``conservative``); the latter select
+    ``backend="yac"`` automatically. ``backend="yac"`` with ``yac_method``
+    says the same thing explicitly. YAC must be importable where the remap
+    runs.
 
     When ``use_remote=True`` and an HPC endpoint is configured, the remap runs
     on the worker (where large meshes live) and compact summary statistics are
@@ -937,6 +976,9 @@ def remap_variable(
     back to local execution when the endpoint is unavailable and the paths are
     locally reachable.
     """
+    from uxarray_mcp.domain.remap_backend import resolve_remap_plan
+
+    plan = resolve_remap_plan(method=method, backend=backend, yac_method=yac_method)
     tracker = OperationTracker("remap_variable", session_id=session_id)
     resolved_grid, resolved_data = _resolve_paths(
         session_id=session_id,
@@ -970,11 +1012,18 @@ def remap_variable(
                     resolved_data,
                     target_grid_path,
                     variable_name,
-                    method,
+                    plan.method,
                     remap_to,
+                    plan.backend,
+                    plan.yac_method,
                 )
             )
             remote_result["_provenance"]["operation_id"] = tracker.operation_id
+            remote_coverage = remote_result.get("source_coverage")
+            if remote_coverage:
+                remote_result["_provenance"].setdefault("warnings", []).extend(
+                    _coverage_warnings(remote_coverage)
+                )
             tracker.succeed("Variable remap complete (remote).")
             return remote_result
         if not _path_is_locally_reachable(resolved_grid):
@@ -990,19 +1039,14 @@ def remap_variable(
     target_grid = load_grid(target_grid_path)
     _, uxda, selected = _load_dataarray(resolved_grid, resolved_data, variable_name)
 
-    if not hasattr(uxda.remap, method):
-        raise ValueError(
-            f"Unsupported remap method {method!r}. Choose from "
-            "'nearest_neighbor', 'inverse_distance_weighted', or 'bilinear'."
-        )
     # Measured before the remap, because the remap itself fills every target
     # point regardless and so cannot tell an interpolated value from an
     # extrapolated one afterwards.
     coverage = _grid_coverage(
-        uxda.uxgrid, target_grid, remap_to=remap_to, method=method
+        uxda.uxgrid, target_grid, remap_to=remap_to, method=plan.coverage_method
     )
-    tracker.stage("remapping", f"Running {method} remap.")
-    remapped = getattr(uxda.remap, method)(target_grid, remap_to=remap_to)
+    tracker.stage("remapping", f"Running {plan.label} remap.")
+    remapped = _run_remap(uxda, target_grid, plan, remap_to)
     result_handle = _persist_dataarray_result(
         data=remapped,
         session_id=session_id,
@@ -1012,7 +1056,8 @@ def remap_variable(
         metadata={
             "source_grid": resolved_grid,
             "target_grid": target_grid_path,
-            "method": method,
+            "method": plan.label,
+            "backend": plan.backend,
             "remap_to": remap_to,
             "variable_name": selected,
         },
@@ -1020,7 +1065,9 @@ def remap_variable(
     tracker.succeed("Variable remap complete.")
     result: dict[str, Any] = {
         "variable_name": selected,
-        "method": method,
+        "method": plan.label,
+        "backend": plan.backend,
+        "yac_method": plan.yac_method,
         "remap_to": remap_to,
         "source_grid": summarize_grid(source_grid),
         "target_grid": summarize_grid(target_grid),
@@ -1038,6 +1085,8 @@ def remap_variable(
             "grid_path": grid_path,
             "data_path": data_path,
             "method": method,
+            "backend": plan.backend,
+            "yac_method": plan.yac_method,
             "remap_to": remap_to,
             "session_id": session_id,
             "dataset_handle": dataset_handle,
@@ -1060,13 +1109,21 @@ def regrid_dataset(
     result_name: str | None = None,
     use_remote: bool = False,
     endpoint: str | None = None,
+    backend: str = "uxarray",
+    yac_method: str | None = None,
 ) -> dict[str, Any]:
     """Remap all selected face-centered variables in a dataset onto a target grid.
+
+    ``method``/``backend``/``yac_method`` are resolved exactly as in
+    :func:`remap_variable`; ``method="conservative"`` selects YAC.
 
     When ``use_remote=True`` and an HPC endpoint is configured, the regrid runs
     on the worker and per-variable summary statistics are returned. Falls back
     to local execution when the endpoint is unavailable and paths are local.
     """
+    from uxarray_mcp.domain.remap_backend import resolve_remap_plan
+
+    plan = resolve_remap_plan(method=method, backend=backend, yac_method=yac_method)
     tracker = OperationTracker("regrid_dataset", session_id=session_id)
     resolved_grid, resolved_data = _resolve_paths(
         session_id=session_id,
@@ -1100,11 +1157,18 @@ def regrid_dataset(
                     resolved_data,
                     target_grid_path,
                     variable_names,
-                    method,
+                    plan.method,
                     remap_to,
+                    plan.backend,
+                    plan.yac_method,
                 )
             )
             remote_result["_provenance"]["operation_id"] = tracker.operation_id
+            remote_coverage = remote_result.get("source_coverage")
+            if remote_coverage:
+                remote_result["_provenance"].setdefault("warnings", []).extend(
+                    _coverage_warnings(remote_coverage)
+                )
             tracker.succeed("Dataset regridding complete (remote).")
             return remote_result
         if not _path_is_locally_reachable(resolved_grid):
@@ -1118,11 +1182,6 @@ def regrid_dataset(
 
     uxds = load_dataset(resolved_grid, resolved_data)
     target_grid = load_grid(target_grid_path)
-    if not hasattr(uxds[next(iter(uxds.data_vars))].remap, method):
-        raise ValueError(
-            f"Unsupported remap method {method!r}. Choose from "
-            "'nearest_neighbor', 'inverse_distance_weighted', or 'bilinear'."
-        )
     variables = variable_names or [
         name
         for name, var in uxds.data_vars.items()
@@ -1133,12 +1192,12 @@ def regrid_dataset(
     # One source mesh and one target mesh for every variable in the dataset,
     # so coverage is a property of the pair and is measured once.
     coverage = _grid_coverage(
-        uxds.uxgrid, target_grid, remap_to=remap_to, method=method
+        uxds.uxgrid, target_grid, remap_to=remap_to, method=plan.coverage_method
     )
     dataset_parts = []
     for name in variables:
-        tracker.stage("remapping", f"Remapping variable {name}")
-        remapped = getattr(uxds[name].remap, method)(target_grid, remap_to=remap_to)
+        tracker.stage("remapping", f"Remapping variable {name} ({plan.label})")
+        remapped = _run_remap(uxds[name], target_grid, plan, remap_to)
         dataset_parts.append(remapped.to_dataset(name=name).to_xarray())
     remapped_dataset = xr.merge(dataset_parts)
     result_handle = _persist_dataset_result(
@@ -1150,13 +1209,16 @@ def regrid_dataset(
         metadata={
             "source_grid": resolved_grid,
             "target_grid": target_grid_path,
-            "method": method,
+            "method": plan.label,
+            "backend": plan.backend,
             "variables": variables,
         },
     )
     tracker.succeed("Dataset regridding complete.")
     result: dict[str, Any] = {
-        "method": method,
+        "method": plan.label,
+        "backend": plan.backend,
+        "yac_method": plan.yac_method,
         "variables": variables,
         "target_grid": summarize_grid(target_grid),
         "result_handle": result_handle,
@@ -1173,6 +1235,8 @@ def regrid_dataset(
             "data_path": data_path,
             "variable_names": variable_names,
             "method": method,
+            "backend": plan.backend,
+            "yac_method": plan.yac_method,
             "remap_to": remap_to,
             "session_id": session_id,
             "dataset_handle": dataset_handle,
@@ -1194,6 +1258,7 @@ def remap_to_rectilinear(
     result_name: str | None = None,
     use_remote: bool = False,
     endpoint: str | None = None,
+    yac_method: str | None = None,
 ) -> dict[str, Any]:
     """Remap a face-centered variable onto a regular lon/lat (rectilinear) grid.
 
@@ -1211,6 +1276,10 @@ def remap_to_rectilinear(
         Source grid and data files (or resolve from session/dataset handle).
     backend : str
         Remapping backend: ``"uxarray"`` (default) or ``"yac"``.
+    yac_method : str, optional
+        YAC interpolation stack when ``backend="yac"``: ``"nnn"`` (default),
+        ``"dnn"``, ``"average"`` or ``"conservative"``. Passing one of these
+        selects the YAC backend on its own.
     session_id, dataset_handle, result_name : optional
         Session/result-handle plumbing.
 
@@ -1227,6 +1296,15 @@ def remap_to_rectilinear(
     NotImplementedError
         If the installed UXarray lacks ``remap.to_rectilinear``.
     """
+    from uxarray_mcp.domain.remap_backend import (
+        resolve_remap_plan,
+        yac_unavailable_message,
+    )
+
+    plan = resolve_remap_plan(
+        method=yac_method or "nearest_neighbor", backend=backend, yac_method=yac_method
+    )
+    backend = plan.backend
     tracker = OperationTracker("remap_to_rectilinear", session_id=session_id)
     resolved_grid, resolved_data = _resolve_paths(
         session_id=session_id,
@@ -1263,7 +1341,8 @@ def remap_to_rectilinear(
                     variable_name,
                     list(target_lon),
                     list(target_lat),
-                    backend,
+                    plan.backend,
+                    plan.yac_method,
                 )
             )
             # Persist the small rectilinear array locally from the returned data.
@@ -1326,9 +1405,31 @@ def remap_to_rectilinear(
     lat = list(target_lat)
     # Coverage is measured before remapping so a zero-coverage request is
     # reported even when the interpolation happily fills every target point.
-    coverage = compute_target_coverage(uxda.uxgrid, lon, lat, method="nearest_neighbor")
-    tracker.stage("remapping", f"Remapping {selected} to {len(lat)}x{len(lon)} grid.")
-    remapped = uxda.remap.to_rectilinear(lon, lat, backend=backend)
+    coverage = compute_target_coverage(
+        uxda.uxgrid, lon, lat, method=plan.coverage_method
+    )
+    tracker.stage(
+        "remapping",
+        f"Remapping {selected} to {len(lat)}x{len(lon)} grid ({plan.label}).",
+    )
+    try:
+        remapped = uxda.remap.to_rectilinear(
+            lon, lat, backend=plan.backend, yac_method=plan.yac_method
+        )
+    except Exception as exc:
+        if plan.backend == "yac" and (
+            "yac" in type(exc).__name__.lower() or "yac.core" in str(exc)
+        ):
+            raise RuntimeError(yac_unavailable_message("local machine")) from exc
+        if plan.backend == "yac" and "Cannot reshape remapped data" in str(exc):
+            # UXarray's YAC rectilinear path builds a cyclic target when the
+            # longitudes span the globe and then cannot reshape it back.
+            raise RuntimeError(
+                f"{exc} This is a known UXarray limitation of backend='yac' "
+                "when target_lon spans the full 360 degrees. Use a regional "
+                "target_lon, or backend='uxarray' for a global one."
+            ) from exc
+        raise
 
     # remapped is a plain xarray.DataArray with lat/lon axes.
     remapped_ds = remapped.to_dataset(name=selected)
@@ -1362,7 +1463,9 @@ def remap_to_rectilinear(
     tracker.succeed("Rectilinear remap complete.")
     result: dict[str, Any] = {
         "variable_name": selected,
-        "backend": backend,
+        "backend": plan.backend,
+        "method": plan.label,
+        "yac_method": plan.yac_method,
         "target_shape": [len(lat), len(lon)],
         "stats": stats,
         "source_coverage": coverage,
@@ -1378,7 +1481,8 @@ def remap_to_rectilinear(
             "target_lat": lat,
             "grid_path": grid_path,
             "data_path": data_path,
-            "backend": backend,
+            "backend": plan.backend,
+            "yac_method": plan.yac_method,
             "session_id": session_id,
             "dataset_handle": dataset_handle,
         },

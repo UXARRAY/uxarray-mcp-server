@@ -9,7 +9,13 @@ USERNAME="${NCAR_USERNAME:-$USER}"   # override with NCAR_USERNAME if it differs
 # ---------------------------------------------------------------------------
 
 ENDPOINT_NAME="${ENDPOINT_NAME:-ucar-uxarray-yac}"
-CONDA_ENV="/glade/work/$USERNAME/conda-envs/uxarray_dev"
+CONDA_ENV="${CONDA_ENV:-/glade/work/$USERNAME/conda-envs/uxarray_dev}"
+
+# YAC buys conservative remapping and nothing else. It is a separate build that
+# most people should skip: every tool except method="conservative" and the
+# backend="yac" methods works without it, and a missing YAC reports itself
+# rather than crashing. Opt in with WITH_YAC=1 once the build exists.
+WITH_YAC="${WITH_YAC:-0}"
 # Override to test a freshly built YAC without editing this file:
 #   YAC_VERSION=3.18 ucar_endpoint.sh restart
 # Bump the default only once that build is verified on the endpoint. 3.20.2 was
@@ -20,10 +26,11 @@ YAC_VERSION="${YAC_VERSION:-3.20.2}"
 YAC_PREFIX="$HOME/opt/yac-$YAC_VERSION"
 YAC_ACTIVATE="$YAC_PREFIX/activate-yac.sh"
 TMUX_SESSION="uxarray-endpoint"
-# NOTE: the MCP server repo does NOT need to be cloned on UCAR. Remote
-# functions are serialised via AllCodeStrategies and run with only uxarray
-# + numpy + matplotlib installed in the conda env. Never add uxarray_mcp
-# to PYTHONPATH on the worker — it causes pydantic version conflicts.
+# NOTE: the repo is cloned on Casper only because this script lives in it. The
+# MCP server itself must never be importable by the worker: remote functions are
+# serialised via AllCodeStrategies and run with only uxarray + numpy +
+# matplotlib installed in the conda env. Never add uxarray_mcp to PYTHONPATH on
+# the worker — it causes pydantic version conflicts.
 
 usage() {
   cat <<'EOF'
@@ -35,6 +42,18 @@ Usage (run on a Casper login node):
 
 Environment overrides:
   ENDPOINT_NAME   Globus Compute endpoint profile name (default: ucar-uxarray-yac)
+  NCAR_USERNAME   NCAR login, if it differs from $USER
+  CONDA_ENV       Worker conda env (default: /glade/work/$USER/conda-envs/uxarray_dev)
+  WITH_YAC        1 to build YAC into worker_init (default: 0 -- see below)
+  YAC_VERSION     YAC prefix under ~/opt to use when WITH_YAC=1 (default: 3.20.2)
+
+YAC is optional. Without it every tool works except method="conservative" and
+the backend="yac" remap methods, which report the missing library rather than
+failing oddly. With WITH_YAC=1 you need a build at ~/opt/yac-$YAC_VERSION
+first; see scripts/hpc_build_yac.py.
+
+If you have no Casper setup yet, scripts/endpoint.sh is the site-agnostic
+version of this script and does not assume any of the above.
 EOF
 }
 
@@ -63,6 +82,7 @@ _activate_env() {
   # shellcheck disable=SC1091
   source "$(conda info --base)/etc/profile.d/conda.sh"
   conda activate "$CONDA_ENV"
+  [[ "$WITH_YAC" == "1" ]] || return 0
   _ensure_yac_activate
   # shellcheck disable=SC1091
   source "$YAC_ACTIVATE"
@@ -106,6 +126,21 @@ _check_yac() {
 _configure() {
   local ep_dir="$HOME/.globus_compute/$ENDPOINT_NAME"
 
+  # worker_init bakes the YAC prefix in at configure time, so this is the one
+  # verb where WITH_YAC actually decides something. A profile named for YAC
+  # that is configured without it would come back up quietly missing
+  # conservative remapping, so make the choice explicit rather than default it.
+  local yac_line=""
+  if [[ "$WITH_YAC" == "1" ]]; then
+    _ensure_yac_activate
+    yac_line=$'\n      source '"$YAC_ACTIVATE"
+  elif [[ "$ENDPOINT_NAME" == *yac* ]]; then
+    echo "ERROR: '$ENDPOINT_NAME' is named for YAC but WITH_YAC is 0." >&2
+    echo "  Rebuild it with YAC:    WITH_YAC=1 $(basename "$0") configure" >&2
+    echo "  Or drop YAC from it:    ENDPOINT_NAME=ucar-uxarray $(basename "$0") configure" >&2
+    return 1
+  fi
+
   if [[ ! -d "$ep_dir" ]]; then
     echo "Creating endpoint profile: $ENDPOINT_NAME"
     globus-compute-endpoint configure "$ENDPOINT_NAME"
@@ -125,8 +160,7 @@ engine:
     worker_init: |
       unset PYTHONPATH
       source "\$(conda info --base)/etc/profile.d/conda.sh"
-      conda activate $CONDA_ENV
-      source $YAC_ACTIVATE
+      conda activate $CONDA_ENV$yac_line
 
 idle_heartbeats_soft: 10
 idle_heartbeats_hard: 5760
@@ -152,8 +186,10 @@ _do_start() {
   _load_modules
   echo "==> Activating conda env: $CONDA_ENV"
   _activate_env
-  echo "==> Checking YAC..."
-  _check_yac
+  if [[ "$WITH_YAC" == "1" ]]; then
+    echo "==> Checking YAC..."
+    _check_yac
+  fi
   # `globus-compute-endpoint start` against a profile that is already Running
   # takes the live endpoint down rather than no-opping, and reports success
   # while doing it. Refuse, and name the verb that actually works. Must come
