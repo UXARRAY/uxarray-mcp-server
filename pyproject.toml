@@ -1,6 +1,6 @@
 [project]
 name = "uxarray-mcp"
-version = "0.3.1"
+version = "2026.9.0"
 description = "MCP server for analyzing unstructured meshes with UXarray"
 readme = "README.md"
 keywords = ["uxarray", "mcp", "unstructured grids", "scientific computing", "globus compute"]
@@ -60,7 +60,7 @@ dependencies = [
     # floor we actually declare, and had failed on it every run since
     # 2026-08-10.
     "pyyaml>=6.0.1",
-    "uxarray>=2026.9.0",
+    "uxarray>=2026.9.0,<2026.10",
 ]
 
 [project.optional-dependencies]
