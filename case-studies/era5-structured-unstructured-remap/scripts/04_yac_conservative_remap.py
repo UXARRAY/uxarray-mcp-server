@@ -2,26 +2,22 @@
 (conservative, nnn, average), for comparison against the three
 UXarray-native methods computed by 02_remap_roundtrip.py.
 
-Why this script needs a different Python interpreter than the rest of the
-case study: YAC is not pip-installable. Its Python bindings are built from
-source (https://gitlab.dkrz.de/dkrz-sw/yac) against libyaxt
+YAC is not pip-installable as a prebuilt wheel: its Python bindings are
+built from source (https://gitlab.dkrz.de/dkrz-sw/yac) against libyaxt
 (https://gitlab.dkrz.de/dkrz-sw/yaxt), an MPI exchange library that is
 itself a from-source autotools build with no PyPI or conda-forge wheel that
-matches an arbitrary local MPI. Building that chain from scratch inside
-this project's uv-managed .venv got as far as YAC's own CMake configure
-step (which correctly found Homebrew's Open MPI) before failing on the
-missing YAXT dependency.
+matches an arbitrary local MPI. Both are now built from source directly
+into this project's own .venv (YAXT 0.12.1 at ~/opt/yaxt-local, YAC 3.21.0
+via `uv pip install`), linked against the same Homebrew Open MPI the rest
+of this case study uses -- confirmed via `otool -L` on yac's compiled
+extension, which links directly against
+/opt/homebrew/opt/open-mpi/lib/libmpi.40.dylib and
+~/opt/yaxt-local/lib/libyaxt_c.1.dylib. See the README's Step 7a for the
+exact build steps (including a libtool patch this machine's toolchain
+required). Run this script with the project's own .venv, same as every
+other script here:
 
-Rather than build the whole chain again, this machine already had YAC
-3.20.2 built (at ~/opt/yac-3.20.2) inside a separate conda environment,
-`uxarray_env3.12`, which also has uxarray 2026.9.0 and mpi4py 4.1.1 built
-against the *same* Homebrew Open MPI 5.0.10 the rest of this case study
-uses -- confirmed via `otool -L` on yac's compiled extension, which links
-directly against /opt/homebrew/opt/open-mpi/lib/libmpi.40.dylib. Run this
-script with that interpreter, e.g.:
-
-    /opt/homebrew/anaconda3/envs/uxarray_env3.12/bin/python \
-        scripts/04_yac_conservative_remap.py
+    python scripts/04_yac_conservative_remap.py
 
 It reads the same source/target files 02_remap_roundtrip.py used and merges
 its results into the same remap_fidelity_results.json.

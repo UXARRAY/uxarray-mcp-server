@@ -277,7 +277,7 @@ autotools build with no matching prebuilt wheel for an arbitrary local MPI.
 Neither `yac` nor `yaxt` exists on conda-forge as an ARM-macOS build that
 matches this machine's Homebrew Open MPI 5.0.10 exactly.
 
-Attempting the from-source build directly in `.venv` (`uv pip install
+An initial attempt to build YAC directly in `.venv` (`uv pip install
 git+https://gitlab.dkrz.de/dkrz-sw/yac.git`, after installing `cython` and
 an `mpi4py` built against the same Homebrew Open MPI) got as far as YAC's
 own CMake configure step — it correctly found and validated Open MPI — before
@@ -287,30 +287,55 @@ failing with:
 CMake Error: Could NOT find yaxt (missing: YAXT_C_LIBRARY YAXT_C_INCLUDE_DIR)
 ```
 
-i.e. the next layer down (build YAXT from source too, via its own
-autotools `autoreconf -fi && ./configure && make install`, then point YAC's
-build at it with `CMAKE_ARGS="-DYAXT_ROOT=..."`) was the actual remaining
-work.
+So YAXT was built from source first:
 
-Rather than build that chain, this machine turned out to already have YAC
-3.20.2 built (at `~/opt/yac-3.20.2`), in a separate conda environment,
-`uxarray_env3.12` — which also has uxarray 2026.9.0 and an `mpi4py` build,
-and, critically, all of it links against the *same* Homebrew Open MPI the
-rest of this case study uses (confirmed via `otool -L` on YAC's compiled
-extension: `/opt/homebrew/opt/open-mpi/lib/libmpi.40.dylib`). That
-consistency is what makes it usable here at all — a YAC build against a
-*different* MPI than the one `mpi4py`/UXarray use in-process would not link
-correctly. All three YAC remap methods (`conservative`, `nnn`, `average`)
-ran cleanly from that interpreter; `dnn` was not tried. See
-[`scripts/04_yac_conservative_remap.py`](scripts/04_yac_conservative_remap.py),
-which documents the interpreter switch and merges its results into the same
-`remap_fidelity_results.json` the native methods use.
+```bash
+git clone --depth 1 https://gitlab.dkrz.de/dkrz-sw/yaxt.git
+cd yaxt && autoreconf -fi && mkdir build && cd build
+../configure --prefix=/Users/mbook/opt/yaxt-local CC=mpicc FC=mpifort
+make -j8 && make install
+```
 
-One practical consequence: the MCP server itself (and its `.venv`) still
-cannot use the YAC backend — only this separate conda interpreter can. Any
-future YAC-backed `run_analysis` calls through the MCP tool will still fail
-the same way until the server's own environment gets the full
-YAC+YAXT+matched-MPI build, which is the piece that was *not* done here.
+`make` failed on every shared-library link with `ld: unknown option:
+-no_fixup_chains`. Root cause: Homebrew GCC 16.2's Fortran driver
+unconditionally bakes `-Wl,-no_fixup_chains` into the generated `libtool`
+script's `allow_undefined_flag` (a historical workaround for a Big Sur
+ARM64 code-signing bug), but the Xcode `ld` on this machine no longer
+recognizes that flag at all. Passing `LDFLAGS="-Wl,-ld_classic"` at
+configure time does not fix this cleanly — it fixes the C-link case but
+breaks Fortran's own configure-time link test with a different error
+(`ld: library not found for -ld_classic`), since `mpifort`/`collect2`
+handles that flag differently than `mpicc` does. The actual fix was to
+patch the two `allow_undefined_flag` lines directly out of the *generated*
+`libtool` script after configuring (removing the literal
+`\$wl-no_fixup_chains` substring), then run `make` again — which then
+built and installed cleanly to `/Users/mbook/opt/yaxt-local`.
+
+With YAXT built, YAC's own CMake configure needed one more nudge: passing
+`-DYAXT_ROOT=...` alone is silently ignored by CMake's `find_package`
+unless policy `CMP0144` is set to `NEW` (CMake warns about this but still
+fails the `find_package` under the old default). The working build:
+
+```bash
+CMAKE_ARGS="-DYAXT_ROOT=/Users/mbook/opt/yaxt-local -DCMAKE_POLICY_DEFAULT_CMP0144=NEW" \
+    uv pip install --python .venv/bin/python "git+https://gitlab.dkrz.de/dkrz-sw/yac.git"
+```
+
+This installed YAC 3.21.0 straight into this project's own `.venv`.
+`otool -L` on the compiled extension confirms it links against the
+just-built `/Users/mbook/opt/yaxt-local/lib/libyaxt_c.1.dylib` and the
+*same* Homebrew Open MPI (`/opt/homebrew/opt/open-mpi/lib/libmpi.40.dylib`)
+that `mpi4py`/UXarray use in-process in this `.venv` — that MPI match is
+what makes it usable at all; a YAC build against a different MPI than the
+one `mpi4py` uses would not link correctly. All three YAC remap methods
+(`conservative`, `nnn`, `average`) ran cleanly from this project's own
+`.venv` interpreter (`dnn` was not tried). See
+[`scripts/04_yac_conservative_remap.py`](scripts/04_yac_conservative_remap.py).
+
+Net result: the MCP server's own `.venv` can now use the YAC backend
+directly — no separate conda environment needed. A future YAC-backed
+`run_analysis` call through the MCP tool has everything it needs already
+installed in this project's environment.
 
 ## Step 8 — forward remap and round trip
 
@@ -358,8 +383,7 @@ in git is under `data/`. To rerun from scratch:
 #   e5.oper.fc.sfc.accumu/202001/e5.oper.fc.sfc.accumu.128_143_cp.ll025sc.2020010106_2020011606.nc
 python scripts/01_build_era5_conus_field.py   # -> data/era5_conus_mean_precip.nc
 python scripts/02_remap_roundtrip.py          # -> data/forward_*.nc, data/remap_fidelity_results.json  (project .venv)
-/opt/homebrew/anaconda3/envs/uxarray_env3.12/bin/python \
-    scripts/04_yac_conservative_remap.py      # -> adds yac_* entries to the same files  (separate conda env — see Step 7a)
+python scripts/04_yac_conservative_remap.py   # -> adds yac_* entries to the same files  (project .venv — see Step 7a for the YAC+YAXT from-source build)
 python scripts/03_plots.py                    # -> images/plot_era5_original.png, images/plot_roundtrip_bias.png  (project .venv)
 python scripts/05_plot_remap_on_mesh.py       # -> images/plot_remap_on_mesh.png  (project .venv)
 ```
@@ -374,12 +398,11 @@ lat_bounds=[20,50], show_mesh_boundary=true)`, not a script.)
 
 - Only 15 days of data (2020-01-01 to 2020-01-15), not a full climatology —
   chosen to keep the round-trip experiment fast, not to cherry-pick a result.
-- The YAC results here come from a separate conda environment
-  (`uxarray_env3.12`) that happened to already have a matching YAC+MPI build,
-  not from this project's own `.venv` or the MCP server's own runtime — see
-  Step 7a. The MCP server itself still cannot run YAC-backed remaps; a real
-  fix would mean building YAC+YAXT from source against the server's own
-  environment, which was not attempted.
+- The YAC results here come from YAC 3.21.0 + YAXT 0.12.1, both built from
+  source directly into this project's own `.venv` and linked against the
+  same Homebrew Open MPI the rest of the case study uses — see Step 7a for
+  the exact build steps (including the libtool/`-no_fixup_chains` linker
+  patch this required on this machine's toolchain).
 - `dnn` (YAC's fourth remap method) was not tried, only `conservative`, `nnn`,
   `average`.
 - "Round-trip fidelity" measures self-consistency (does the field survive an
