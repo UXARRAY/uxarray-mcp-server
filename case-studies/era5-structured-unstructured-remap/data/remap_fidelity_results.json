@@ -1,0 +1,39 @@
+{
+  "source": "ERA5 e5.oper.fc.sfc.accumu (params 142+143), NSF NCAR ERA5 AWS Open Data",
+  "period": "2020-01-01 to 2020-01-15",
+  "variable": "precip_mm_day",
+  "source_grid": {
+    "format": "Structured (0.25 deg regular lat-lon)",
+    "n_face": 31581
+  },
+  "target_mesh": {
+    "format": "ESMF (ne30pg3 cubed-sphere, CONUS subset)",
+    "n_face": 1867
+  },
+  "methods": {
+    "nearest_neighbor": {
+      "n_points": 31581,
+      "bias_mm_day": 0.0014678258448839188,
+      "rmse_mm_day": 0.08606107532978058,
+      "pattern_correlation": 0.9406303915546607,
+      "original_mean_mm_day": 0.1759786605834961,
+      "roundtrip_mean_mm_day": 0.17744648456573486
+    },
+    "inverse_distance_weighted": {
+      "n_points": 31581,
+      "bias_mm_day": 0.0015216244772929934,
+      "rmse_mm_day": 0.08046692733498564,
+      "pattern_correlation": 0.9471372833049231,
+      "original_mean_mm_day": 0.1759786605834961,
+      "roundtrip_mean_mm_day": 0.17750028903654375
+    },
+    "bilinear": {
+      "n_points": 31581,
+      "bias_mm_day": 0.0017044055636862836,
+      "rmse_mm_day": 0.08241412469751923,
+      "pattern_correlation": 0.9450250667375348,
+      "original_mean_mm_day": 0.1759786605834961,
+      "roundtrip_mean_mm_day": 0.17768307012293708
+    }
+  }
+}
