@@ -48,11 +48,47 @@ the endpoint's Globus Auth allow-list. Do this with eyes open.
 ## Solo personal endpoint quickstart
 
 If only **you** will submit to this endpoint, you can skip the service-account
-ticket, the multi-user setup, and the function allowlist. The minimum viable
-personal endpoint is six commands and one config edit.
+ticket, the multi-user setup, and the function allowlist.
 
-**Prereqs:** shell on the HPC machine, a Globus identity, your project's
-Slurm account or PBS project ID, and the site's conda/module convention.
+**Prereqs:** shell on the HPC machine, a Globus identity, and the site's
+conda/module convention. You do not need a scheduler account for the first
+pass — start on the login node, prove the round trip, then move to Slurm or
+PBS.
+
+### With the script
+
+`scripts/endpoint.sh` in this repo does all of it and knows nothing about any
+particular facility. Clone the repo on the HPC machine (the worker does not
+import it — the scripts just live there) and:
+
+```bash
+export CONDA_ENV=uxarray            # or VENV=~/venvs/uxarray
+export MODULES="conda"              # whatever your site needs, in order
+
+./scripts/endpoint.sh install       # create the env, install the worker packages
+./scripts/endpoint.sh check         # report what is ready; changes nothing
+./scripts/endpoint.sh configure     # write ~/.globus_compute/uxarray/config.yaml
+./scripts/endpoint.sh start         # starts inside tmux, prints the UUID on first run
+```
+
+`start` creates its own tmux session (`uxarray-endpoint`), so run it from a
+plain shell rather than starting tmux yourself. First start opens an OAuth
+flow: over ssh, paste the URL into a browser and paste the code back.
+
+Once that works, move the workers onto the scheduler:
+
+```bash
+SCHEDULER=slurm ACCOUNT=myproject QUEUE=debug ./scripts/endpoint.sh configure
+./scripts/endpoint.sh restart
+```
+
+`./scripts/endpoint.sh` with no argument lists every override — worker Python,
+walltime, block counts, AMQP port, and `WORKER_INIT_EXTRA` for anything the
+script should not know about (a YAC activate file, an `LD_LIBRARY_PATH`).
+
+### By hand
+
+The same thing without the script:
 
 ```bash
 # 1. On the HPC machine, in your account
@@ -77,34 +113,44 @@ globus-compute-endpoint configure uxarray
 > `uxarray-mcp doctor` will surface a warning at probe time if anything is
 > off.
 
-Edit `~/.globus_compute/uxarray/config.yaml` and set the scheduler block.
-Minimum diff from the generated template (PBS example shown — see Step 3
-below for Slurm):
+Edit `~/.globus_compute/uxarray/config.yaml`. Start with `LocalProvider`, which
+runs workers on the login node: it needs no account, no queue and no working
+scheduler config, so when it fails you know the failure is yours and not the
+site's. This is the shape we run in production at NCAR.
 
 ```yaml
 display_name: uxarray
 engine:
   type: GlobusComputeEngine
+  max_workers_per_node: 1
   provider:
-    type: PBSProProvider
-    queue: casper                       # or your site's queue
-    account: YOUR_PROJECT_ID            # critical — without this, jobs reject
-    nodes_per_block: 1
+    type: LocalProvider
     init_blocks: 1
     min_blocks: 0
     max_blocks: 1
-    walltime: "01:00:00"
     worker_init: |
       unset PYTHONPATH                  # critical — see Step 3 for why
-      module load conda
+      source "$(conda info --base)/etc/profile.d/conda.sh"
       conda activate gce
+idle_heartbeats_soft: 10
+idle_heartbeats_hard: 5760
 ```
+
+Login-node workers are fine for inspection, zonal means and plots. They are not
+fine for hour-long jobs — sites notice. Move to the scheduler block in
+[Step 3](#step-3--configure-the-endpoint) before doing anything heavy.
 
 A single-user endpoint already runs only what the identity that started it
 submits, so there is nothing to add here to lock it to you. **Do not put your
 Globus identity UUID in this file** — no key in it takes one. Sharing the
-endpoint is what Step 6 is for, and it is a policy created in Globus Auth,
-referenced by one UUID.
+endpoint is what [Step 6](#step-6--auth-policy-optional) is for, and it is a
+policy created in Globus Auth, referenced by one UUID.
+
+In particular, `authentication_policy` is typed `UUID | str | None`. Writing it
+as a nested block — the shape the Globus Auth policy document itself has —
+fails at startup with two pydantic errors that name `uuid_type` and
+`string_type`. If you hit that, the fix is almost always to delete the block
+entirely; see [Step 6](#step-6--auth-policy-optional).
 
 Then:
 
@@ -124,7 +170,15 @@ uxarray-mcp endpoints add mine <UUID> --path-prefix /glade/   # or /lcrc/, /gpfs
 uxarray-mcp doctor --endpoint mine
 ```
 
+`mine` is a **local alias** and has nothing to do with the profile name on the
+HPC machine; every later `--endpoint` flag uses the alias. The `--path-prefix`
+is what makes a path route here, so an endpoint registered without one only
+ever runs work that names it explicitly.
+
 If `doctor` reports `active`, you're done. Total time: ~30 min the first time.
+
+To move files as well as run code, Globus Transfer is a separate service with
+its own login — see [data-transfer.md](data-transfer.md).
 
 **You should still do the full hardening eventually:**
 
@@ -276,6 +330,13 @@ engine:
       conda activate gce
 ```
 
+Both scheduler blocks are starting points, not verified configurations. The
+endpoint we run at NCAR uses `LocalProvider`; the PBS block above has not been
+exercised on Casper, and PBS sites commonly need a `select` line naming
+`ncpus`/`mem` before a job is accepted at all. Get `LocalProvider` round-
+tripping first, so that when the scheduler rejects something you are debugging
+one thing.
+
 Critical lines:
 
 - **`unset PYTHONPATH`** — prevents pydantic/dill version conflicts when
@@ -310,6 +371,16 @@ Verify it imports:
 ```bash
 python -c "import uxarray; print(uxarray.__version__)"
 ```
+
+**YAC is optional and most endpoints should skip it.** It is a separate C build
+and it buys exactly one thing: `method="conservative"` and the `backend="yac"`
+remap methods. Everything else — inspection, validation, areas, zonal means,
+gradient/curl/divergence, subsetting, cross-sections, comparison metrics,
+plots, and nearest-neighbour/IDW/bilinear remapping — works without it, and the
+YAC-only methods report the missing library rather than failing obscurely. If
+you do want it, `scripts/hpc_build_yac.py` builds it and
+`scripts/yac_smoke_test.py` proves it on the worker rather than the login node;
+point `WORKER_INIT_EXTRA` (or the site script's `WITH_YAC=1`) at the result.
 
 ---
 
@@ -464,8 +535,8 @@ a public GitHub README.
 Have them run:
 
 ```bash
-uxarray-mcp endpoints add ucar <UUID> --path-prefix /glade/
-uxarray-mcp doctor --endpoint ucar
+uxarray-mcp endpoints add <alias> <UUID> --path-prefix /glade/
+uxarray-mcp doctor --endpoint <alias>
 ```
 
 If `doctor` reports `active`, you're done.
