@@ -73,6 +73,7 @@ No data was downloaded. The laptop never held more than a 178 KB PNG.
 - [What it cost](#what-it-cost)
 - [Set it up yourself](#set-it-up-yourself)
 - [Methods: what was used](#methods-what-was-used)
+- [Reproducing it](#reproducing-it)
 - [Honest limitations](#honest-limitations)
 
 ---
@@ -257,11 +258,25 @@ so a wrong plot is *falsifiable* rather than merely pretty.
 4. **The function is serialized and shipped.** Globus Compute's
    `AllCodeStrategies` sends the *source* of the worker function, so the code
    does not have to be pre-installed on Casper.
-5. **A Casper worker runs it.** It opens the ten files with
-   `ux.open_mfdataset`, subsets to the CONUS bounding box, takes the time mean,
-   scales to mm/day, renders a choropleth, and overlays Natural Earth coastlines
-   from the worker's cartopy cache.
-6. **A PNG and a JSON record come back.** ~180 KB total.
+5. **A Casper worker runs it.** One function, five stages, all inside the NCAR
+   filesystem boundary:
+
+   | # | stage | what it does |
+   |---|---|---|
+   | 1 | open | `ux.open_mfdataset` over the ten annual files and the SCRIP mesh |
+   | 2 | subset | `Grid.subset.bounding_box([-125,-67], [24,50])` — **before** the reduction, cutting 777,602 cells to 23,510 |
+   | 3 | reduce | mean over 14,600 time steps, then `× 86,400,000` for m/s → mm/day |
+   | 4 | render | HoloViews `polygons()` on the matplotlib backend, plus Natural Earth coastlines, borders and state lines from the worker's cartopy cache |
+   | 5 | package | `min` / `mean` / `max`, `n_nonfinite`, `n_face_subset`, image byte count, and the PBS provenance block |
+
+6. **A PNG and a JSON record come back.** ~180 KB total, in one response.
+
+That is one tool call, not a pipeline you assembled. The server publishes 33
+tools in total — vector calculus (curl, divergence, gradient), remapping and
+regridding including YAC, zonal means and anomalies, cross-sections, subsetting,
+session and result handles. [`docs/tools.md`](../../docs/tools.md) is the full
+menu; [`docs/architecture.md`](../../docs/architecture.md) explains how a front
+door like `plot_dataset` dispatches to the operation underneath.
 
 ### The one design decision that matters
 
@@ -317,8 +332,19 @@ Three reasons, in order of size:
    [`docs/ucar.md`](../../docs/ucar.md)). Login-node I/O is shared and throttled;
    compute nodes read faster.
 
-Marginal cost is **~46 s per year of data**, dead linear, which confirms I/O
-bound with no meaningful per-call overhead.
+**The per-year cost is not constant, and the gap is worth naming.** One year
+takes 29.1 s; ten take 464.4 s. That is 16× the wall clock for 10× the data —
+about 29 s for the first year against roughly 48 s for every year after it. Fit
+a straight line through the two points and the intercept comes out *negative*,
+which is not what fixed per-call overhead looks like. Throughput tells the same
+story from the other side: 129 MB/s on the single-year read, 81 MB/s across ten.
+
+The likely explanation is the page cache. The 1979 file was read again and again
+while this case study was being built, so its 29 s is a warm number and the
+ten-year figure is closer to the cold cost. That is a suspicion and not a
+measurement — nothing here dropped the cache between runs. Plan with **~48 s per
+year**; treat 29 s as what you get on a file the filesystem already holds in
+memory.
 
 **If you need it faster:** compute the ten annual means once and average those —
 the repeat becomes seconds. Or parallelize the file reads. Or move the provider
@@ -364,14 +390,17 @@ costs are worth separating, because only one of them is interesting.
 
 | item | approximate tokens |
 |---|---|
-| **standing cost:** the uxarray tool menu, 31 tools, sent on *every* request | **~10,600** |
+| **standing cost:** the uxarray tool menu, 33 tools, sent on *every* request | **~10,600** |
 | the paragraph you typed | ~200 |
 | the returned map (1000×560 image) | ~750 |
 | the returned metadata + provenance JSON | ~750 |
 
-**The standing cost dominates.** Publishing 31 tools means ~10.6k tokens of
-schema ride along with every message, whether or not you use any of them. The
-per-call cost of actually doing the science is small by comparison.
+**The standing cost dominates.** Publishing 33 tools means ~10.6k tokens of
+schema ride along with every message, whether or not you use any of them
+(counted with `tiktoken`, `cl100k_base`, over the registered tool list — not
+estimated). Nearly half of that is tool *descriptions*: full docstrings with
+`Args:`, `Returns:` and `Examples:` sections, shipped raw. The per-call cost of
+actually doing the science is small by comparison.
 
 Two honest consequences:
 
@@ -568,6 +597,50 @@ Wall-clock times, byte counts, cell counts and all `value_stats` are measured
 from the runs described. Token counts are estimates: the tool-schema figure is
 measured from the registered tool list; image and JSON token figures are
 standard approximations, not billing records.
+
+---
+
+## Reproducing it
+
+Every number above is produced by a script in this repository, so you do not
+have to take the article's word for any of them:
+
+```bash
+uv run python scripts/reproduce_conus_case_study.py --act 1   # capabilities, ~3-20 s
+uv run python scripts/reproduce_conus_case_study.py --act 2   # 1-year mean, ~30 s
+uv run python scripts/reproduce_conus_case_study.py --act 3   # 10-year mean, ~7.8 min
+uv run python scripts/reproduce_conus_case_study.py --all
+```
+
+It asserts the published values rather than printing them, so a drift in the
+data, the mesh, or the reduction fails the run instead of quietly producing a
+different map. You need the Casper endpoint configured as in
+[Set it up yourself](#set-it-up-yourself); Act III needs `timeout_seconds: 2400`.
+
+### What a rerun actually showed
+
+Run on 2026-09-11/12 against `ucar-uxarray-yac`:
+
+| quantity | published | rerun |
+|---|---|---|
+| faces / nodes / edges | 777,602 / 780,456 / 2,329,471 | identical |
+| time steps in the 10-year mean | 14,600 | 14,600 |
+| CONUS subset | 23,510 of 777,602 | 23,510 of 777,602 |
+| min / mean / max mm/day | 0.111 / 2.232 / 8.584 | 0.110901 / 2.232262 / 8.584175 |
+| non-finite values | 0 | 0 |
+| PNG size | 177,737 B | 177,737 B, `cmp` byte-identical |
+| wall clock, 10 years | 462.1 s | 467.9 s |
+
+> [!IMPORTANT]
+> Read that table for what it is. The rerun carries the same PBS job ID,
+> `5890924.casper-pbs`, as the original — it landed on the same worker process,
+> on the same node, with the same library versions and very likely the same page
+> cache. A byte-identical PNG under those conditions demonstrates that the
+> pipeline is **deterministic**. It is not evidence that the result reproduces
+> across a fresh allocation, a different node, or another cartopy or matplotlib
+> build, and the byte-for-byte match in particular would be the first thing to
+> break on any of those. The scientific values — cell counts, step counts,
+> statistics — are the durable part.
 
 ---
 
