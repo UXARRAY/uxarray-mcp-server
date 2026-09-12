@@ -618,6 +618,71 @@ def _make_results_wire_safe(tool: Any) -> None:
     callable_.fn = _wire_safe(inner)
 
 
+def _trim_wire_schema(tool: Any) -> None:
+    """Drop schema nobody asked for from what we actually serve.
+
+    Two separate pieces of dead weight ride on ``tool.parameters``, and
+    both reach clients because the MCP and REST surfaces read that dict
+    directly -- ``RouteTable._tool_to_route`` at
+    ``toolregistry_server/route_table.py:186`` -- rather than going
+    through ``Tool.get_schema()``, which is where upstream does its
+    cleaning. Measured together at ~2,400 tokens per request on the
+    33-tool core surface, or 21% of it.
+
+    ``toolcall_reason``: ``Tool.model_post_init`` writes this key into
+    ``parameters`` on every construction (``toolregistry/tool.py:253``),
+    unconditionally. The switch meant to govern it lives in
+    ``get_schema()`` (``tool.py:436``) and defaults to off, which is the
+    registry we build -- so the feature is disabled and the schema ships
+    anyway. Execution already discards the argument
+    (``tool_registry.py:361``), so nothing depends on clients sending it.
+
+    Pydantic ``title``: every generated property carries a ``"title"``
+    restating its own name in title case. It is display metadata no
+    client needs. Upstream agrees it is noise and strips it in
+    ``get_schema()``, but with a blanket key filter
+    (``Tool._EXTRA_STRIP_KEYS``) that descends into ``properties`` and
+    deletes the *parameter named* ``title`` along with it -- which is why
+    ``plot_dataset``'s real ``title`` argument is missing from
+    ``get_schemas()``. Recurse into property values only, so the
+    annotation goes and the parameter stays.
+
+    Both passes are idempotent, and the first becomes a no-op if upstream
+    closes the gap.
+    """
+    params = getattr(tool, "parameters", None)
+    if not isinstance(params, dict):
+        return
+
+    props = params.get("properties")
+    if isinstance(props, dict):
+        props.pop("toolcall_reason", None)
+    required = params.get("required")
+    if isinstance(required, list) and "toolcall_reason" in required:
+        params["required"] = [r for r in required if r != "toolcall_reason"]
+
+    _drop_title_annotations(params)
+
+
+def _drop_title_annotations(schema: Any) -> None:
+    """Remove Pydantic ``title`` metadata in place, keeping parameter names.
+
+    Only the values under ``properties`` are recursed into. The keys of
+    that mapping are parameter names and are never inspected, which is
+    the whole difference between this and a blanket key strip.
+    """
+    if not isinstance(schema, dict):
+        return
+    schema.pop("title", None)
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        for spec in props.values():
+            _drop_title_annotations(spec)
+    items = schema.get("items")
+    if isinstance(items, dict):
+        _drop_title_annotations(items)
+
+
 def _apply_tags(
     registry: ToolRegistry,
     registered_name: str,
@@ -810,12 +875,13 @@ def build_registry(
     # ``enable_tool_discovery`` registers ``discover_tools`` itself, so it
     # never passes through the loops above. Sweep the whole surface rather
     # than name that one tool: anything the library registers on its own
-    # belongs behind the same boundary, and ``_make_results_wire_safe`` is
-    # idempotent, so re-running it over already-wrapped tools costs nothing.
+    # belongs behind the same boundary, and both sweeps are idempotent, so
+    # re-running them over already-treated tools costs nothing.
     for name in registry.list_tools():
         tool = registry.get_tool(name)
         if tool is not None:
             _make_results_wire_safe(tool)
+            _trim_wire_schema(tool)
 
     _verify_coverage(registered, profile)
     return registry
