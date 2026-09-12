@@ -231,8 +231,8 @@ scripts/convergence_agent/
 *.png
 save_plots.py
 
-# Artifacts written by scripts/reproduce_conus_case_study.py next to the
-# case study it reproduces. The run is the point; its output is not reviewed.
+# Artifacts written by case-studies/conus-precipitation-gdex/scripts/reproduce_conus_case_study.py
+# next to the case study it reproduces. The run is the point; its output is not reviewed.
 case-studies/**/*-reproduced.json
 case-studies/conus-precipitation-gdex/conus-precip-1yr-1979.json
 

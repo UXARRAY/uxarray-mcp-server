@@ -606,10 +606,10 @@ Every number above is produced by a script in this repository, so you do not
 have to take the article's word for any of them:
 
 ```bash
-uv run python scripts/reproduce_conus_case_study.py --act 1   # capabilities, ~3-20 s
-uv run python scripts/reproduce_conus_case_study.py --act 2   # 1-year mean, ~30 s
-uv run python scripts/reproduce_conus_case_study.py --act 3   # 10-year mean, ~7.8 min
-uv run python scripts/reproduce_conus_case_study.py --all
+uv run python case-studies/conus-precipitation-gdex/scripts/reproduce_conus_case_study.py --act 1   # capabilities, ~3-20 s
+uv run python case-studies/conus-precipitation-gdex/scripts/reproduce_conus_case_study.py --act 2   # 1-year mean, ~30 s
+uv run python case-studies/conus-precipitation-gdex/scripts/reproduce_conus_case_study.py --act 3   # 10-year mean, ~7.8 min
+uv run python case-studies/conus-precipitation-gdex/scripts/reproduce_conus_case_study.py --all
 ```
 
 It asserts the published values rather than printing them, so a drift in the
