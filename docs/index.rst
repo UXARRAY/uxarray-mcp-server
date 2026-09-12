@@ -29,6 +29,7 @@ HTTP clients) from a single install.
    improv
    ucar
    chrysalis
+   demo-gdex-conus-precip
 
 .. toctree::
    :maxdepth: 2

@@ -281,7 +281,7 @@ cost several-fold.
 
 Every call returns `_provenance`. Show the raw block on screen:
 
-```json
+```text
 "_provenance": {
   "tool": "remote_temporal_mean_map",
   "inputs": {"args": ["<grid path>", "[<10 data paths>]", "PRECT", ...]},
