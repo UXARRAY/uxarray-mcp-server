@@ -59,6 +59,36 @@ def _classify(name: str) -> str:
     return "unknown"
 
 
+def _empty_scan_hint(root: Path, directory: str, recursive: bool) -> str:
+    """Explain a zero-file scan, naming subdirectories when they exist.
+
+    A non-recursive scan of an archive root is the common way to get zero
+    hits, and ``total_files: 0`` with an empty ``groups`` reads as "nothing
+    here" when the truth is "everything is one level down". GDEX is laid
+    out exactly that way, so the failure looks like a missing dataset
+    rather than a wrong flag. Name the subdirectories and the caller can
+    fix it in one move instead of guessing.
+    """
+    if not recursive:
+        try:
+            subdirs = sorted(p.name for p in root.iterdir() if p.is_dir())
+        except OSError:
+            subdirs = []
+        if subdirs:
+            shown = ", ".join(subdirs[:10])
+            more = f" (+{len(subdirs) - 10} more)" if len(subdirs) > 10 else ""
+            return (
+                f"No mesh or data files directly in {directory}, but it holds "
+                f"{len(subdirs)} subdirector"
+                f"{'y' if len(subdirs) == 1 else 'ies'}: {shown}{more}. "
+                "Re-run with recursive=True, or point at one subdirectory."
+            )
+    return (
+        f"No mesh or data files found in {directory}. "
+        "Try recursive=True or check the path."
+    )
+
+
 def list_datasets(
     directory: str,
     recursive: bool = False,
@@ -171,10 +201,7 @@ def list_datasets(
     # Build recommendations
     recommendations: List[str] = []
     if not all_files:
-        recommendations.append(
-            f"No mesh or data files found in {directory}. "
-            "Try recursive=True or check the path."
-        )
+        recommendations.append(_empty_scan_hint(root, directory, recursive))
     else:
         if grid_found and data_found:
             recommendations.append(
@@ -325,10 +352,30 @@ def _remote_catalog_fn(
 
     recommendations = []
     if not all_files:
-        recommendations.append(
-            f"No mesh or data files found in {directory}. "
-            "Try recursive=True or check the path."
-        )
+        # Same reasoning as ``_empty_scan_hint``, inlined because this
+        # function is shipped to the worker by value and cannot reach
+        # module scope. This is the copy that matters most: GDEX is an
+        # archive of subdirectories and lives on the remote filesystem.
+        subdirs = []
+        if not recursive:
+            try:
+                subdirs = sorted(p.name for p in root.iterdir() if p.is_dir())
+            except OSError:
+                subdirs = []
+        if subdirs:
+            shown = ", ".join(subdirs[:10])
+            more = f" (+{len(subdirs) - 10} more)" if len(subdirs) > 10 else ""
+            recommendations.append(
+                f"No mesh or data files directly in {directory}, but it holds "
+                f"{len(subdirs)} subdirector"
+                f"{'y' if len(subdirs) == 1 else 'ies'}: {shown}{more}. "
+                "Re-run with recursive=True, or point at one subdirectory."
+            )
+        else:
+            recommendations.append(
+                f"No mesh or data files found in {directory}. "
+                "Try recursive=True or check the path."
+            )
     else:
         if grid_found and data_found:
             recommendations.append(

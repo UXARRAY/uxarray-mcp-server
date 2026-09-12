@@ -217,3 +217,66 @@ class TestListDatasetsRecommendations:
         result = list_datasets(str(tmp_path))
         entry = result["groups"][0]["files"][0]
         assert "size_mb" in entry
+
+
+class TestListDatasetsArchiveRoot:
+    """A directory whose datasets are all one level down.
+
+    This is how GDEX and most model archives are laid out, and the
+    non-recursive scan of such a root is the ordinary way to get zero hits.
+    Reporting only ``total_files: 0`` made a wrong flag look like a missing
+    dataset, so the recommendation names what is actually there.
+    """
+
+    def test_subdirectories_are_named_when_no_files_match(self, tmp_path):
+        _make_files(tmp_path, ["d651007/data.nc", "d651014/data.nc"])
+        result = list_datasets(str(tmp_path), recursive=False)
+        combined = " ".join(result["recommendations"])
+        assert result["total_files"] == 0
+        assert "d651007" in combined
+        assert "d651014" in combined
+        assert "recursive=True" in combined
+
+    def test_the_subdirectory_count_is_reported(self, tmp_path):
+        _make_files(tmp_path, [f"member_{i:02d}/data.nc" for i in range(14)])
+        result = list_datasets(str(tmp_path), recursive=False)
+        combined = " ".join(result["recommendations"])
+        assert "14 subdirectories" in combined
+        # Only the first ten are named; the rest are counted, not listed.
+        assert "(+4 more)" in combined
+
+    def test_a_single_subdirectory_reads_as_singular(self, tmp_path):
+        _make_files(tmp_path, ["only/data.nc"])
+        result = list_datasets(str(tmp_path), recursive=False)
+        combined = " ".join(result["recommendations"])
+        assert "1 subdirectory:" in combined
+
+    def test_a_genuinely_empty_directory_still_says_so(self, tmp_path):
+        result = list_datasets(str(tmp_path), recursive=False)
+        combined = " ".join(result["recommendations"])
+        assert "No mesh or data files found" in combined
+        assert "subdirector" not in combined
+
+    def test_a_recursive_scan_that_finds_nothing_does_not_blame_subdirs(self, tmp_path):
+        """recursive=True already looked inside, so the hint would be wrong."""
+        _make_files(tmp_path, ["sub/notes.txt"])
+        result = list_datasets(str(tmp_path), recursive=True)
+        combined = " ".join(result["recommendations"])
+        assert result["total_files"] == 0
+        assert "subdirector" not in combined
+
+    def test_the_remote_scan_gives_the_same_hint(self, tmp_path):
+        """The worker copy is the one that meets GDEX; it must not drift.
+
+        ``_remote_catalog_fn`` is shipped to the endpoint by value and
+        cannot call module scope, so the logic is duplicated there. Test
+        the duplicate rather than trust it.
+        """
+        from uxarray_mcp.tools.catalog import _remote_catalog_fn
+
+        _make_files(tmp_path, ["d651007/data.nc", "d651014/data.nc"])
+        result = _remote_catalog_fn(str(tmp_path), False, 200)
+        combined = " ".join(result["recommendations"])
+        assert result["total_files"] == 0
+        assert "d651007" in combined
+        assert "recursive=True" in combined

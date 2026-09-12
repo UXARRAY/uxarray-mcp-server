@@ -156,6 +156,38 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   issue, and a human merge is what reaches PyPI.
 
 ### Fixed
+- Every tool schema we serve carried ~2,400 tokens of dead weight, on every
+  request. Two causes, one root: nothing we run reaches tools through
+  `Tool.get_schema()`, which is where upstream does its cleaning.
+  `RouteTable._tool_to_route` reads `tool.parameters` raw, so both surfaces get
+  the uncleaned dict. First, `toolcall_reason`: `Tool.model_post_init` writes
+  it into `parameters` on every construction, unconditionally, while the switch
+  meant to govern it lives in `get_schema()` and defaults to off. Thought-
+  augmented tool calling has been disabled here since the registry was written
+  and the schema shipped anyway, on all 33 core tools, for an argument
+  execution then discards. Second, a Pydantic `title` on every generated
+  property, restating the property's own name in title case. Both are now
+  trimmed at registry build. The core surface went from 11,361 to 8,974
+  `cl100k_base` tokens, 21% off the fixed cost of every request.
+- `plot_dataset`'s `title` argument was invisible to any client reading
+  `registry.get_schemas()`. Upstream strips Pydantic `title` annotations with a
+  blanket key filter (`Tool._EXTRA_STRIP_KEYS`) that descends into `properties`
+  and deletes the parameter *named* `title` along with them. Our trim recurses
+  into property values only, so the annotation goes and the argument stays; a
+  test pins the distinction. The served MCP surface was never affected, because
+  it never called the function doing the stripping.
+- The tool-specification budget measured a surface nobody receives.
+  `TestToolSpecBudget` and `scripts/measure_payload.py` both read
+  `registry.get_schemas()`, understating the served catalog by 4,263 bytes and
+  passing throughout. Both now measure `RouteTable`, and the budgets are
+  ratcheted onto the trimmed figures: 42000 to 36000 bytes overall, 6000 to
+  5000 for `run_analysis`, 4200 to 3500 for `get_capabilities`.
+- `list_datasets` reported an archive root as empty. A non-recursive scan of a
+  directory whose datasets all sit one level down returned `total_files: 0` and
+  no groups, which reads as a missing dataset rather than a wrong flag -- and
+  that layout is GDEX, and most model archives. The zero-file case now counts
+  the subdirectories and names the first ten, so the caller can fix it in one
+  move. Applied to the worker copy as well, which is the one that meets GDEX.
 - The worker-payload drift guard read source text, so it failed on formatting
   and could pass on real drift. `test_every_dispatch_offers_the_same_input_kinds`
   counted the substrings `startswith("healpix:")` and `".shp", ".geojson"` and
