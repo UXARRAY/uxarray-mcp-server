@@ -34,6 +34,36 @@
       "pattern_correlation": 0.9450250667375348,
       "original_mean_mm_day": 0.1759786605834961,
       "roundtrip_mean_mm_day": 0.17768307012293708
+    },
+    "yac_conservative": {
+      "n_points": 31581,
+      "bias_mm_day": 0.0008382406024465628,
+      "rmse_mm_day": 0.07529218163936881,
+      "pattern_correlation": 0.9528229500145791,
+      "original_mean_mm_day": 0.1759786605834961,
+      "roundtrip_mean_mm_day": 0.17681690516169732,
+      "backend": "yac",
+      "yac_method": "conservative"
+    },
+    "yac_nnn": {
+      "n_points": 31581,
+      "bias_mm_day": 0.0014678256430846663,
+      "rmse_mm_day": 0.08606107513642282,
+      "pattern_correlation": 0.9406303915546607,
+      "original_mean_mm_day": 0.1759786605834961,
+      "roundtrip_mean_mm_day": 0.17744649020233544,
+      "backend": "yac",
+      "yac_method": "nnn"
+    },
+    "yac_average": {
+      "n_points": 31581,
+      "bias_mm_day": 0.0016135363512593268,
+      "rmse_mm_day": 0.08351759624208663,
+      "pattern_correlation": 0.9430413037293913,
+      "original_mean_mm_day": 0.1759786605834961,
+      "roundtrip_mean_mm_day": 0.1775922009105101,
+      "backend": "yac",
+      "yac_method": "average"
     }
   }
 }

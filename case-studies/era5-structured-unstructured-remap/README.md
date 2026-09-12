@@ -17,26 +17,37 @@ cubed-sphere mesh — no synthetic data anywhere.
 
 Mean daily CONUS precipitation for 2020-01-01 through 2020-01-15, computed
 from ERA5, was pushed onto a 1,867-cell cubed-sphere mesh subset and pulled
-back onto ERA5's original 0.25° grid using three remap methods. All three
+back onto ERA5's original 0.25° grid using six remap methods — three native
+to UXarray's own engine, and three routed through YAC (DKRZ's coupling
+library) once it was built for this environment (see Step 7a). All six
 reproduce the original field closely:
 
-| method | bias (mm/day) | RMSE (mm/day) | pattern correlation |
-|---|---|---|---|
-| nearest_neighbor | 0.0015 | 0.0861 | 0.941 |
-| inverse_distance_weighted | 0.0015 | 0.0805 | 0.947 |
-| bilinear | 0.0017 | 0.0824 | 0.945 |
+| method | backend | bias (mm/day) | RMSE (mm/day) | pattern correlation |
+|---|---|---|---|---|
+| nearest_neighbor | uxarray | 0.0015 | 0.0861 | 0.941 |
+| inverse_distance_weighted | uxarray | 0.0015 | 0.0805 | 0.947 |
+| bilinear | uxarray | 0.0017 | 0.0824 | 0.945 |
+| conservative | YAC | 0.0008 | 0.0753 | 0.953 |
+| nnn (nearest-neighbor) | YAC | 0.0015 | 0.0861 | 0.941 |
+| average | YAC | 0.0016 | 0.0835 | 0.943 |
 
 (Original field: mean 0.176 mm/day, range 0–2.48 mm/day.) Bias is
-essentially zero for all three — the mesh is coarser than ERA5's native grid
+essentially zero for all six — the mesh is coarser than ERA5's native grid
 (1,867 cells vs. 31,581 grid points inside the same CONUS box), so the round
 trip is fundamentally lossy in the same way any downsample-then-upsample is,
-but it isn't systematically biased high or low. IDW edges out the other two on
-both RMSE and correlation, consistent with it averaging over multiple nearby
-source points instead of picking one (nearest neighbor) or interpolating
-across a single element (bilinear). The error is not noise — it concentrates
-exactly where the physics has sharp spatial gradients (Pacific Northwest
-orographic bands, frontal precipitation streaks along the Ohio Valley and
-Gulf Coast), and is near zero over smooth, low-gradient areas. See
+but it isn't systematically biased high or low. **YAC's conservative method
+is the best of all six** on both RMSE and correlation — consistent with it
+being the only method here that guarantees areal-integral preservation
+during the forward remap, rather than picking or interpolating point values.
+UXarray's own IDW is the best of the three non-conservative methods, since it
+averages over multiple nearby source points instead of picking one (nearest
+neighbor) or interpolating across a single element (bilinear). YAC's `nnn`
+and UXarray's `nearest_neighbor` land on effectively identical numbers, as
+expected — both are the same nearest-neighbor operation, just via different
+implementations. The error is not noise — it concentrates exactly where the
+physics has sharp spatial gradients (Pacific Northwest orographic bands,
+frontal precipitation streaks along the Ohio Valley and Gulf Coast), and is
+near zero over smooth, low-gradient areas. See
 [`images/roundtrip_bias_all_methods.png`](images/roundtrip_bias_all_methods.png).
 
 ## Step 1 — enabling and probing the RODA MCP server
@@ -252,17 +263,59 @@ dataset produced by `Grid.from_structured()` cannot be remapped via
 manual `reset_index` step first, and the error message gives no hint that a
 `Grid.from_structured` MultiIndex is the cause.
 
-**Also confirmed unavailable in this environment**: the YAC backend
-(`conservative`, `nnn`, `dnn`, `average` remap methods) — `import yac` raises
-`ModuleNotFoundError`. Only the three native UXarray-engine methods
-(`nearest_neighbor`, `inverse_distance_weighted`, `bilinear`) were used here;
-conservative remapping (which would additionally guarantee the areal
-integral is preserved) was not tested and is a natural follow-up once YAC is
-installed.
+## Step 7a — getting YAC working
+
+`import yac` raised `ModuleNotFoundError` in this project's own `.venv`
+(the one this whole case study otherwise runs in). YAC is not a
+pip-installable wheel: its Python bindings are Cython-generated and built
+from source against
+[YAC's own DKRZ GitLab repo](https://gitlab.dkrz.de/dkrz-sw/yac), and YAC in
+turn hard-depends on
+[libyaxt](https://gitlab.dkrz.de/dkrz-sw/yaxt) ("Yet Another eXchange
+Tool"), DKRZ's own MPI data-exchange library, which is itself a from-source
+autotools build with no matching prebuilt wheel for an arbitrary local MPI.
+Neither `yac` nor `yaxt` exists on conda-forge as an ARM-macOS build that
+matches this machine's Homebrew Open MPI 5.0.10 exactly.
+
+Attempting the from-source build directly in `.venv` (`uv pip install
+git+https://gitlab.dkrz.de/dkrz-sw/yac.git`, after installing `cython` and
+an `mpi4py` built against the same Homebrew Open MPI) got as far as YAC's
+own CMake configure step — it correctly found and validated Open MPI — before
+failing with:
+
+```
+CMake Error: Could NOT find yaxt (missing: YAXT_C_LIBRARY YAXT_C_INCLUDE_DIR)
+```
+
+i.e. the next layer down (build YAXT from source too, via its own
+autotools `autoreconf -fi && ./configure && make install`, then point YAC's
+build at it with `CMAKE_ARGS="-DYAXT_ROOT=..."`) was the actual remaining
+work.
+
+Rather than build that chain, this machine turned out to already have YAC
+3.20.2 built (at `~/opt/yac-3.20.2`), in a separate conda environment,
+`uxarray_env3.12` — which also has uxarray 2026.9.0 and an `mpi4py` build,
+and, critically, all of it links against the *same* Homebrew Open MPI the
+rest of this case study uses (confirmed via `otool -L` on YAC's compiled
+extension: `/opt/homebrew/opt/open-mpi/lib/libmpi.40.dylib`). That
+consistency is what makes it usable here at all — a YAC build against a
+*different* MPI than the one `mpi4py`/UXarray use in-process would not link
+correctly. All three YAC remap methods (`conservative`, `nnn`, `average`)
+ran cleanly from that interpreter; `dnn` was not tried. See
+[`scripts/04_yac_conservative_remap.py`](scripts/04_yac_conservative_remap.py),
+which documents the interpreter switch and merges its results into the same
+`remap_fidelity_results.json` the native methods use.
+
+One practical consequence: the MCP server itself (and its `.venv`) still
+cannot use the YAC backend — only this separate conda interpreter can. Any
+future YAC-backed `run_analysis` calls through the MCP tool will still fail
+the same way until the server's own environment gets the full
+YAC+YAXT+matched-MPI build, which is the piece that was *not* done here.
 
 ## Step 8 — forward remap and round trip
 
-For each of `nearest_neighbor`, `inverse_distance_weighted`, `bilinear`:
+For each of `nearest_neighbor`, `inverse_distance_weighted`, `bilinear`
+(UXarray-native) and `conservative`, `nnn`, `average` (YAC-backed):
 
 1. **Forward**: `era5_precip.remap.<method>(target_grid=ne30pg3_conus)` —
    ERA5's 31,581-face structured field onto the 1,867-face unstructured mesh.
@@ -275,9 +328,23 @@ For each of `nearest_neighbor`, `inverse_distance_weighted`, `bilinear`:
    above, full detail in
    [`data/remap_fidelity_results.json`](data/remap_fidelity_results.json).
 
-The forward-remapped field on the actual unstructured mesh (IDW shown; the
-other two look visually similar at this resolution):
-[`images/remap_idw_on_ne30pg3_mesh.png`](images/remap_idw_on_ne30pg3_mesh.png).
+The forward-remapped field on the actual unstructured mesh (YAC conservative
+shown, since it's the best-scoring method; the other five look visually
+similar at this resolution):
+[`images/remap_yac_conservative_on_ne30pg3_mesh.png`](images/remap_yac_conservative_on_ne30pg3_mesh.png).
+
+All map images in this case study carry real Cartopy coastlines and
+US state/country borders (Natural Earth, 50 m resolution) — the mesh
+wireframe via the MCP server's own `plot_type="mesh_geo"` tool, and the two
+choropleths (original ERA5 field, remapped-on-mesh field) via UXarray's
+`uxda.plot.polygons(projection=ccrs.PlateCarree())`, since the MCP server's
+`plot_type="variable"` tool
+(`src/uxarray_mcp/domain/plotting.py::render_variable()`) has no
+projection/Cartopy support at all — a real gap in that tool, worked around
+here by calling UXarray's plotting API directly and adding the coastlines to
+the resulting `cartopy.mpl.geoaxes.GeoAxes` by hand. See
+[`scripts/05_plot_remap_on_mesh.py`](scripts/05_plot_remap_on_mesh.py) for
+the exact technique.
 
 ## Reproducing this
 
@@ -290,21 +357,31 @@ in git is under `data/`. To rerun from scratch:
 #   e5.oper.fc.sfc.accumu/202001/e5.oper.fc.sfc.accumu.128_142_lsp.ll025sc.2020010106_2020011606.nc
 #   e5.oper.fc.sfc.accumu/202001/e5.oper.fc.sfc.accumu.128_143_cp.ll025sc.2020010106_2020011606.nc
 python scripts/01_build_era5_conus_field.py   # -> data/era5_conus_mean_precip.nc
-python scripts/02_remap_roundtrip.py          # -> data/forward_*.nc, data/remap_fidelity_results.json
-python scripts/03_plots.py                    # -> images/*.png
+python scripts/02_remap_roundtrip.py          # -> data/forward_*.nc, data/remap_fidelity_results.json  (project .venv)
+/opt/homebrew/anaconda3/envs/uxarray_env3.12/bin/python \
+    scripts/04_yac_conservative_remap.py      # -> adds yac_* entries to the same files  (separate conda env — see Step 7a)
+python scripts/03_plots.py                    # -> images/plot_era5_original.png, images/plot_roundtrip_bias.png  (project .venv)
+python scripts/05_plot_remap_on_mesh.py       # -> images/plot_remap_on_mesh.png  (project .venv)
 ```
 
 (Paths inside the scripts point at `/tmp/era5_raw` as originally run — adjust
-to wherever the raw files land before rerunning.)
+to wherever the raw files land before rerunning. The mesh wireframe image,
+`images/ne30pg3_conus_mesh_wireframe.png`, was produced via the MCP tool
+`plot_dataset(plot_type="mesh_geo", grid_path=..., lon_bounds=[-130,-65],
+lat_bounds=[20,50], show_mesh_boundary=true)`, not a script.)
 
 ## Honest limitations
 
 - Only 15 days of data (2020-01-01 to 2020-01-15), not a full climatology —
   chosen to keep the round-trip experiment fast, not to cherry-pick a result.
-- Conservative (YAC-backed) remapping was not tested — YAC isn't installed
-  in this environment. Areal-integral preservation, which conservative remap
-  specifically guarantees and the three tested methods don't, is therefore
-  an open question here.
+- The YAC results here come from a separate conda environment
+  (`uxarray_env3.12`) that happened to already have a matching YAC+MPI build,
+  not from this project's own `.venv` or the MCP server's own runtime — see
+  Step 7a. The MCP server itself still cannot run YAC-backed remaps; a real
+  fix would mean building YAC+YAXT from source against the server's own
+  environment, which was not attempted.
+- `dnn` (YAC's fourth remap method) was not tried, only `conservative`, `nnn`,
+  `average`.
 - "Round-trip fidelity" measures self-consistency (does the field survive an
   onto-mesh-and-back trip), not the physical accuracy of the mesh-based
   representation against any independent observation. No independent
