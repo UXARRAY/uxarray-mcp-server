@@ -130,12 +130,24 @@ def measure(grid_file: str, data_file: str) -> dict[str, dict[str, Any]]:
 
 
 def measure_catalog() -> dict[str, Any]:
-    """How much context the tool catalog itself occupies before any call."""
+    """How much context the tool catalog itself occupies before any call.
+
+    Measured through ``RouteTable``, which is what every surface we run
+    actually serves. ``registry.get_schemas()`` returns ``get_schema()``'s
+    cleaned output instead, which no client receives, and reporting it
+    understated the catalog by 4,263 bytes.
+    """
+    from toolregistry_server.route_table import RouteTable
+
     from uxarray_mcp.app import make_registry
 
     schemas = {
-        schema.get("function", schema)["name"]: schema
-        for schema in make_registry().get_schemas()
+        route.tool_name: {
+            "name": route.tool_name,
+            "description": route.description,
+            "parameters": route.parameters_schema,
+        }
+        for route in RouteTable(make_registry()).list_routes()
     }
     by_name = {name: _size(schema) for name, schema in schemas.items()}
     total = sum(by_name.values())
