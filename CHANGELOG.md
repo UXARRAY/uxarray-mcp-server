@@ -156,6 +156,21 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   issue, and a human merge is what reaches PyPI.
 
 ### Fixed
+- The worker-payload drift guard read source text, so it failed on formatting
+  and could pass on real drift. `test_every_dispatch_offers_the_same_input_kinds`
+  counted the substrings `startswith("healpix:")` and `".shp", ".geojson"` and
+  required the two counts to be equal. A dispatch whose extension list the
+  formatter wrapped over three lines therefore read as zero shapefile branches,
+  and a nested `if` naming the HEALPix prefix twice read as two HEALPix
+  branches -- `remote_temporal_mean_map` is both, and was reported as offering
+  HEALPix without shapefiles while doing no such thing. Equally, a payload that
+  genuinely dropped the shapefile read would have passed whenever the miscount
+  balanced. The guard now reads the syntax tree and asserts that both input
+  kinds are *present*, which is the property the test was written to protect;
+  how many times a function spells either one is its own business. A new test
+  pins the guard's own teeth: it must flag a payload that drops the shapefile
+  read, and must judge the one-line and formatter-wrapped spellings of the
+  extension test alike.
 - A gradient could not be obtained on a grid without a `sphere_radius`
   attribute. The refusal for the missing attribute told the caller to pass
   `scale_by_radius=False`; doing so was refused in turn with the advice to

@@ -90,12 +90,35 @@ def _healpix_zoom_calls(fn: ast.FunctionDef) -> list[ast.Call]:
     ]
 
 
-def _dispatch_branch_counts(source: str) -> tuple[int, int]:
-    """How many HEALPix and shapefile branches a function's source carries."""
-    return (
-        source.count('startswith("healpix:")'),
-        source.count('".shp", ".geojson"'),
+def _dispatch_input_kinds(fn: ast.FunctionDef) -> tuple[bool, bool]:
+    """Whether a function's dispatch offers the HEALPix and shapefile kinds.
+
+    Read from the syntax tree, not from the source text. An earlier version
+    counted the substrings ``startswith("healpix:")`` and ``".shp",
+    ".geojson"`` and asserted the two counts were equal, which tied the guard
+    to formatting rather than to behaviour: a dispatch whose extension list the
+    formatter wrapped over three lines read as zero shapefile branches, and a
+    nested ``if`` that names the HEALPix prefix twice read as two HEALPix
+    branches. Neither is drift.
+
+    What the guard is for is that both kinds are offered *at all*, so that is
+    what is returned. How many times a function spells either one is its own
+    business.
+    """
+    healpix = any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "startswith"
+        and len(node.args) == 1
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "healpix:"
+        for node in ast.walk(fn)
     )
+    shapefile = any(
+        isinstance(node, ast.Constant) and node.value in (".shp", ".geojson")
+        for node in ast.walk(fn)
+    )
+    return healpix, shapefile
 
 
 def _assigned_literal(fn: ast.FunctionDef, name: str):
@@ -171,12 +194,12 @@ class TestInlinedCopiesAgree:
     def test_the_zoom_is_extracted_the_same_way_everywhere(self):
         """One spelling of the zoom argument across every copy.
 
-        Twenty call sites, and a worker that read the zoom differently from
-        the other nineteen would answer the same request with a different
+        Twenty-one call sites, and a worker that read the zoom differently
+        from the other twenty would answer the same request with a different
         mesh. The count is asserted too: a copy that vanished is drift.
         """
         blocks = _all_blocks(_healpix_zoom_calls, "the HEALPix zoom argument")
-        _assert_one_shape(blocks, "the HEALPix zoom argument", 20)
+        _assert_one_shape(blocks, "the HEALPix zoom argument", 21)
 
     def test_every_dispatch_offers_the_same_input_kinds(self):
         """A path the worker can open in one tool must open in all of them.
@@ -185,20 +208,70 @@ class TestInlinedCopiesAgree:
         through geopandas, and everything ``ux.open_grid`` handles. Nothing
         made them travel together, so a tool added with only the HEALPix
         branch would reject a shapefile that every neighbouring tool accepts.
+
+        A function that dispatches on neither is not in scope: the smoke and
+        probe payloads build their own grids and never take a path.
         """
         offenders = {
-            name: counts
-            for name, obj in (
-                (n, getattr(cf, n)) for n in sorted(dir(cf)) if n.startswith("remote_")
-            )
-            if callable(obj)
-            and (counts := _dispatch_branch_counts(inspect.getsource(obj)))
-            and counts[0] != counts[1]
+            name: {"healpix": kinds[0], "shapefile": kinds[1]}
+            for name, fn in _remote_functions()
+            if (kinds := _dispatch_input_kinds(fn))[0] != kinds[1]
         }
         assert not offenders, (
-            "these remote functions dispatch on HEALPix without an equal "
-            f"number of shapefile branches: {offenders}"
+            "these remote functions offer the HEALPix input kind without the "
+            f"shapefile kind, or the reverse: {offenders}"
         )
+
+    def test_the_input_kind_guard_would_notice_a_missing_branch(self):
+        """The test above passing is only worth something if this one does.
+
+        Its predecessor counted substrings, so it reported a wrapped
+        extension list as no shapefile branch at all and a nested ``if`` as
+        two HEALPix branches -- it failed on formatting and would equally
+        have passed on a real omission that happened to balance. Both cases
+        are pinned here: the payload that genuinely drops the shapefile read
+        is caught, and the two spellings of the extension test that the
+        formatter chooses between are read the same way.
+        """
+
+        def parse(src: str) -> ast.FunctionDef:
+            return ast.parse(textwrap.dedent(src)).body[0]
+
+        dropped_the_shapefile_read = parse(
+            """
+            def remote_example(grid_path):
+                if grid_path.lower().startswith("healpix:"):
+                    grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+                else:
+                    grid = ux.open_grid(grid_path)
+            """
+        )
+        assert _dispatch_input_kinds(dropped_the_shapefile_read) == (True, False)
+
+        on_one_line = parse(
+            """
+            def remote_example(grid_path):
+                if grid_path.lower().startswith("healpix:"):
+                    grid = None
+                elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
+                    grid = None
+            """
+        )
+        wrapped_by_the_formatter = parse(
+            """
+            def remote_example(grid_path):
+                if grid_path.lower().startswith("healpix:") or os.path.splitext(
+                    grid_path.lower()
+                )[1] in [
+                    ".shp",
+                    ".geojson",
+                ]:
+                    if grid_path.lower().startswith("healpix:"):
+                        grid = None
+            """
+        )
+        assert _dispatch_input_kinds(on_one_line) == (True, True)
+        assert _dispatch_input_kinds(wrapped_by_the_formatter) == (True, True)
 
     def test_the_worker_runtime_envelope_reports_the_same_keys(self):
         """Presence was already guarded; shape was not.
@@ -217,7 +290,7 @@ class TestInlinedCopiesAgree:
             key: repr([ast.literal_eval(k) for k in node.keys])
             for key, node in _each(_worker_runtime_dicts)
         }
-        _assert_one_shape(blocks, "the _worker_runtime key list", 20)
+        _assert_one_shape(blocks, "the _worker_runtime key list", 21)
 
     @pytest.mark.parametrize("constant", ["_LEVEL_EXACT", "_LEVEL_SUBSTR"])
     def test_the_dimension_classification_is_one_policy(self, constant):
@@ -226,7 +299,7 @@ class TestInlinedCopiesAgree:
             for name, fn in _remote_functions()
             if (value := _assigned_literal(fn, constant)) is not None
         }
-        _assert_one_shape(blocks, f"the inlined {constant}", 7)
+        _assert_one_shape(blocks, f"the inlined {constant}", 8)
 
 
 class TestInlinedHelpersMatchTheirDomainTwin:
