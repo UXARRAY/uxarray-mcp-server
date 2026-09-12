@@ -115,7 +115,32 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   different directory per client, invisible to the caller, and never the one
   they meant.
 
+- `plot_dataset(plot_type="temporal_mean")` reduces many files on the worker and
+  maps the result. Every other plot type reads one file and draws the whole
+  mesh, so a multi-year regional mean -- the ordinary reason to reach for an HPC
+  endpoint at all -- had no path through the server: `temporal_mean`,
+  `subset_bbox` and `anomaly` all refused `use_remote=True`, and the advice they
+  gave was to pass a locally-readable path, which is not available when the data
+  is on someone else's filesystem. `remote_temporal_mean_map` opens the files
+  with `open_mfdataset`, applies the bounding box *before* the reduction so only
+  the kept cells are carried through it, scales units, and renders a choropleth
+  with Natural Earth geography when the worker has cartopy. It reports
+  `n_time_steps`, `reduced_dims`, `n_face_subset` against `n_face_total` and
+  `n_nonfinite`, because a PNG cannot say what was averaged away. Verified on
+  the UCAR worker: ten annual files of 6-hourly CESM ne120 output, 14,600 steps
+  reduced to a CONUS map in 462 s, matching a direct call to sixteen digits.
+- `case-studies/conus-precipitation-gdex/` documents that run end to end -- the
+  prompt, the result, the provenance, the timings, and setup for both a laptop
+  and a Casper endpoint.
+
 ### Changed
+- `plot_dataset(plot_type="variable")` now refuses `lon_bounds`/`lat_bounds`
+  instead of ignoring them. It draws the whole mesh and never honored a box, but
+  it accepted one and returned a global map with nothing in the response saying
+  the box had been dropped -- so a regional request came back looking answered.
+  The refusal names `temporal_mean` and `mesh_geo`, the plot types that do honor
+  a box. Callers who passed a box and accepted the global map get an error where
+  they used to get a picture.
 - Releases now follow upstream instead of the calendar. The workflow polled on
   the 5th of every month, but upstream skipped 2026.01 and 2026.05, shipped
   twice in August, and released 2026.09.0 on the 10th, so the poll was either

@@ -917,6 +917,378 @@ def remote_plot_variable(
     }
 
 
+def remote_temporal_mean_map(
+    grid_path: str,
+    data_paths: list,
+    variable_name: str,
+    lon_bounds: Optional[list] = None,
+    lat_bounds: Optional[list] = None,
+    level_index: int = 0,
+    scale_factor: float = 1.0,
+    units_label: Optional[str] = None,
+    region_name: str = "",
+    width: int = 900,
+    height: int = 520,
+    cmap: str = "viridis",
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    title: Optional[str] = None,
+    geography: bool = True,
+) -> Dict[str, Any]:
+    """Average a variable over time across many files, cut to a box, and draw it.
+
+    The three steps are one function because splitting them defeats the
+    point. ``temporal_mean`` alone cannot reach a facility-only path, and a
+    mean computed on the submitter would have to pull every input file over
+    the wire; here the whole reduction happens on the worker and only the
+    PNG plus a few summary numbers come back.
+
+    The bounding box is applied *before* the time average, so a regional
+    request reads the faces it asked for rather than the globe. On a mesh
+    where the region is a small fraction of the faces this is the
+    difference between a demo that finishes and one that does not.
+
+    Parameters
+    ----------
+    grid_path : str
+        Mesh file on the worker filesystem (or ``healpix:<zoom>``).
+    data_paths : list
+        One or more data files to average across, in time order. A bare
+        string is accepted and treated as a single-element list.
+    variable_name : str
+        Face-centered variable to average.
+    lon_bounds, lat_bounds : list | None
+        ``[min, max]`` degrees. Both must be given to subset; either alone
+        is refused rather than half-applied.
+    level_index : int
+        Index along a vertical dimension. Never applied to a time axis.
+    scale_factor : float
+        Multiplied into the mean after averaging, for unit conversion
+        (CAM ``PRECT`` is m/s; 86400000.0 gives mm/day).
+    units_label : str | None
+        Units for the colorbar. Records what ``scale_factor`` converted to,
+        since the number alone cannot say.
+    region_name : str
+        Human-readable region label for the default title.
+    width, height : int
+        PNG size in pixels.
+    cmap : str
+        Matplotlib colormap name.
+    vmin, vmax : float | None
+        Color limits, in the units produced by ``scale_factor``.
+    title : str | None
+        Overrides the generated title.
+    geography : bool
+        Draw coastlines, national borders and state lines under the data.
+        The axes are plain degrees, which is what Natural Earth's geometries
+        are in, so they overlay without a projection. Skipped without
+        comment if cartopy or its data are missing on the worker; the
+        result says which happened.
+
+    Returns
+    -------
+    dict
+        - png_b64, image_size_bytes: the rendered map
+        - geography: how many coastline/border/state paths were drawn, or
+          why none were
+        - variable_name, units, scale_factor: what was drawn, in what units
+        - n_files, n_time_steps, time_start, time_end: what was averaged
+        - reduced_dims: the time dims collapsed and the level index held
+        - n_face_total, n_face_subset, fraction_of_mesh: subset coverage
+        - value_stats: min/mean/max of the mean field, for sanity checks
+        - grid_info: n_face, n_node, n_edge of the *subset* grid
+    """
+    import base64
+    import io
+    import os
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import uxarray as ux
+
+    if isinstance(data_paths, str):
+        data_paths = [data_paths]
+    data_paths = [str(p) for p in (data_paths or [])]
+    if not data_paths:
+        raise ValueError("remote_temporal_mean_map requires at least one data path.")
+    missing = [p for p in data_paths if not os.path.exists(p)]
+    if missing:
+        raise FileNotFoundError(
+            f"{len(missing)} of {len(data_paths)} data paths are not readable "
+            f"on the worker; first missing: {missing[0]}"
+        )
+    if (lon_bounds is None) != (lat_bounds is None):
+        raise ValueError(
+            "Subsetting needs both lon_bounds and lat_bounds; got only one. "
+            "Pass both, or neither for the whole mesh."
+        )
+
+    # open_mfdataset takes a grid *path*, not a Grid object -- handing it one
+    # fails with the Grid's repr as the error message. Only the two synthetic
+    # grid spellings need the object, and those get the dataset attached by
+    # hand, exactly as remote_plot_variable does.
+    _spec = grid_path.lower()
+    if _spec.startswith("healpix:") or os.path.splitext(_spec)[1] in [
+        ".shp",
+        ".geojson",
+    ]:
+        import xarray as xr
+
+        if _spec.startswith("healpix:"):
+            _grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        else:
+            _grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        uxds = ux.UxDataset(
+            xr.open_mfdataset(data_paths, combine="by_coords"), uxgrid=_grid
+        )
+    else:
+        uxds = ux.open_mfdataset(grid_path, data_paths, combine="by_coords")
+    n_face_total = int(uxds.uxgrid.n_face)
+
+    if variable_name not in uxds.data_vars:
+        raise ValueError(
+            f"Variable '{variable_name}' not found. "
+            f"Available: {list(uxds.data_vars.keys())}"
+        )
+    uxda = uxds[variable_name]
+
+    face_dims = {"n_face", "nCells"}
+    if not any(d in face_dims for d in uxda.dims):
+        raise ValueError(f"Variable '{variable_name}' is not face-centered.")
+
+    # Same split as remote_plot_variable: a time index and a level index
+    # reach different axes, and mixing them silently averages the wrong one.
+    _LEVEL_EXACT = {"lev", "level", "levels", "plev", "z", "nvertlevels"}
+    _LEVEL_SUBSTR = ("lev", "depth", "height", "altitude", "isobaric")
+    level_sel = {}
+    time_dims = []
+    reduced_dims: Dict[str, Any] = {}
+    for dim in uxda.dims:
+        if dim in face_dims:
+            continue
+        size = int(uxda.sizes[dim])
+        name = str(dim).lower()
+        if "time" in name:
+            time_dims.append(str(dim))
+            reduced_dims[str(dim)] = {"kind": "time", "how": "mean", "size": size}
+            continue
+        if size == 1:
+            level_sel[dim] = 0
+            continue
+        if name in _LEVEL_EXACT or any(s in name for s in _LEVEL_SUBSTR):
+            level_sel[dim] = level_index
+            reduced_dims[str(dim)] = {
+                "kind": "level",
+                "index": level_index,
+                "size": size,
+            }
+        else:
+            level_sel[dim] = 0
+            reduced_dims[str(dim)] = {"kind": "other", "index": 0, "size": size}
+    if not time_dims:
+        raise ValueError(
+            f"Variable '{variable_name}' has no time dimension to average; "
+            f"dims are {list(uxda.dims)}."
+        )
+    if level_sel:
+        uxda = uxda.isel(**level_sel)
+
+    n_time_steps = 1
+    for d in time_dims:
+        n_time_steps *= int(uxda.sizes[d])
+    time_start = time_end = None
+    for d in time_dims:
+        if d in uxda.coords:
+            _tv = uxda[d].values
+            if len(_tv):
+                time_start, time_end = str(_tv[0]), str(_tv[-1])
+            break
+
+    # Cut to the region before averaging: the mean then touches only the
+    # faces that end up in the picture.
+    subset_applied = False
+    if lon_bounds is not None and lat_bounds is not None:
+        uxda = uxda.subset.bounding_box(
+            lon_bounds=[float(v) for v in lon_bounds],
+            lat_bounds=[float(v) for v in lat_bounds],
+        )
+        subset_applied = True
+        if int(uxda.uxgrid.n_face) == 0:
+            raise ValueError(
+                f"Bounding box lon={lon_bounds} lat={lat_bounds} selects no "
+                f"faces of this {n_face_total}-face mesh. Longitudes here may "
+                f"use a different convention (0..360 vs -180..180)."
+            )
+
+    mean_da = uxda.mean(dim=time_dims)
+    if hasattr(mean_da, "compute"):
+        mean_da = mean_da.compute()
+    if scale_factor != 1.0:
+        _scaled = mean_da * float(scale_factor)
+        # Arithmetic can hand back a plain xarray object; the grid has to be
+        # reattached or .plot.polygons has no mesh to draw on.
+        if not hasattr(_scaled, "uxgrid") or _scaled.uxgrid is None:
+            _scaled = ux.UxDataArray(_scaled, uxgrid=mean_da.uxgrid)
+        mean_da = _scaled
+    sub_grid = mean_da.uxgrid
+    n_face_subset = int(sub_grid.n_face)
+
+    label = variable_name if not units_label else f"{variable_name} ({units_label})"
+    mean_da = mean_da.rename(label)
+
+    vals = np.asarray(mean_da.values, dtype="float64")
+    finite = vals[np.isfinite(vals)]
+    value_stats = {
+        "min": float(finite.min()) if finite.size else None,
+        "mean": float(finite.mean()) if finite.size else None,
+        "max": float(finite.max()) if finite.size else None,
+        "n_faces": int(vals.size),
+        "n_nonfinite": int(vals.size - finite.size),
+    }
+
+    import holoviews as hv
+
+    hv.extension("matplotlib")
+
+    dpi = 100
+    kwargs: Dict[str, Any] = {"backend": "matplotlib", "cmap": cmap}
+    if vmin is not None or vmax is not None:
+        kwargs["clim"] = (
+            float(vmin) if vmin is not None else float(np.nanmin(vals)),
+            float(vmax) if vmax is not None else float(np.nanmax(vals)),
+        )
+
+    element = mean_da.plot.polygons(**kwargs)
+    renderer = hv.Store.renderers["matplotlib"]
+    plot = renderer.get_plot(element)
+    fig = plot.state
+    fig.set_size_inches(width / dpi, height / dpi)
+    fig.set_dpi(dpi)
+
+    if title is None:
+        _span = ""
+        if time_start and time_end:
+            _span = f" {time_start[:10]} to {time_end[:10]}"
+        _where = f" over {region_name}" if region_name else ""
+        title = f"Mean {label}{_where},{_span} ({n_time_steps} steps)"
+    fig.axes[0].set_title(title)
+
+    # Geography, drawn as plain paths rather than through a projection: the
+    # polygons were plotted in degrees, and Natural Earth's geometries are in
+    # degrees, so the two line up without cartopy owning the axes. A map of a
+    # region with no coastline on it is hard to check and easy to misread.
+    geo_info: Dict[str, Any] = {"drawn": False}
+    if geography:
+        try:
+            import cartopy.feature as cfeature
+            from matplotlib.collections import LineCollection
+
+            _ax = fig.axes[0]
+            _xlim, _ylim = _ax.get_xlim(), _ax.get_ylim()
+            counts = {}
+            for key, category, feature_name, lw, color in (
+                ("coastlines", "physical", "coastline", 0.8, "#111111"),
+                (
+                    "borders",
+                    "cultural",
+                    "admin_0_boundary_lines_land",
+                    0.6,
+                    "#333333",
+                ),
+                (
+                    "states",
+                    "cultural",
+                    "admin_1_states_provinces_lines",
+                    0.4,
+                    "#555555",
+                ),
+            ):
+                segments = []
+                for geom in cfeature.NaturalEarthFeature(
+                    category, feature_name, "50m"
+                ).geometries():
+                    parts = getattr(geom, "geoms", None) or [geom]
+                    for part in parts:
+                        coords = getattr(part, "coords", None)
+                        if coords is None:
+                            continue
+                        pts = list(coords)
+                        if len(pts) > 1:
+                            segments.append(pts)
+                if segments:
+                    _ax.add_collection(
+                        LineCollection(
+                            segments,
+                            linewidths=lw,
+                            colors=color,
+                            zorder=5,
+                        )
+                    )
+                counts[key] = len(segments)
+            # add_collection re-autoscales to the whole world; the box the
+            # caller asked for is the view that matters.
+            _ax.set_xlim(_xlim)
+            _ax.set_ylim(_ylim)
+            geo_info = {"drawn": True, **counts}
+        except Exception as exc:  # cartopy absent, or its data not cached
+            geo_info = {"drawn": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+    # Mirrors remote_plot_variable: after the resize the HoloViews colorbar
+    # sits over the map and tight_layout will not move it.
+    _axes = list(fig.axes)
+    if len(_axes) < 2:
+        fig.tight_layout()
+    else:
+        _axes[0].set_position([0.08, 0.12, 0.76, 0.80])
+        for _cax in _axes[1:]:
+            _cax.set_position([0.87, 0.12, 0.025, 0.80])
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    png_bytes = buf.read()
+    if not png_bytes:
+        raise ValueError("Rendered temporal mean map is empty.")
+
+    return {
+        "png_b64": base64.b64encode(png_bytes).decode("utf-8"),
+        "image_size_bytes": len(png_bytes),
+        "variable_name": variable_name,
+        "units": units_label,
+        "scale_factor": float(scale_factor),
+        "n_files": len(data_paths),
+        "n_time_steps": int(n_time_steps),
+        "time_start": time_start,
+        "time_end": time_end,
+        "reduced_dims": reduced_dims,
+        "subset_applied": subset_applied,
+        "lon_bounds": list(lon_bounds) if lon_bounds is not None else None,
+        "lat_bounds": list(lat_bounds) if lat_bounds is not None else None,
+        "n_face_total": n_face_total,
+        "n_face_subset": n_face_subset,
+        "fraction_of_mesh": (n_face_subset / n_face_total) if n_face_total else None,
+        "value_stats": value_stats,
+        "geography": geo_info,
+        "grid_info": {
+            "n_face": n_face_subset,
+            "n_node": int(sub_grid.n_node),
+            "n_edge": int(sub_grid.n_edge),
+        },
+        "_worker_runtime": {
+            "hostname": __import__("socket").gethostname(),
+            "python_version": __import__("platform").python_version(),
+            "uxarray_version": getattr(ux, "__version__", "unknown"),
+            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+        },
+    }
+
+
 def remote_plot_zonal_mean(
     grid_path: str,
     data_path: str,

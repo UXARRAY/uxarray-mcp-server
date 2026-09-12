@@ -1022,7 +1022,11 @@ def plot_dataset(
     plot_type: str,
     grid_path: str | None = None,
     data_path: str | None = None,
+    data_paths: list[str] | None = None,
     variable_name: str | None = None,
+    scale_factor: float = 1.0,
+    units_label: str | None = None,
+    region_name: str = "",
     width: int = 800,
     height: int = 400,
     cmap: str = "viridis",
@@ -1052,7 +1056,15 @@ def plot_dataset(
     """Render mesh, geographic mesh, variable, or zonal-mean plots.
 
     ``plot_type`` is one of ``mesh``, ``mesh_geo``, ``variable``,
-    ``zonal_mean``.
+    ``zonal_mean``, ``temporal_mean``.
+
+    ``temporal_mean`` averages ``variable_name`` over every time step in
+    ``data_paths`` and draws the result, optionally cut to
+    ``lon_bounds``/``lat_bounds`` first and scaled by ``scale_factor`` into
+    ``units_label``. It is the only plot type that reads more than one data
+    file, and the only one whose box is honored, so it is what a decadal
+    regional mean on facility-only paths goes through. Longitudes follow
+    uxarray's -180..180 convention, not 0..360.
 
     ``time_index`` and ``level_index`` are separate selectors, applied only
     to time-like and level-like dimensions respectively. Results carry a
@@ -1062,7 +1074,9 @@ def plot_dataset(
     ``mesh_geo`` (local only) draws the cell outlines over Natural Earth
     features and takes ``show_mesh_boundary``, ``coastlines``, ``borders``,
     ``rivers``, ``lakes``, ``cities`` and ``basemap`` (``basemap`` needs a
-    network connection). The other plot types ignore these.
+    network connection). ``temporal_mean`` reads ``coastlines`` as well, and
+    draws coastlines, borders and state lines under the field. The remaining
+    plot types ignore all of these.
     """
     from uxarray_mcp.tools.plotting import plot_mesh_geo
     from uxarray_mcp.tools.remote_tools import plot_mesh, plot_variable, plot_zonal_mean
@@ -1097,7 +1111,47 @@ def plot_dataset(
             session_id=session_id,
             dataset_handle=dataset_handle,
         )
+    if kind in ("temporal_mean", "mean_map"):
+        from uxarray_mcp.tools.remote_tools import temporal_mean_map
+
+        paths = data_paths if data_paths else ([data_path] if data_path else None)
+        if not paths:
+            raise ValueError(
+                "plot_type='temporal_mean' requires data_paths (the files to "
+                "average over), or a single data_path."
+            )
+        return temporal_mean_map(
+            grid_path=grid_path,
+            data_paths=paths,
+            variable_name=variable_name,
+            lon_bounds=lon_bounds,
+            lat_bounds=lat_bounds,
+            level_index=level_index,
+            scale_factor=scale_factor,
+            units_label=units_label,
+            region_name=region_name,
+            width=width,
+            height=height,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            title=title,
+            geography=coastlines,
+            use_remote=use_remote,
+            endpoint=endpoint,
+            session_id=session_id,
+            dataset_handle=dataset_handle,
+        )
     if kind == "variable":
+        # A box handed to this plot type used to be accepted and dropped, so
+        # a regional request came back as a global picture that looked like
+        # an answer. Name the plot type that honors it instead.
+        if lon_bounds is not None or lat_bounds is not None:
+            raise ValueError(
+                "plot_type='variable' draws the whole mesh and cannot honor "
+                "lon_bounds/lat_bounds. Use plot_type='temporal_mean' for a "
+                "regional map, or 'mesh_geo' for a regional wireframe."
+            )
         return plot_variable(
             grid_path=grid_path,
             data_path=data_path,
@@ -1133,7 +1187,9 @@ def plot_dataset(
             session_id=session_id,
             dataset_handle=dataset_handle,
         )
-    raise ValueError("plot_type must be one of: mesh, mesh_geo, variable, zonal_mean.")
+    raise ValueError(
+        "plot_type must be one of: mesh, mesh_geo, variable, zonal_mean, temporal_mean."
+    )
 
 
 def diagnose_endpoint(

@@ -34,6 +34,7 @@ from .compute_functions import (
     remote_plot_variable,
     remote_plot_zonal_mean,
     remote_probe_path,
+    remote_temporal_mean_map,
 )
 from .config import HPCConfig
 
@@ -562,6 +563,51 @@ class UXarrayComputeAgent(_AcademyAgent):
                 time_index,
                 level_index,
             )
+
+    @action
+    async def temporal_mean_map_remote(
+        self,
+        grid_path: str,
+        data_paths: list,
+        variable_name: str,
+        lon_bounds: Optional[list] = None,
+        lat_bounds: Optional[list] = None,
+        level_index: int = 0,
+        scale_factor: float = 1.0,
+        units_label: Optional[str] = None,
+        region_name: str = "",
+        width: int = 900,
+        height: int = 520,
+        cmap: str = "viridis",
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        title: Optional[str] = None,
+        geography: bool = True,
+        use_remote: bool = False,
+    ) -> Dict[str, Any]:
+        """Average across files, cut to a box, and render -- all on the worker."""
+        args = (
+            grid_path,
+            data_paths,
+            variable_name,
+            lon_bounds,
+            lat_bounds,
+            level_index,
+            scale_factor,
+            units_label,
+            region_name,
+            width,
+            height,
+            cmap,
+            vmin,
+            vmax,
+            title,
+            geography,
+        )
+        if use_remote and self.config.endpoint_id:
+            return await self._run_on_hpc(remote_temporal_mean_map, *args)
+        else:
+            return remote_temporal_mean_map(*args)
 
     @action
     async def plot_zonal_mean_remote(
