@@ -689,6 +689,120 @@ def plot_mesh(
     )
 
 
+def subset_bbox_plot(
+    grid_path: str | None = None,
+    lon_bounds: list[float] | None = None,
+    lat_bounds: list[float] | None = None,
+    region_name: str = "",
+    width: int = 800,
+    height: int = 450,
+    edgecolor: str = "steelblue",
+    facecolor: str = "lightcyan",
+    linewidth: float = 0.3,
+    use_remote: bool = False,
+    endpoint: str | None = None,
+    session_id: str | None = None,
+    dataset_handle: str | None = None,
+) -> list[Any]:
+    """Crop a mesh to a bounding box and render the crop as a wireframe PNG. Optional HPC execution.
+
+    ``plot_type="mesh"`` always draws the whole grid, so a regional request
+    against a continental-scale mesh came back as a global picture (or, at
+    HPC face counts, a wireframe dense enough to look like a solid fill).
+    This subsets to ``lon_bounds``/``lat_bounds`` before rendering. With
+    ``use_remote=True`` the subset and the render both happen on the worker,
+    so a multi-GB grid never has to leave the facility filesystem.
+
+    Parameters
+    ----------
+    grid_path : str | None
+        Path to mesh file. Can be a local path or an HPC filesystem path
+        when use_remote=True. Optional when ``session_id`` and
+        ``dataset_handle`` are provided.
+    lon_bounds, lat_bounds : list[float]
+        [min, max] in degrees. Longitudes follow uxarray's -180..180
+        convention, not 0..360.
+    region_name : str
+        Label used in the plot title.
+    width, height : int
+        Image dimensions in pixels.
+    edgecolor, facecolor : str
+        Matplotlib colors for cell edges and fill.
+    linewidth : float
+        Edge line width in points.
+    use_remote : bool
+        If True and HPC is configured, subset and render on the endpoint.
+    session_id, dataset_handle : str | None
+        When both are provided, the grid path is looked up from the
+        registered session dataset instead of ``grid_path``.
+
+    Returns
+    -------
+    list
+        MCP image/resource-link + metadata content blocks. Metadata
+        includes n_face_total, n_face_subset, fraction_of_mesh, and
+        resolution_ratio (mean face area outside the box over inside it).
+
+    Examples
+    --------
+    >>> result = subset_bbox_plot(
+    ...     "/hpc/data/grid.nc",
+    ...     lon_bounds=[-106.6, -93.5],
+    ...     lat_bounds=[25.8, 36.5],
+    ...     region_name="Texas",
+    ...     use_remote=True,
+    ... )
+    """
+    from .plotting import _resolve_plot_paths
+
+    if not lon_bounds or not lat_bounds:
+        raise ValueError(
+            "subset_bbox_plot requires lon_bounds and lat_bounds, each "
+            "[min, max] in degrees."
+        )
+
+    resolved_grid, _ = _resolve_plot_paths(grid_path, None, session_id, dataset_handle)
+    args = (
+        resolved_grid,
+        list(lon_bounds),
+        list(lat_bounds),
+        region_name,
+        width,
+        height,
+        edgecolor,
+        facecolor,
+        linewidth,
+    )
+
+    def _local() -> Dict[str, Any]:
+        from uxarray_mcp.provenance import attach_provenance
+        from uxarray_mcp.remote.compute_functions import remote_subset_bbox_plot
+
+        raw = remote_subset_bbox_plot(*args)
+        raw.pop("_worker_runtime", None)
+        return attach_provenance(
+            raw,
+            tool="subset_bbox_plot",
+            inputs={"args": [str(a) for a in args]},
+            venue="local",
+        )
+
+    result = _run_with_optional_hpc(
+        tool_name="subset_bbox_plot",
+        use_remote=use_remote,
+        endpoint=endpoint,
+        path_hint=resolved_grid,
+        session_id=session_id,
+        local_call=_local,
+        remote_call=lambda agent: _run_sync(
+            lambda: agent.subset_bbox_plot_remote(*args, use_remote=use_remote)
+        ),
+    )
+    return _plot_result_to_mcp_contents(
+        _ensure_plot_artifact(result, plot_type="subset_bbox_wireframe")
+    )
+
+
 def plot_variable(
     grid_path: str | None = None,
     data_path: str | None = None,

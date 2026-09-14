@@ -34,6 +34,7 @@ from .compute_functions import (
     remote_plot_variable,
     remote_plot_zonal_mean,
     remote_probe_path,
+    remote_subset_bbox_plot,
     remote_temporal_mean_map,
 )
 from .config import HPCConfig
@@ -516,6 +517,37 @@ class UXarrayComputeAgent(_AcademyAgent):
             return await self._run_on_hpc(remote_plot_mesh, grid_path, width, height)
         else:
             return remote_plot_mesh(grid_path, width, height)
+
+    @action
+    async def subset_bbox_plot_remote(
+        self,
+        grid_path: str,
+        lon_bounds: list,
+        lat_bounds: list,
+        region_name: str = "",
+        width: int = 800,
+        height: int = 450,
+        edgecolor: str = "steelblue",
+        facecolor: str = "lightcyan",
+        linewidth: float = 0.3,
+        use_remote: bool = False,
+    ) -> Dict[str, Any]:
+        """Subset a mesh by bounding box and render the crop -- all on the worker."""
+        args = (
+            grid_path,
+            lon_bounds,
+            lat_bounds,
+            region_name,
+            width,
+            height,
+            edgecolor,
+            facecolor,
+            linewidth,
+        )
+        if use_remote and self.config.endpoint_id:
+            return await self._run_on_hpc(remote_subset_bbox_plot, *args)
+        else:
+            return remote_subset_bbox_plot(*args)
 
     @action
     async def plot_variable_remote(
