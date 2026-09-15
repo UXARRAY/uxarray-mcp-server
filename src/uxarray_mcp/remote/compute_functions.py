@@ -1591,6 +1591,9 @@ def remote_subset_bbox_plot(
     edgecolor: str = "steelblue",
     facecolor: str = "lightcyan",
     linewidth: float = 0.3,
+    geography: bool = False,
+    cities: bool = False,
+    city_scale: str = "50m",
 ) -> Dict[str, Any]:
     """Subset a mesh by bounding box and return stats + a wireframe PNG.
 
@@ -1617,6 +1620,17 @@ def remote_subset_bbox_plot(
         Matplotlib color for cell fill.
     linewidth : float
         Edge line width in points.
+    geography : bool
+        Draw coastlines, national borders and state lines under the mesh,
+        from Natural Earth via cartopy on the worker. A crop with no
+        coastline on it is hard to place; this is the only way to add one
+        without shipping the mesh itself off the facility filesystem.
+    cities : bool
+        Label populated places inside the crop (also from Natural Earth).
+        Independent of ``geography`` — a bare wireframe can carry city dots.
+    city_scale : str
+        ``"50m"`` (default) for major cities only, ``"10m"`` for dense
+        coverage. Only used when ``cities=True``.
 
     Returns
     -------
@@ -1629,6 +1643,9 @@ def remote_subset_bbox_plot(
         - mean_area_full_sr, mean_area_subset_sr: face-area statistics (sr)
         - resolution_ratio: mean_area_full / mean_area_subset  (>1 = finer)
         - uxarray_version: library version on the HPC worker
+        - geography: whether coastlines/borders/states were drawn, and how
+          many segments of each (or the reason they were skipped)
+        - cities: whether city labels were drawn, and how many
         - png_b64: base64 PNG of the subset wireframe
         - image_size_bytes: PNG size in bytes
     """
@@ -1715,6 +1732,91 @@ def remote_subset_bbox_plot(
         ax.set_xlim(lon_bounds)
         ax.set_ylim(lat_bounds)
 
+    geo_info: Dict[str, Any] = {"drawn": False}
+    if geography:
+        try:
+            import cartopy.feature as cfeature
+            from matplotlib.collections import LineCollection
+
+            _xlim, _ylim = ax.get_xlim(), ax.get_ylim()
+            counts = {}
+            for key, category, feature_name, lw, color in (
+                ("coastlines", "physical", "coastline", 0.8, "#111111"),
+                ("borders", "cultural", "admin_0_boundary_lines_land", 0.6, "#333333"),
+                (
+                    "states",
+                    "cultural",
+                    "admin_1_states_provinces_lines",
+                    0.4,
+                    "#555555",
+                ),
+            ):
+                segments = []
+                for geom in cfeature.NaturalEarthFeature(
+                    category, feature_name, "50m"
+                ).geometries():
+                    parts = getattr(geom, "geoms", None) or [geom]
+                    for part in parts:
+                        coords = getattr(part, "coords", None)
+                        if coords is None:
+                            continue
+                        pts = list(coords)
+                        if len(pts) > 1:
+                            segments.append(pts)
+                if segments:
+                    ax.add_collection(
+                        LineCollection(segments, linewidths=lw, colors=color, zorder=5)
+                    )
+                counts[key] = len(segments)
+            ax.set_xlim(_xlim)
+            ax.set_ylim(_ylim)
+            geo_info = {"drawn": True, **counts}
+        except Exception as exc:
+            geo_info = {"drawn": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+    city_info: Dict[str, Any] = {"drawn": False, "count": 0}
+    if cities:
+        try:
+            import cartopy.io.shapereader as shpreader
+
+            _xlim, _ylim = ax.get_xlim(), ax.get_ylim()
+            shpfile = shpreader.natural_earth(
+                resolution=city_scale, category="cultural", name="populated_places"
+            )
+            reader = shpreader.Reader(shpfile)
+            n_cities = 0
+            for record in reader.records():
+                geom = record.geometry
+                lon, lat = geom.x, geom.y
+                if not (
+                    lon_bounds[0] <= lon <= lon_bounds[1]
+                    and lat_bounds[0] <= lat <= lat_bounds[1]
+                ):
+                    continue
+                name = record.attributes.get("NAME", "")
+                ax.plot(lon, lat, "k.", markersize=3, zorder=6)
+                ax.text(
+                    lon + 0.15,
+                    lat,
+                    name,
+                    fontsize=6,
+                    color="#111",
+                    zorder=7,
+                    bbox=dict(
+                        facecolor="white",
+                        alpha=0.7,
+                        pad=0.5,
+                        edgecolor="none",
+                        boxstyle="round,pad=0.2",
+                    ),
+                )
+                n_cities += 1
+            ax.set_xlim(_xlim)
+            ax.set_ylim(_ylim)
+            city_info = {"drawn": True, "count": n_cities, "scale": city_scale}
+        except Exception as exc:
+            city_info = {"drawn": False, "reason": f"{type(exc).__name__}: {exc}"}
+
     ax.set_title(f"{title}\n{subtitle}", fontsize=10)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
@@ -1759,6 +1861,8 @@ def remote_subset_bbox_plot(
         "mean_area_subset_sr": mean_area_subset,
         "resolution_ratio": resolution_ratio,
         "uxarray_version": ux_version,
+        "geography": geo_info,
+        "cities": city_info,
         "png_b64": base64.b64encode(png_bytes).decode(),
         "image_size_bytes": len(png_bytes),
     }
