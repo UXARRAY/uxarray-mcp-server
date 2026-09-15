@@ -1047,6 +1047,7 @@ def plot_dataset(
     rivers: bool = False,
     lakes: bool = True,
     cities: bool = False,
+    city_scale: str = "50m",
     basemap: bool = False,
     use_remote: bool = False,
     endpoint: str | None = None,
@@ -1069,8 +1070,8 @@ def plot_dataset(
     that honors the box — unlike ``mesh``, which always draws the whole
     grid. With ``use_remote=True`` the crop and the render both happen on
     the worker, so a multi-GB grid never has to leave the facility to show
-    one region of it. ``title`` (used as the region label) and
-    ``line_color`` (used as the edge color) both apply here.
+    one region of it. ``title``/``line_color``/``coastlines``/``cities``/
+    ``city_scale`` apply here too, and run wherever ``use_remote`` does.
 
     ``time_index`` and ``level_index`` are separate selectors, applied only
     to time-like and level-like dimensions respectively. Results carry a
@@ -1079,10 +1080,10 @@ def plot_dataset(
 
     ``mesh_geo`` (local only) draws the cell outlines over Natural Earth
     features and takes ``show_mesh_boundary``, ``coastlines``, ``borders``,
-    ``rivers``, ``lakes``, ``cities`` and ``basemap`` (``basemap`` needs a
-    network connection). ``temporal_mean`` reads ``coastlines`` as well, and
-    draws coastlines, borders and state lines under the field. The remaining
-    plot types ignore all of these.
+    ``rivers``, ``lakes``, ``cities``, ``city_scale`` and ``basemap``
+    (``basemap`` needs a network connection). ``temporal_mean`` reads
+    ``coastlines`` too, drawing coastlines/borders/states under the field.
+    Other plot types ignore these.
     """
     from uxarray_mcp.tools.plotting import plot_mesh_geo
     from uxarray_mcp.tools.remote_tools import (
@@ -1125,6 +1126,9 @@ def plot_dataset(
             width=width,
             height=height,
             edgecolor=line_color,
+            geography=coastlines,
+            cities=cities,
+            city_scale=city_scale,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -1145,6 +1149,7 @@ def plot_dataset(
             show_mesh_boundary=show_mesh_boundary,
             basemap=basemap,
             cities=cities,
+            city_scale=city_scale,
             session_id=session_id,
             dataset_handle=dataset_handle,
         )

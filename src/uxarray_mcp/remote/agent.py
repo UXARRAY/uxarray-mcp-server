@@ -530,6 +530,9 @@ class UXarrayComputeAgent(_AcademyAgent):
         edgecolor: str = "steelblue",
         facecolor: str = "lightcyan",
         linewidth: float = 0.3,
+        geography: bool = False,
+        cities: bool = False,
+        city_scale: str = "50m",
         use_remote: bool = False,
     ) -> Dict[str, Any]:
         """Subset a mesh by bounding box and render the crop -- all on the worker."""
@@ -543,6 +546,9 @@ class UXarrayComputeAgent(_AcademyAgent):
             edgecolor,
             facecolor,
             linewidth,
+            geography,
+            cities,
+            city_scale,
         )
         if use_remote and self.config.endpoint_id:
             return await self._run_on_hpc(remote_subset_bbox_plot, *args)

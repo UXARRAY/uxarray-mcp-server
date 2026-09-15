@@ -699,6 +699,9 @@ def subset_bbox_plot(
     edgecolor: str = "steelblue",
     facecolor: str = "lightcyan",
     linewidth: float = 0.3,
+    geography: bool = False,
+    cities: bool = False,
+    city_scale: str = "50m",
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
@@ -730,6 +733,15 @@ def subset_bbox_plot(
         Matplotlib colors for cell edges and fill.
     linewidth : float
         Edge line width in points.
+    geography : bool
+        Draw coastlines, national borders and state lines under the crop,
+        from Natural Earth via cartopy on the worker. Independent of
+        ``use_remote`` -- runs wherever the subset itself runs.
+    cities : bool
+        Label populated places that fall inside the crop.
+    city_scale : str
+        ``"50m"`` (default, major cities) or ``"10m"`` (dense coverage).
+        Only used when ``cities=True``.
     use_remote : bool
         If True and HPC is configured, subset and render on the endpoint.
     session_id, dataset_handle : str | None
@@ -772,6 +784,9 @@ def subset_bbox_plot(
         edgecolor,
         facecolor,
         linewidth,
+        geography,
+        cities,
+        city_scale,
     )
 
     def _local() -> Dict[str, Any]:
