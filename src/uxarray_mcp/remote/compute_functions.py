@@ -273,12 +273,37 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
         )
         return _cov
 
+    # SCRIP corner-array guard + lazy dedup. See remote_subset_bbox_plot for
+    # the full rationale; this copy must stay in step with the others.
+    MAX_SCRIP_CORNER_GIB = 100.0
+    open_kwargs: Dict[str, Any] = {}
+
+    if os.path.splitext(file_path.lower())[1] == ".nc":
+        import xarray as xr
+
+        with xr.open_dataset(file_path) as _peek:
+            if "grid_corner_lat" in _peek.variables:
+                corner_var = _peek["grid_corner_lat"]
+                est_gib = (2 * corner_var.size * 8) / (1024**3)
+                if est_gib > MAX_SCRIP_CORNER_GIB:
+                    shape = dict(zip(corner_var.dims, corner_var.shape))
+                    raise ValueError(
+                        f"Refusing to open SCRIP grid {file_path!r}: "
+                        f"estimated corner-array footprint is ~{est_gib:.1f} "
+                        f"GiB ({shape}), which exceeds the "
+                        f"{MAX_SCRIP_CORNER_GIB:.0f} GiB safety threshold "
+                        "even with lazy dask-backed loading. Use a coarser "
+                        "resolution file, or subset it to your region of "
+                        "interest before loading it with uxarray."
+                    )
+                open_kwargs["chunks"] = "auto"
+
     if file_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(file_path.split(":")[1]))
     elif os.path.splitext(file_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(file_path, backend="geopandas")
     else:
-        grid = ux.open_grid(file_path)
+        grid = ux.open_grid(file_path, **open_kwargs)
 
     return {
         "n_face": int(grid.n_face),
@@ -493,12 +518,37 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
         )
         return _cov
 
+    # SCRIP corner-array guard + lazy dedup. See remote_subset_bbox_plot for
+    # the full rationale; this copy must stay in step with the others.
+    MAX_SCRIP_CORNER_GIB = 100.0
+    open_kwargs: Dict[str, Any] = {}
+
+    if os.path.splitext(file_path.lower())[1] == ".nc":
+        import xarray as xr
+
+        with xr.open_dataset(file_path) as _peek:
+            if "grid_corner_lat" in _peek.variables:
+                corner_var = _peek["grid_corner_lat"]
+                est_gib = (2 * corner_var.size * 8) / (1024**3)
+                if est_gib > MAX_SCRIP_CORNER_GIB:
+                    shape = dict(zip(corner_var.dims, corner_var.shape))
+                    raise ValueError(
+                        f"Refusing to open SCRIP grid {file_path!r}: "
+                        f"estimated corner-array footprint is ~{est_gib:.1f} "
+                        f"GiB ({shape}), which exceeds the "
+                        f"{MAX_SCRIP_CORNER_GIB:.0f} GiB safety threshold "
+                        "even with lazy dask-backed loading. Use a coarser "
+                        "resolution file, or subset it to your region of "
+                        "interest before loading it with uxarray."
+                    )
+                open_kwargs["chunks"] = "auto"
+
     if file_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(file_path.split(":")[1]))
     elif os.path.splitext(file_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(file_path, backend="geopandas")
     else:
-        grid = ux.open_grid(file_path)
+        grid = ux.open_grid(file_path, **open_kwargs)
 
     areas = grid.face_areas
     # None (not a fabricated "m^2" default) when the grid carries no units
@@ -682,12 +732,37 @@ def remote_plot_mesh(
     import matplotlib.pyplot as plt
     import uxarray as ux
 
+    # SCRIP corner-array guard + lazy dedup. See remote_subset_bbox_plot for
+    # the full rationale; this copy must stay in step with the others.
+    MAX_SCRIP_CORNER_GIB = 100.0
+    open_kwargs: Dict[str, Any] = {}
+
+    if os.path.splitext(grid_path.lower())[1] == ".nc":
+        import xarray as xr
+
+        with xr.open_dataset(grid_path) as _peek:
+            if "grid_corner_lat" in _peek.variables:
+                corner_var = _peek["grid_corner_lat"]
+                est_gib = (2 * corner_var.size * 8) / (1024**3)
+                if est_gib > MAX_SCRIP_CORNER_GIB:
+                    shape = dict(zip(corner_var.dims, corner_var.shape))
+                    raise ValueError(
+                        f"Refusing to open SCRIP grid {grid_path!r}: "
+                        f"estimated corner-array footprint is ~{est_gib:.1f} "
+                        f"GiB ({shape}), which exceeds the "
+                        f"{MAX_SCRIP_CORNER_GIB:.0f} GiB safety threshold "
+                        "even with lazy dask-backed loading. Use a coarser "
+                        "resolution file, or subset it to your region of "
+                        "interest before loading it with uxarray."
+                    )
+                open_kwargs["chunks"] = "auto"
+
     if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
     else:
-        grid = ux.open_grid(grid_path)
+        grid = ux.open_grid(grid_path, **open_kwargs)
 
     import holoviews as hv
 
@@ -1662,12 +1737,50 @@ def remote_subset_bbox_plot(
     import matplotlib.pyplot as plt
     import uxarray as ux
 
+    # SCRIP grids carry two full (grid_size, grid_corners) float64 corner
+    # arrays. uxarray's own SCRIP reader (_to_ugrid) used to materialize
+    # both eagerly and run a Polars np.unique-style dedup over the flattened
+    # (grid_size * grid_corners) row set regardless of any later subsetting
+    # or of a `chunks=` kwarg -- that was the actual OOM cause on a 63 GiB
+    # np4 SCRIP file (~53.6 GiB of corner arrays). Fixed upstream: passing
+    # `chunks=` now dispatches _to_ugrid to a dask-native dedup path that
+    # never fully materializes the corner arrays. This pre-check is kept as
+    # an outer safety net (not the load-bearing guard it used to be) because
+    # the *subsetting* step (grid.bounds / grid.face_areas) still forces an
+    # eager materialize of face_node_connectivity + node coordinate arrays
+    # -- smaller than the old corner-duplicate footprint since node dedup is
+    # lazy now, but not yet proven safe at every scale.
+    MAX_SCRIP_CORNER_GIB = 100.0
+    open_kwargs: Dict[str, Any] = {}
+
+    if os.path.splitext(grid_path.lower())[1] == ".nc":
+        import xarray as xr
+
+        with xr.open_dataset(grid_path) as _peek:
+            if "grid_corner_lat" in _peek.variables:
+                corner_var = _peek["grid_corner_lat"]
+                est_gib = (2 * corner_var.size * 8) / (1024**3)
+                if est_gib > MAX_SCRIP_CORNER_GIB:
+                    shape = dict(zip(corner_var.dims, corner_var.shape))
+                    raise ValueError(
+                        f"Refusing to open SCRIP grid {grid_path!r}: "
+                        f"estimated corner-array footprint is ~{est_gib:.1f} "
+                        f"GiB ({shape}), which exceeds the "
+                        f"{MAX_SCRIP_CORNER_GIB:.0f} GiB safety threshold "
+                        "even with lazy dask-backed loading. Use a coarser "
+                        "resolution file, or subset it to your region of "
+                        "interest before loading it with uxarray."
+                    )
+                # Engage uxarray's dask-native SCRIP dedup path so the
+                # corner arrays are never fully materialized on open.
+                open_kwargs["chunks"] = "auto"
+
     if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
     else:
-        grid = ux.open_grid(grid_path)
+        grid = ux.open_grid(grid_path, **open_kwargs)
     n_face_total = int(grid.n_face)
 
     # full-mesh mean area
@@ -2762,6 +2875,29 @@ def remote_grid_facts(
     import uxarray as ux
     import xarray as xr
 
+    # SCRIP corner-array guard + lazy dedup. See remote_subset_bbox_plot for
+    # the full rationale; this copy must stay in step with the others.
+    MAX_SCRIP_CORNER_GIB = 100.0
+    open_kwargs: Dict[str, Any] = {}
+
+    if os.path.splitext(grid_path.lower())[1] == ".nc":
+        with xr.open_dataset(grid_path) as _peek:
+            if "grid_corner_lat" in _peek.variables:
+                corner_var = _peek["grid_corner_lat"]
+                est_gib = (2 * corner_var.size * 8) / (1024**3)
+                if est_gib > MAX_SCRIP_CORNER_GIB:
+                    shape = dict(zip(corner_var.dims, corner_var.shape))
+                    raise ValueError(
+                        f"Refusing to open SCRIP grid {grid_path!r}: "
+                        f"estimated corner-array footprint is ~{est_gib:.1f} "
+                        f"GiB ({shape}), which exceeds the "
+                        f"{MAX_SCRIP_CORNER_GIB:.0f} GiB safety threshold "
+                        "even with lazy dask-backed loading. Use a coarser "
+                        "resolution file, or subset it to your region of "
+                        "interest before loading it with uxarray."
+                    )
+                open_kwargs["chunks"] = "auto"
+
     if grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
         grid_format = "HEALPix"
@@ -2769,7 +2905,7 @@ def remote_grid_facts(
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
         grid_format = str(getattr(grid, "source_grid_spec", "Unknown"))
     else:
-        grid = ux.open_grid(grid_path)
+        grid = ux.open_grid(grid_path, **open_kwargs)
         grid_format = str(getattr(grid, "source_grid_spec", "Unknown"))
 
     facts: Dict[str, Any] = {
