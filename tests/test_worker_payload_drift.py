@@ -139,6 +139,31 @@ def _assigned_literal(fn: ast.FunctionDef, name: str):
     return None
 
 
+def _scrip_guard_thresholds(fn: ast.FunctionDef) -> list[ast.Constant]:
+    """The ``MAX_SCRIP_CORNER_GIB`` a copy of the SCRIP guard refuses above."""
+    found = []
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "MAX_SCRIP_CORNER_GIB":
+                found.append(node.value)
+    return found
+
+
+def _open_grid_calls(fn: ast.FunctionDef) -> list[ast.Call]:
+    """Every ``ux.open_grid(...)`` call in a remote function."""
+    found = []
+    for node in ast.walk(fn):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "open_grid"
+        ):
+            found.append(node)
+    return found
+
+
 def _worker_runtime_dicts(fn: ast.FunctionDef) -> list[ast.Dict]:
     """Every dict literal stored under a ``_worker_runtime`` key."""
     found = []
@@ -200,6 +225,43 @@ class TestInlinedCopiesAgree:
         """
         blocks = _all_blocks(_healpix_zoom_calls, "the HEALPix zoom argument")
         _assert_one_shape(blocks, "the HEALPix zoom argument", 21)
+
+    def test_the_scrip_guard_refuses_at_the_same_size_everywhere(self):
+        """One refusal threshold across every copy of the SCRIP guard.
+
+        A worker that refused at a different size from its neighbours would
+        answer the same file with a number in one tool and a ValueError in
+        the next, which is worse than either answer alone.
+        """
+        blocks = _all_blocks(_scrip_guard_thresholds, "the SCRIP size threshold")
+        _assert_one_shape(blocks, "the SCRIP size threshold", 5)
+
+    def test_grid_opens_that_carry_the_guard_also_pass_chunks(self):
+        """The guard and ``chunks=`` have to travel together.
+
+        The guard only estimates and refuses; what actually keeps a large
+        SCRIP grid inside memory is ``chunks=``, which sends uxarray's reader
+        down its dask-native corner dedup instead of materializing the whole
+        corner table. A copy that kept the refusal and dropped the kwarg
+        would still OOM on every file under the threshold -- which is all of
+        the ones anyone opens -- while looking guarded.
+        """
+        offenders = []
+        for name, fn in _remote_functions():
+            if not _scrip_guard_thresholds(fn):
+                continue
+            for call in _open_grid_calls(fn):
+                spreads_open_kwargs = any(
+                    isinstance(kw.value, ast.Name) and kw.value.id == "open_kwargs"
+                    for kw in call.keywords
+                    if kw.arg is None
+                )
+                if not spreads_open_kwargs:
+                    offenders.append(f"{name}:{call.lineno}")
+        assert not offenders, (
+            "these ux.open_grid calls sit in a function carrying the SCRIP "
+            f"size guard but do not pass **open_kwargs: {offenders}"
+        )
 
     def test_every_dispatch_offers_the_same_input_kinds(self):
         """A path the worker can open in one tool must open in all of them.
