@@ -15,11 +15,14 @@ Run with the project's own .venv.
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import holoviews as hv
+import paths
 import uxarray as ux
 
 hv.extension("matplotlib")
 
-OUT = "/tmp/era5_raw"
+OUT = str(paths.DATA)
+IMG = str(paths.IMAGES)
+paths.ensure_dirs()
 
 uxds = ux.open_dataset(
     f"{OUT}/ne30pg3_conus.nc",
@@ -44,5 +47,7 @@ ax.add_feature(cfeature.STATES.with_scale("50m"), linewidth=0.3)
 gl = ax.gridlines(draw_labels=True, linewidth=0.2, color="gray", alpha=0.5)
 gl.top_labels = False
 gl.right_labels = False
-fig.savefig(f"{OUT}/plot_remap_on_mesh.png", dpi=110, bbox_inches="tight")
-print(f"wrote {OUT}/plot_remap_on_mesh.png")
+fig.savefig(
+    f"{IMG}/remap_yac_conservative_on_ne30pg3_mesh.png", dpi=110, bbox_inches="tight"
+)
+print(f"wrote {IMG}/remap_yac_conservative_on_ne30pg3_mesh.png")

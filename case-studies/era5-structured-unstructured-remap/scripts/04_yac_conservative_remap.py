@@ -26,12 +26,13 @@ its results into the same remap_fidelity_results.json.
 import json
 
 import numpy as np
+import paths
 import uxarray as ux
 import xarray as xr
 
-SOURCE_NC = "/tmp/era5_raw/era5_conus_mean_precip.nc"
-TARGET_MESH_NC = "/tmp/era5_raw/ne30pg3_conus.nc"
-OUT_DIR = "/tmp/era5_raw"
+SOURCE_NC = str(paths.SOURCE_NC)
+TARGET_MESH_NC = str(paths.TARGET_MESH_NC)
+OUT_DIR = str(paths.DATA)
 RESULTS_JSON = f"{OUT_DIR}/remap_fidelity_results.json"
 
 YAC_METHODS = ["conservative", "nnn", "average"]
@@ -63,7 +64,9 @@ def main():
             "n_points": int(mask.sum()),
             "bias_mm_day": float(diff.mean()),
             "rmse_mm_day": float(np.sqrt((diff**2).mean())),
-            "pattern_correlation": float(np.corrcoef(orig_field[mask], roundtrip[mask])[0, 1]),
+            "pattern_correlation": float(
+                np.corrcoef(orig_field[mask], roundtrip[mask])[0, 1]
+            ),
             "original_mean_mm_day": float(orig_field[mask].mean()),
             "roundtrip_mean_mm_day": float(roundtrip[mask].mean()),
             "backend": "yac",

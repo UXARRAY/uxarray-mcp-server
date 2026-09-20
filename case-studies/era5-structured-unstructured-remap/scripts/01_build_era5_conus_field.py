@@ -7,17 +7,14 @@ for that run. Two runs per day (06Z + 18Z) sum to a 24h total. Units are m.
 """
 
 import numpy as np
+import paths
 import xarray as xr
 
 LAT_SLICE = slice(50, 20)  # descending, matches file's lat order (90 -> -90)
 LON_SLICE = slice(230, 295)  # 0-360 convention; CONUS is -130..-65 E
 
-lsp = xr.open_dataset(
-    "/tmp/era5_raw/e5.oper.fc.sfc.accumu.128_142_lsp.ll025sc.2020010106_2020011606.nc"
-)
-cp = xr.open_dataset(
-    "/tmp/era5_raw/e5.oper.fc.sfc.accumu.128_143_cp.ll025sc.2020010106_2020011606.nc"
-)
+lsp = xr.open_dataset(paths.require(paths.LSP_NC, "python scripts/00_download_era5.py"))
+cp = xr.open_dataset(paths.require(paths.CP_NC, "python scripts/00_download_era5.py"))
 
 lsp12 = lsp["LSP"].isel(forecast_hour=11).sel(latitude=LAT_SLICE, longitude=LON_SLICE)
 cp12 = cp["CP"].isel(forecast_hour=11).sel(latitude=LAT_SLICE, longitude=LON_SLICE)
@@ -28,7 +25,9 @@ print("per-run min/max (m):", float(total_per_run.min()), float(total_per_run.ma
 
 n_runs = total_per_run.sizes["forecast_initial_time"]
 assert n_runs % 2 == 0, "expected paired 06Z/18Z runs"
-daily = total_per_run.values.reshape(n_runs // 2, 2, *total_per_run.shape[1:]).sum(axis=1)
+daily = total_per_run.values.reshape(n_runs // 2, 2, *total_per_run.shape[1:]).sum(
+    axis=1
+)
 n_days = daily.shape[0]
 print(f"reconstructed {n_days} daily totals from {n_runs} forecast runs")
 
@@ -47,8 +46,16 @@ out = xr.Dataset(
         )
     },
     coords={
-        "latitude": ("latitude", lat, {"standard_name": "latitude", "units": "degrees_north"}),
-        "longitude": ("longitude", lon_180, {"standard_name": "longitude", "units": "degrees_east"}),
+        "latitude": (
+            "latitude",
+            lat,
+            {"standard_name": "latitude", "units": "degrees_north"},
+        ),
+        "longitude": (
+            "longitude",
+            lon_180,
+            {"standard_name": "longitude", "units": "degrees_east"},
+        ),
     },
 )
 out["precip_mm_day"].attrs = {
@@ -60,7 +67,15 @@ out["precip_mm_day"].attrs = {
 out.attrs["Conventions"] = "CF-1.8"
 out.attrs["title"] = "ERA5 CONUS mean daily precipitation, Jan 1-15 2020"
 
-out.to_netcdf("/tmp/era5_raw/era5_conus_mean_precip.nc")
-print("wrote /tmp/era5_raw/era5_conus_mean_precip.nc")
+paths.ensure_dirs()
+out.to_netcdf(paths.SOURCE_NC)
+print("wrote", paths.SOURCE_NC)
 print("grid shape:", lat.shape, lon.shape)
-print("mean precip mm/day: min", float(mean_daily_mm.min()), "max", float(mean_daily_mm.max()), "mean", float(mean_daily_mm.mean()))
+print(
+    "mean precip mm/day: min",
+    float(mean_daily_mm.min()),
+    "max",
+    float(mean_daily_mm.max()),
+    "mean",
+    float(mean_daily_mm.mean()),
+)

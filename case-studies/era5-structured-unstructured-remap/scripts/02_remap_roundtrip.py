@@ -26,11 +26,13 @@ independent unstructured-mesh observation of the same field exists.
 import json
 
 import numpy as np
+import paths
 import uxarray as ux
+import xarray as xr
 
-SOURCE_NC = "/tmp/era5_raw/era5_conus_mean_precip.nc"
-TARGET_MESH_NC = "/tmp/era5_raw/ne30pg3_conus.nc"
-OUT_DIR = "/tmp/era5_raw"
+SOURCE_NC = str(paths.SOURCE_NC)
+TARGET_MESH_NC = str(paths.TARGET_MESH_NC)
+OUT_DIR = str(paths.DATA)
 
 METHODS = ["nearest_neighbor", "inverse_distance_weighted", "bilinear"]
 
@@ -72,9 +74,6 @@ def main():
 
     target_grid = ux.open_grid(TARGET_MESH_NC)
 
-    era5_lon_1d = src.uxgrid.to_xarray().attrs  # placeholder, unused
-    import xarray as xr
-
     era5_native = xr.open_dataset(SOURCE_NC)
     orig_lat = era5_native["latitude"].values
     orig_lon = era5_native["longitude"].values
@@ -107,8 +106,14 @@ def main():
                 "source": "ERA5 e5.oper.fc.sfc.accumu (params 142+143), NSF NCAR ERA5 AWS Open Data",
                 "period": "2020-01-01 to 2020-01-15",
                 "variable": "precip_mm_day",
-                "source_grid": {"format": "Structured (0.25 deg regular lat-lon)", "n_face": int(src.uxgrid.n_face)},
-                "target_mesh": {"format": "ESMF (ne30pg3 cubed-sphere, CONUS subset)", "n_face": int(target_grid.n_face)},
+                "source_grid": {
+                    "format": "Structured (0.25 deg regular lat-lon)",
+                    "n_face": int(src.uxgrid.n_face),
+                },
+                "target_mesh": {
+                    "format": "ESMF (ne30pg3 cubed-sphere, CONUS subset)",
+                    "n_face": int(target_grid.n_face),
+                },
                 "methods": results,
             },
             fh,

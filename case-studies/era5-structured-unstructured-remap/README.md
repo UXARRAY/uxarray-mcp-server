@@ -373,26 +373,47 @@ the exact technique.
 
 ## Reproducing this
 
-The two 500 MB raw ERA5 files are not stored in this repo (kept in `/tmp`
-during this analysis); everything from Step 4 onward that fits comfortably
-in git is under `data/`. To rerun from scratch:
+Every intermediate small enough for git is committed under `data/`, so the
+interesting half runs from a fresh clone with no download and no AWS
+account. Run from the `scripts/` directory, using the project `.venv`:
 
 ```bash
-# Step 4 inputs — download from s3://nsf-ncar-era5 (anonymous, us-west-2):
-#   e5.oper.fc.sfc.accumu/202001/e5.oper.fc.sfc.accumu.128_142_lsp.ll025sc.2020010106_2020011606.nc
-#   e5.oper.fc.sfc.accumu/202001/e5.oper.fc.sfc.accumu.128_143_cp.ll025sc.2020010106_2020011606.nc
-python scripts/01_build_era5_conus_field.py   # -> data/era5_conus_mean_precip.nc
-python scripts/02_remap_roundtrip.py          # -> data/forward_*.nc, data/remap_fidelity_results.json  (project .venv)
-python scripts/04_yac_conservative_remap.py   # -> adds yac_* entries to the same files  (project .venv — see Step 7a for the YAC+YAXT from-source build)
-python scripts/03_plots.py                    # -> images/plot_era5_original.png, images/plot_roundtrip_bias.png  (project .venv)
-python scripts/05_plot_remap_on_mesh.py       # -> images/plot_remap_on_mesh.png  (project .venv)
+cd case-studies/era5-structured-unstructured-remap/scripts
+
+python 02_remap_roundtrip.py   # -> data/forward_*.nc, data/remap_fidelity_results.json
+python 03_plots.py             # -> images/era5_original_conus.png, images/roundtrip_bias_all_methods.png
+python 05_plot_remap_on_mesh.py  # -> images/remap_yac_conservative_on_ne30pg3_mesh.png
 ```
 
-(Paths inside the scripts point at `/tmp/era5_raw` as originally run — adjust
-to wherever the raw files land before rerunning. The mesh wireframe image,
-`images/ne30pg3_conus_mesh_wireframe.png`, was produced via the MCP tool
-`plot_dataset(plot_type="mesh_geo", grid_path=..., lon_bounds=[-130,-65],
-lat_bounds=[20,50], show_mesh_boundary=true)`, not a script.)
+Verified on 2026-09-19 from the committed inputs: `02` reproduced all three
+uxarray methods' fidelity numbers **bit-identically** to the committed
+`remap_fidelity_results.json`, and `03`/`05` reproduced
+`era5_original_conus.png` and
+`remap_yac_conservative_on_ne30pg3_mesh.png` **byte-identically** to the
+committed PNGs.
+
+To go further back, or to rebuild the source field yourself:
+
+```bash
+uv pip install s3fs
+python 00_download_era5.py                # -> raw/*.nc, ~1 GB from s3://nsf-ncar-era5
+python 01_build_era5_conus_field.py       # -> data/era5_conus_mean_precip.nc
+python 04_yac_conservative_remap.py       # -> adds the three yac_* entries
+```
+
+`04` needs a from-source YAC+YAXT build in the project `.venv` — see Step 7a.
+Without it, `03` prints which methods it is skipping and draws the
+three-method figure instead of the six-method one, rather than failing.
+
+Paths resolve relative to the case-study directory, so no editing is needed;
+set `ERA5_CASE_STUDY_DIR` to run against a scratch directory instead. (The
+scripts originally hardcoded `/tmp/era5_raw`, which is where the analysis
+really ran and which reproduced nowhere else — `scripts/paths.py` is the fix.)
+
+The mesh wireframe, `images/ne30pg3_conus_mesh_wireframe.png`, came from the
+MCP tool `plot_dataset(plot_type="mesh_geo", grid_path=...,
+lon_bounds=[-130,-65], lat_bounds=[20,50], show_mesh_boundary=true)`, not a
+script.
 
 ## Honest limitations
 
