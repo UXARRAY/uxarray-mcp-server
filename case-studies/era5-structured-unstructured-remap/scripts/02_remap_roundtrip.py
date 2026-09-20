@@ -119,6 +119,8 @@ def main():
             fh,
             indent=2,
         )
+        fh.write("\n")  # trailing newline: the file is committed, and the
+        # repo's end-of-file-fixer hook rejects it without one.
     print("wrote remap_fidelity_results.json")
 
 

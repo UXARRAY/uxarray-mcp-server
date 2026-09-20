@@ -82,6 +82,8 @@ def main():
 
     with open(RESULTS_JSON, "w") as fh:
         json.dump(results, fh, indent=2)
+        fh.write("\n")  # see 02_remap_roundtrip.py: committed file, hook
+        # requires the trailing newline.
     print("updated remap_fidelity_results.json with YAC methods:", YAC_METHODS)
 
 
