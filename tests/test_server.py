@@ -127,11 +127,15 @@ def test_deferred_full_profile_shape():
         + EXPECTED_CONTROL
         + EXPECTED_CORE_EXTRA
         + EXPECTED_PROMPTS
-        + 1  # discover_tools
+        # discover_tools, plus call_deferred — toolregistry 0.18 registers
+        # the two together as INFRASTRUCTURE_TOOLS, because a deferred tool
+        # that discovery can find but nothing can invoke is not reachable.
+        + 2
     )
     assert len(enabled_visible) == expected_visible
     assert len(enabled_deferred) == EXPECTED_DEFERRED
     assert "discover_tools" in registry.list_tools()
+    assert "call_deferred" in registry.list_tools()
 
 
 def test_unknown_profile_raises():
