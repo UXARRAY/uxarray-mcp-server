@@ -312,9 +312,7 @@ def main() -> int:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path(__file__).resolve().parent.parent
-        / "case-studies"
-        / "conus-precipitation-gdex",
+        default=Path(__file__).resolve().parent.parent,
         help="Directory to save generated artifacts",
     )
     args = parser.parse_args()

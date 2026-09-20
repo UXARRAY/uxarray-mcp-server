@@ -288,6 +288,38 @@ class TestUXarrayComputeAgent:
             # carries the key at all, so it must be absent from the kwargs.
             assert "user_endpoint_config" not in executor_cls.call_args.kwargs
 
+    def test_registration_serializer_ships_code_and_costs_no_login(self):
+        """Both halves of the serialization, and no eager authentication.
+
+        ``Executor(serializer=...)`` covers task args and kwargs only.
+        Registration goes through ``Client.fx_serializer``, which defaults to
+        pickling a top-level function *by reference* -- so the worker would
+        import its own installed ``uxarray_mcp`` and never run the code sent
+        to it, making a local fix look deployed when it is not.
+
+        Setting that on the Executor's own client, rather than constructing a
+        second Client, is what keeps this off the network: a bare ``Client()``
+        authenticates, which in CI means blocking on a Globus login prompt
+        (``OSError: pytest: reading from stdin while output is captured``).
+        Patching only ``Executor`` here is deliberate -- if the code ever
+        builds its own Client again, this test goes back to hanging.
+        """
+        from globus_compute_sdk.serialize import AllCodeStrategies
+
+        with patch("globus_compute_sdk.Executor") as executor_cls:
+            agent = UXarrayComputeAgent(
+                HPCConfig(endpoint_id="sep-uuid", execution_mode="hpc")
+            )
+            executor = agent._get_executor()
+
+            task_serializer = executor_cls.call_args.kwargs["serializer"]
+            assert isinstance(task_serializer.code_serializer, AllCodeStrategies)
+
+            registration_serializer = executor.client.fx_serializer
+            assert isinstance(
+                registration_serializer.code_serializer, AllCodeStrategies
+            )
+
     def test_stopped_executor_is_rebuilt(self):
         """A failed submit must not poison every later call in the process.
 
