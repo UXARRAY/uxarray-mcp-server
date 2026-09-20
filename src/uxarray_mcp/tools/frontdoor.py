@@ -1047,24 +1047,31 @@ def plot_dataset(
     rivers: bool = False,
     lakes: bool = True,
     cities: bool = False,
+    city_scale: str = "50m",
     basemap: bool = False,
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
     dataset_handle: str | None = None,
 ) -> list[Any]:
-    """Render mesh, geographic mesh, variable, or zonal-mean plots.
+    """Render mesh, geographic mesh, variable, zonal-mean, or subset-box plots.
 
     ``plot_type`` is one of ``mesh``, ``mesh_geo``, ``variable``,
-    ``zonal_mean``, ``temporal_mean``.
+    ``zonal_mean``, ``temporal_mean``, ``subset_bbox``.
 
     ``temporal_mean`` averages ``variable_name`` over every time step in
     ``data_paths`` and draws the result, optionally cut to
     ``lon_bounds``/``lat_bounds`` first and scaled by ``scale_factor`` into
     ``units_label``. It is the only plot type that reads more than one data
-    file, and the only one whose box is honored, so it is what a decadal
-    regional mean on facility-only paths goes through. Longitudes follow
-    uxarray's -180..180 convention, not 0..360.
+    file. Longitudes follow uxarray's -180..180 convention, not 0..360.
+
+    ``subset_bbox`` crops the mesh to ``lon_bounds``/``lat_bounds`` before
+    drawing a wireframe of the crop, and is the only mesh-only plot type
+    that honors the box — unlike ``mesh``, which always draws the whole
+    grid. With ``use_remote=True`` the crop and the render both happen on
+    the worker, so a multi-GB grid never has to leave the facility to show
+    one region of it. ``title``/``line_color``/``coastlines``/``cities``/
+    ``city_scale`` apply here too, and run wherever ``use_remote`` does.
 
     ``time_index`` and ``level_index`` are separate selectors, applied only
     to time-like and level-like dimensions respectively. Results carry a
@@ -1073,21 +1080,55 @@ def plot_dataset(
 
     ``mesh_geo`` (local only) draws the cell outlines over Natural Earth
     features and takes ``show_mesh_boundary``, ``coastlines``, ``borders``,
-    ``rivers``, ``lakes``, ``cities`` and ``basemap`` (``basemap`` needs a
-    network connection). ``temporal_mean`` reads ``coastlines`` as well, and
-    draws coastlines, borders and state lines under the field. The remaining
-    plot types ignore all of these.
+    ``rivers``, ``lakes``, ``cities``, ``city_scale`` and ``basemap``
+    (``basemap`` needs a network connection). ``temporal_mean`` reads
+    ``coastlines`` too, drawing coastlines/borders/states under the field.
+    Other plot types ignore these.
     """
     from uxarray_mcp.tools.plotting import plot_mesh_geo
-    from uxarray_mcp.tools.remote_tools import plot_mesh, plot_variable, plot_zonal_mean
+    from uxarray_mcp.tools.remote_tools import (
+        plot_mesh,
+        plot_variable,
+        plot_zonal_mean,
+        subset_bbox_plot,
+    )
 
     kind = plot_type.strip().lower().replace("-", "_")
     lat_spec = _resolve_lat_spec(lat_spec, lat_step)
     if kind == "mesh":
+        if lon_bounds is not None or lat_bounds is not None:
+            # A box handed to plot_type="mesh" used to be silently dropped:
+            # the call succeeded and returned a global wireframe that looked
+            # like an answer to a regional question. Refuse instead of
+            # lying, and name the plot type that actually crops.
+            raise ValueError(
+                "plot_type='mesh' draws the whole mesh and cannot honor "
+                "lon_bounds/lat_bounds. Use plot_type='subset_bbox' for a "
+                "cropped wireframe (works with use_remote=True), or "
+                "'mesh_geo' for a regional wireframe with coastlines "
+                "(local only)."
+            )
         return plot_mesh(
             grid_path=grid_path,
             width=width,
             height=height,
+            use_remote=use_remote,
+            endpoint=endpoint,
+            session_id=session_id,
+            dataset_handle=dataset_handle,
+        )
+    if kind == "subset_bbox":
+        return subset_bbox_plot(
+            grid_path=grid_path,
+            lon_bounds=lon_bounds,
+            lat_bounds=lat_bounds,
+            region_name=title or "",
+            width=width,
+            height=height,
+            edgecolor=line_color,
+            geography=coastlines,
+            cities=cities,
+            city_scale=city_scale,
             use_remote=use_remote,
             endpoint=endpoint,
             session_id=session_id,
@@ -1108,6 +1149,7 @@ def plot_dataset(
             show_mesh_boundary=show_mesh_boundary,
             basemap=basemap,
             cities=cities,
+            city_scale=city_scale,
             session_id=session_id,
             dataset_handle=dataset_handle,
         )
@@ -1188,7 +1230,8 @@ def plot_dataset(
             dataset_handle=dataset_handle,
         )
     raise ValueError(
-        "plot_type must be one of: mesh, mesh_geo, variable, zonal_mean, temporal_mean."
+        "plot_type must be one of: mesh, mesh_geo, variable, zonal_mean, "
+        "temporal_mean, subset_bbox."
     )
 
 
