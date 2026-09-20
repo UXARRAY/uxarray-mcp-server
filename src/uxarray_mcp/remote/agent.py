@@ -212,7 +212,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             self._executor = None
 
         if self._executor is None and self.config.endpoint_id:
-            from globus_compute_sdk import Client, Executor
+            from globus_compute_sdk import Executor
             from globus_compute_sdk.serialize import (
                 AllCodeStrategies,
                 ComputeSerializer,
@@ -224,22 +224,8 @@ class UXarrayComputeAgent(_AcademyAgent):
                     message=r"(?s).*Environment differences detected between local SDK and endpoint.*",
                     category=UserWarning,
                 )
-                # Executor(serializer=...) only governs how *task args/kwargs*
-                # are serialized (see its own docstring: "Used to serialize
-                # task args and kwargs"). Function *registration* goes through
-                # Client.fx_serializer instead (Client.register_function passes
-                # serializer=self.fx_serializer explicitly) -- a Client built
-                # with no args defaults to plain DillCode, which pickles an
-                # importable top-level function *by reference*
-                # (module+qualname), not by value. That silently defeats the
-                # whole point of AllCodeStrategies: the worker resolves the
-                # function via its own installed uxarray_mcp instead of the
-                # code shipped from here. An explicit Client with the same
-                # strategy for code_serialization_strategy closes that gap.
-                client = Client(code_serialization_strategy=AllCodeStrategies())
                 executor_kwargs: dict[str, Any] = {
                     "endpoint_id": self.config.endpoint_id,
-                    "client": client,
                     "serializer": ComputeSerializer(strategy_code=AllCodeStrategies()),
                 }
                 # Only send the key when configured. A multi-user endpoint
@@ -249,6 +235,26 @@ class UXarrayComputeAgent(_AcademyAgent):
                 if user_config is not None:
                     executor_kwargs["user_endpoint_config"] = user_config
                 self._executor = Executor(**executor_kwargs)
+
+                # ``serializer=`` above only governs how *task args and
+                # kwargs* are serialized -- that is what the Executor's own
+                # docstring says it is for. Function *registration* goes
+                # through the Client instead: ``register_function`` passes
+                # ``serializer=self.fx_serializer`` explicitly, and a Client
+                # built with no arguments defaults to plain DillCode, which
+                # pickles an importable top-level function *by reference*
+                # (module + qualname) rather than by value. That silently
+                # defeats AllCodeStrategies: the worker resolves the function
+                # through its own installed uxarray_mcp instead of running the
+                # code shipped from here, so a local fix appears to do nothing
+                # remotely. Set the strategy on the Executor's own client
+                # rather than constructing a second one, which would
+                # authenticate eagerly just to pick a serializer.
+                client = getattr(self._executor, "client", None)
+                if client is not None and hasattr(client, "fx_serializer"):
+                    client.fx_serializer = ComputeSerializer(
+                        strategy_code=AllCodeStrategies()
+                    )
         return self._executor
 
     @action
