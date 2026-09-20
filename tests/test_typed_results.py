@@ -240,7 +240,19 @@ class TestListToolsCacheHints:
         if entry is None:  # pragma: no cover - SDK internals moved
             pytest.skip("SDK exposes no tools/list handler to call")
 
-        result = asyncio.run(entry.handler(None, None))
+        # toolregistry-server 0.6 tracks the calling session off the request
+        # context, so the handler dereferences ``ctx.session`` and a bare
+        # None no longer stands in for a request. Pass the least thing that
+        # is still a request context.
+        # The tracker is a WeakSet, so the stand-in session has to be
+        # weak-referenceable -- a bare object() is not.
+        class _Session:
+            pass
+
+        class _Ctx:
+            session = _Session()
+
+        result = asyncio.run(entry.handler(_Ctx(), None))
         assert result.ttl_ms == LIST_TOOLS_TTL_MS
         assert result.cache_scope == LIST_TOOLS_CACHE_SCOPE
         assert {"ttl_ms", "cache_scope"} <= result.model_fields_set

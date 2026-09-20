@@ -700,8 +700,11 @@ def _apply_tags(
         predefined, custom = _TAG_OVERRIDES[raw_name]
     else:
         predefined, custom = _default_tags_for(raw_name, func)
-    tool.metadata.tags |= predefined
-    tool.metadata.custom_tags |= custom
+    # ``|=`` on a dataclass attribute is an assignment, and ToolMetadata is
+    # frozen as of toolregistry 0.17, so it raises FrozenInstanceError. The
+    # sets themselves are still mutable, so update them in place.
+    tool.metadata.tags.update(predefined)
+    tool.metadata.custom_tags.update(custom)
     _apply_output_schema(tool, raw_name)
 
 

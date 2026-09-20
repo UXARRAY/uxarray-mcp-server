@@ -1248,8 +1248,12 @@ def regrid_dataset(
 
 def remap_to_rectilinear(
     variable_name: str,
-    target_lon: Sequence[float],
-    target_lat: Sequence[float],
+    # list[float], not Sequence[float]: toolregistry 0.18 cannot render
+    # Sequence in JSON Schema and silently falls back to an unconstrained
+    # `{}`, which accepts a string where a list of numbers is meant. The
+    # front door already declares these as list[float].
+    target_lon: list[float],
+    target_lat: list[float],
     grid_path: str | None = None,
     data_path: str | None = None,
     backend: str = "uxarray",

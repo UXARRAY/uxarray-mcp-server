@@ -39,12 +39,15 @@ license = { file = "LICENSE" }
 # declare >=3.10, so 3.11 is a conservative floor.
 requires-python = ">=3.11"
 dependencies = [
-    "toolregistry-server[mcp]>=0.5.0",
+    # 0.6.0 is the floor: its v2 tools/list handler reads the calling session
+    # off the request context, and it pairs with toolregistry 0.17+ below.
+    "toolregistry-server[mcp]>=0.6.0",
     # Imported directly (ToolRegistry, ToolTag), so it is declared directly
-    # rather than leaned on transitively. 0.16.0 is the release that teaches
-    # is_content_block_list about audio/resource_link/resource; on 0.15.0 those
-    # blocks are silently stringified into one TextContent instead of failing.
-    "toolregistry>=0.16.0",
+    # rather than leaned on transitively. 0.16.0 taught is_content_block_list
+    # about audio/resource_link/resource; 0.17 froze ToolMetadata, so the
+    # policy-tag merge has to mutate the tag sets in place rather than
+    # rebind them, and 0.18 registers call_deferred beside discover_tools.
+    "toolregistry>=0.18.0",
     # Both SDK generations are in range and register handlers differently:
     # 1.27.2 has the per-method decorators and no `add_request_handler`, 2.1.1
     # has `add_request_handler` and no decorators. `resources.py` registers
@@ -65,7 +68,7 @@ dependencies = [
 
 [project.optional-dependencies]
 openapi = [
-    "toolregistry-server[openapi]>=0.5.0",
+    "toolregistry-server[openapi]>=0.6.0",
 ]
 hpc = [
     "academy-py>=0.3.1",

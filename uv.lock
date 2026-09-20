@@ -1642,11 +1642,11 @@ wheels = [
 
 [[package]]
 name = "llm-rosetta"
-version = "0.7.3"
+version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/de/58/7e404e416994213edafda58c1d348139650073c20565faaeb09f985a2d90/llm_rosetta-0.7.3.tar.gz", hash = "sha256:40a2c34f0ff73320ec882a4a7c2b35bef77e5a0ceaa2e3f7bb30742f7f08cc0f", size = 415494, upload-time = "2026-07-24T18:52:02.638Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/07/c3/117c70a9de059c647aba42bbc03c403c6846c5f522735c51b7a253a14af3/llm_rosetta-0.13.0.tar.gz", hash = "sha256:9619159c489fd637b6a2119045a19913d4954fbc4a061d7c07918ad0360affdd", size = 587851, upload-time = "2026-09-08T10:51:50.014Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/95/31/a2200128ab71dcf26d5f900fdf7b8179a8b525d4ac25bc4be6c7c107b48c/llm_rosetta-0.7.3-py3-none-any.whl", hash = "sha256:533e54f130d9cf5e04ba7606a5eeef30c7dc7be96732f7cb4bf50a9fafc5c7bd", size = 462214, upload-time = "2026-07-24T18:52:01.132Z" },
+    { url = "https://files.pythonhosted.org/packages/80/c4/a91023d1f59200396548fbcd3f8705de8932e13c4d4e8f55dbc784a86bc4/llm_rosetta-0.13.0-py3-none-any.whl", hash = "sha256:37eb8836ea101099762082bba1efaff7033d7328ff6c87bcd1ca49a81db4a519", size = 647954, upload-time = "2026-09-08T10:51:48.378Z" },
 ]
 
 [[package]]
@@ -1859,7 +1859,7 @@ wheels = [
 
 [[package]]
 name = "mcp"
-version = "2.1.1"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1877,22 +1877,22 @@ dependencies = [
     { name = "typing-inspection" },
     { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/6e/21fb8e5d579dbe21d96ea4d5034200d46d8bdf2261053b5bd041f3c2f612/mcp-2.1.1.tar.gz", hash = "sha256:50b7ba1ebbe117008ea7bdd288234043e69c20b403d6851d19661e6d431a75ef", size = 3984589, upload-time = "2026-08-25T16:14:02.376Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/31/ac54fb0fdd5b37de704486e288bba4fbbb463f24cfcfedbede407b854513/mcp-2.2.0.tar.gz", hash = "sha256:2dc37ecb1974becdcebdbf7561e7c15a07dbbf20ba21ba16c3593b3038b3afbd", size = 4084129, upload-time = "2026-09-07T16:06:23.439Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/af/8644cc5fa26a59afd2df2e98eeb19e72926887fa4b7441aba4ff661140db/mcp-2.1.1-py3-none-any.whl", hash = "sha256:1c6c31c5d6471c58db76af3af8af67f46d11d01f0a59077d0a308cbdb3d3e915", size = 357912, upload-time = "2026-08-25T16:13:59.024Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/ff/8e7eade68b8a28f7da0ed1085544341b51f9c935dbf6b95c76b7edfea6a0/mcp-2.2.0-py3-none-any.whl", hash = "sha256:bde982589473a060ae145e3406e9a5333fe538c97229ba841f5a7f92be004f81", size = 365656, upload-time = "2026-09-07T16:06:19.711Z" },
 ]
 
 [[package]]
 name = "mcp-types"
-version = "2.1.1"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6a/dd/1c4417dc0b722c23a1669032d5f044e41170fe5d4773b488a50fcce98c32/mcp_types-2.1.1.tar.gz", hash = "sha256:77dcbe48fba73cca71a673f2646a5f037a017b7a0a07ac89cec1113028890eda", size = 66674, upload-time = "2026-08-25T16:14:03.861Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/91/762d7755d971aff8a28d75f7961656148edf27875c8026e6385aaab08ae7/mcp_types-2.2.0.tar.gz", hash = "sha256:d3ed53703ddd10d9c6399f29d322bb66f3f67ab41348ac8556ba23e07fedefad", size = 65892, upload-time = "2026-09-07T16:06:25.187Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/d0/242e63c510f4a17381f55b1549a3f94f5687a0595984febd2b6f87a687a0/mcp_types-2.1.1-py3-none-any.whl", hash = "sha256:26f9f7f03f2a5730717a5b98e2ab7eb640ac352d05a00cdc725c311864778295", size = 69656, upload-time = "2026-08-25T16:14:00.667Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/d7/6ffba5d8cd5dd9b8a19478875c50e04945314ba5074e84d749283f27f62d/mcp_types-2.2.0-py3-none-any.whl", hash = "sha256:ea476b73ee86709ab5abc9452385ed36cc05907e582355622e294595c9a04f13", size = 69106, upload-time = "2026-09-07T16:06:21.461Z" },
 ]
 
 [[package]]
@@ -3891,28 +3891,27 @@ wheels = [
 
 [[package]]
 name = "toolregistry"
-version = "0.16.0"
+version = "0.18.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
     { name = "llm-rosetta" },
-    { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/44/67/608a9e6282da35b469d9e9d5663889231c7a688d1641080686fe2c2ec992/toolregistry-0.16.0.tar.gz", hash = "sha256:adb3ab118aafd9db36267f6ba964b53c08470c15fd94bbeb4ae56d9b79c7478e", size = 317264, upload-time = "2026-08-25T19:32:45.18Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/dd/5553167822f3308250b9f2a7827aa22d0c13d66846f74a2ea6691414676f/toolregistry-0.18.1.tar.gz", hash = "sha256:fe639bb043fd94e4d34c02e8cfd06e0751de4bb0a95b0c1307013d625778cf65", size = 359979, upload-time = "2026-09-16T09:09:21.667Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/40/c2/dea5b709cec87c9e2d9949099251410b06ea7938cabc40bd3159ab38f44b/toolregistry-0.16.0-py3-none-any.whl", hash = "sha256:f2a88c40b620e2c9f31b5faa7a56899d88ee12fedba774381c4083ec39b18ac1", size = 252530, upload-time = "2026-08-25T19:32:43.713Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/5f/75370c48e8fe37df1c57f7a99fb46fc1ada2ce568f6beee85d2017a74453/toolregistry-0.18.1-py3-none-any.whl", hash = "sha256:6dc988bb1de14c86a8b782143c195d9c9212cf58143e5e62b9f27427121d21b9", size = 277805, upload-time = "2026-09-16T09:09:20.004Z" },
 ]
 
 [[package]]
 name = "toolregistry-server"
-version = "0.5.0"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "toolregistry" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/39/837d2186c580f28b4b57ee89edd38dfe771ac8fb932b9c04eb4199f67805/toolregistry_server-0.5.0.tar.gz", hash = "sha256:c534de48dbee6472b42fad9396dfcde0a7a5333b1b77161087ebc5781b000ffb", size = 79969, upload-time = "2026-08-25T20:46:50.568Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7c/9d/12badb761e32e8963240443513fa987ff08711a7cbfa2bbd30f97c803dad/toolregistry_server-0.6.0.tar.gz", hash = "sha256:1c423ed1f2e28785cdd3f2751c0bb4bfbf233c716d25d5012635b50750110841", size = 90593, upload-time = "2026-09-15T08:56:01.028Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6b/e6/91de86891a07d85a61388625f660e40da5c1ad3a0dd2e3ba337597106d3c/toolregistry_server-0.5.0-py3-none-any.whl", hash = "sha256:59c1ba1fdd543f79be827cf7c04c3238dd22c4889445a5ba7c76cb2c14878018", size = 64439, upload-time = "2026-08-25T20:46:49.426Z" },
+    { url = "https://files.pythonhosted.org/packages/29/10/41192f02c779f5c4eb93058fc1cf7f452609a340ac1712f41fd630a72b3b/toolregistry_server-0.6.0-py3-none-any.whl", hash = "sha256:24a2f1b43d2df250728a13e4df1d97a30ae6568de345cb7cb71472f588792b69", size = 69382, upload-time = "2026-09-15T08:55:59.613Z" },
 ]
 
 [package.optional-dependencies]
