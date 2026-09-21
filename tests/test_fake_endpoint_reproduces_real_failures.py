@@ -17,9 +17,6 @@ The four, in the order they were hit:
 
 from __future__ import annotations
 
-import sys
-import textwrap
-
 import pytest
 
 from tests.fake_endpoint import (
