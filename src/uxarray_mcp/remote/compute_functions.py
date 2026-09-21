@@ -87,6 +87,13 @@ def remote_runtime_probe() -> Dict[str, Any]:
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
             "pbs_job_id": os.environ.get("PBS_JOBID"),
         },
@@ -171,6 +178,13 @@ def remote_probe_path(file_path: str, inspect_netcdf: bool = True) -> Dict[str, 
         "mcp_server_version": __import__(
             "importlib.metadata", fromlist=["version"]
         ).version("uxarray-mcp"),
+        "peak_rss_gib": round(
+            __import__("resource")
+            .getrusage(__import__("resource").RUSAGE_SELF)
+            .ru_maxrss
+            / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+            2,
+        ),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "pbs_job_id": os.environ.get("PBS_JOBID"),
     }
@@ -382,6 +396,13 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
                 "mcp_server_version": __import__(
                     "importlib.metadata", fromlist=["version"]
                 ).version("uxarray-mcp"),
+                "peak_rss_gib": round(
+                    __import__("resource")
+                    .getrusage(__import__("resource").RUSAGE_SELF)
+                    .ru_maxrss
+                    / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                    2,
+                ),
                 "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
                 "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
             },
@@ -465,6 +486,13 @@ def remote_validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -668,6 +696,13 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -788,6 +823,13 @@ def remote_inspect_variable(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -897,6 +939,13 @@ def remote_plot_mesh(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -1088,6 +1137,13 @@ def remote_plot_variable(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -1463,6 +1519,13 @@ def remote_temporal_mean_map(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -1616,6 +1679,13 @@ def remote_plot_zonal_mean(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -1761,6 +1831,13 @@ def remote_calculate_zonal_mean(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2078,6 +2155,13 @@ def remote_subset_bbox_plot(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2275,6 +2359,13 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
             "pbs_job_id": os.environ.get("PBS_JOBID"),
         },
@@ -2457,6 +2548,13 @@ def remote_calculate_gradient(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2655,6 +2753,13 @@ def remote_calculate_curl(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2848,6 +2953,13 @@ def remote_calculate_divergence(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2975,6 +3087,13 @@ def remote_calculate_azimuthal_mean(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -3050,6 +3169,13 @@ def remote_grid_facts(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -3285,6 +3411,13 @@ def remote_remap_variable(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -3485,6 +3618,13 @@ def remote_regrid_dataset(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -3655,6 +3795,13 @@ def remote_remap_to_rectilinear(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -3744,6 +3891,13 @@ def remote_calculate_zonal_anomaly(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "peak_rss_gib": round(
+                __import__("resource")
+                .getrusage(__import__("resource").RUSAGE_SELF)
+                .ru_maxrss
+                / (1024**2 if __import__("sys").platform != "darwin" else 1024**3),
+                2,
+            ),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
