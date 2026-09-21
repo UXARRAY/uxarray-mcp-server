@@ -63,6 +63,23 @@ GLOBAL_COVERAGE_TOLERANCE = 1e-3
 #: seconds to report a boolean is not worth the boolean.
 TOPOLOGY_MAX_FACES = 250_000
 
+#: Face count above which even ``face_areas`` is skipped.
+#:
+#: Two orders of magnitude above TOPOLOGY_MAX_FACES on purpose: summing face
+#: areas is vectorized and stays under 0.05 s through HEALPix zoom 8, so the
+#: geometric half is worth keeping long after the topological half has
+#: abstained. It stops being worth it somewhere else entirely -- on the 300M
+#: face np4 CONUS-RRM grid, an area per face computed from 3.6 billion corners
+#: lands on top of the ~118 GiB the coordinates already cost and the process is
+#: killed. Remotely that arrives as WorkerLost, naming neither memory nor this
+#: line, which is how it was first mistaken for an undeployed fix.
+#:
+#: 50M is chosen to sit above every mesh anyone has actually summarised here
+#: (the largest was 133M faces... which is above it, deliberately: that one
+#: needs a subset, not a 40-minute summary) and far below the size that kills
+#: a 235 GiB node.
+AREA_MAX_FACES = 50_000_000
+
 #: Decimal places used when matching node coordinates. Six is ~0.1 m on
 #: Earth's surface, far below any mesh spacing we deal with, and coarse
 #: enough to absorb the round-trip through NetCDF float64 text.
@@ -178,7 +195,28 @@ def compute_mesh_coverage(
         "lat_extent": None,
     }
 
-    if steradians is None:
+    # getattr, not grid.n_face: this function's contract is that a grid it
+    # cannot read yields nulls rather than an exception, and the mocked grids
+    # in the unit tests have no n_face at all. An unknown size is treated as
+    # small, which keeps the existing behaviour for anything not obviously huge.
+    _face_count = getattr(grid, "n_face", 0)
+    try:
+        _face_count = int(_face_count)
+    except Exception:
+        _face_count = 0
+    if steradians is None and _face_count > AREA_MAX_FACES:
+        # face_areas computes an area per face from every corner. On a
+        # 300M-face np4 SCRIP grid that is 3.6 billion corners of work on top
+        # of the ~118 GiB the coordinates already cost, and the process is
+        # killed -- remotely that surfaces as WorkerLost, which names neither
+        # memory nor this line. Skipped and reported, exactly as the closure
+        # check below already does, rather than dying for a summary field.
+        coverage["sphere_fraction_skipped"] = (
+            f"{_face_count} faces exceeds the {AREA_MAX_FACES}-face "
+            "limit for summing face areas; sphere_fraction not computed. "
+            "Subset the mesh first if you need it."
+        )
+    elif steradians is None:
         try:
             steradians = float(np.asarray(grid.face_areas).sum())
         except Exception:  # pragma: no cover - mocked grids in unit tests
