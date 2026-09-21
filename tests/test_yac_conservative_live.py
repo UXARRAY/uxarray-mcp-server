@@ -156,12 +156,26 @@ def test_conservative_remap_runs_and_conserves_the_mean(healpix_pair, state_dir)
 
 
 def test_conservative_beats_nearest_neighbour_on_conservation(healpix_pair, state_dir):
-    """The claim that justifies building YAC at all, as a test.
+    """Conservative must beat point-sampling, which is a narrower claim than
+    "conservative is the most accurate method".
 
-    The ERA5 case study measured conservative as roughly halving the drift in
-    the field's mean against nearest neighbour. If that ordering ever inverts,
-    either the backend regressed or the case study's recommendation is wrong,
-    and both are worth a red build.
+    Measured on Chrysalis across all seven methods, HEALPix z4 -> z2:
+
+        smooth field (cos lat)   dnn .062  avg .070  IDW .075
+                                 bilinear .083  CONSERVATIVE .095  nn .204
+        front (step at 20N)      CONSERVATIVE .416  dnn .452  IDW 1.49
+                                 avg 2.40  bilinear 2.48  nn 7.14
+
+    On a smooth field conservative sits mid-pack: mean drift is not what it
+    optimises, and any smoother does well when there is nothing sharp to
+    smear. On a discontinuity it wins by 3.6x over the next non-YAC method
+    and 17x over nearest neighbour -- which is the case the method exists
+    for, and the case real fields (fronts, orography, land-sea contrast)
+    actually contain.
+
+    So this pins the ordering that holds everywhere -- conservative beats
+    nearest neighbour -- rather than a ranking that only holds on the field
+    that happens to be in the fixture.
     """
     from uxarray_mcp.tools.frontdoor import run_analysis
 
