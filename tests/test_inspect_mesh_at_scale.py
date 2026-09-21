@@ -132,3 +132,57 @@ class TestSmallMeshesAreUnaffected:
         assert coverage["euler_characteristic"] == 2
         assert "sphere_fraction_skipped" not in coverage
         assert coverage.get("topology_skipped") is None
+
+
+class TestSubsetCostsTheCropNotTheMesh:
+    """A regional crop must not price itself against the whole globe.
+
+    ``subset_bbox`` computed the mean face area of the *entire* mesh before
+    subsetting, purely to express the crop's resolution as a ratio. On the
+    300M-face np4 grid that killed the worker at ~400 s -- the caller asked
+    for Texas and paid for the planet, then got nothing.
+
+    The subset now happens first, and the whole-mesh statistic is skipped and
+    reported above the same 50M-face cap the area sum uses elsewhere.
+
+    The huge-mesh case is not asserted here: the proxy that fakes an enormous
+    ``n_face`` cannot also satisfy uxarray's subsetting internals, which
+    divide by the real face count. Faking that convincingly would mean
+    reimplementing the grid, and a test whose fixture is a reimplementation
+    tests the fixture. What *is* pinned below is the order of operations,
+    which is the thing that was wrong.
+    """
+
+    def test_the_full_mesh_area_is_computed_after_the_subset(self):
+        """Order of operations, read off the source.
+
+        Cheap and exact: if the whole-mesh ``face_areas`` scan ever moves back
+        above ``subset.bounding_box``, a crop of a mesh too large to measure
+        dies again before it starts.
+        """
+        import inspect
+
+        src = inspect.getsource(cf.remote_subset_bbox_plot)
+        subset_at = src.index("grid.subset.bounding_box")
+        full_area_at = src.index("full_areas = grid.face_areas")
+        assert subset_at < full_area_at, (
+            "the whole-mesh face_areas scan runs before the subset; on a "
+            "300M-face mesh that kills the worker before the crop is attempted"
+        )
+
+    def test_the_whole_mesh_scan_is_capped(self):
+        """And the cap is the same one used elsewhere, not a new number."""
+        import inspect
+
+        src = inspect.getsource(cf.remote_subset_bbox_plot)
+        assert "_MAX_AREA_FACES = 50_000_000" in src
+        assert "mean_area_full_skipped" in src
+
+    def test_a_small_mesh_still_reports_the_ratio(self):
+        """The statistic is worth keeping where it is affordable."""
+        result = cf.remote_subset_bbox_plot(
+            "healpix:3", [-30, 30], [-20, 20], width=200, height=150
+        )
+        assert result["mean_area_full_sr"] is not None
+        assert result["mean_area_full_skipped"] is None
+        assert result["resolution_ratio"] is not None

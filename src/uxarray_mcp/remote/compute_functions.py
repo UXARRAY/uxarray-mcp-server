@@ -1971,16 +1971,34 @@ def remote_subset_bbox_plot(
         grid = ux.open_grid(grid_path, **open_kwargs)
     n_face_total = int(grid.n_face)
 
-    # full-mesh mean area
-    full_areas = grid.face_areas
-    mean_area_full = float(full_areas.values.mean())
-
-    # subset by bounding box
+    # Subset first. The crop is the thing that was asked for; everything else
+    # here is commentary on it, and commentary must not cost more than the
+    # answer. Reordered because the full-mesh mean area below used to run
+    # first and killed the worker on a 300M-face mesh before the subset was
+    # ever attempted -- the caller asked for Texas and paid for the planet.
     subset = grid.subset.bounding_box(
         lon_bounds=lon_bounds,
         lat_bounds=lat_bounds,
     )
     n_face_subset = int(subset.n_face)
+
+    # The full-mesh mean area exists only to express the crop's resolution as
+    # a ratio against the rest of the mesh. That is worth having and not worth
+    # dying for: above the cap it is reported as skipped, and the crop, the
+    # figure and the subset's own areas are all still returned.
+    _MAX_AREA_FACES = 50_000_000
+    mean_area_full = None
+    mean_area_full_skipped = None
+    if n_face_total > _MAX_AREA_FACES:
+        mean_area_full_skipped = (
+            f"{n_face_total} faces exceeds the {_MAX_AREA_FACES}-face limit "
+            "for summing face areas over the whole mesh; mean_area_full_sr "
+            "and resolution_ratio were not computed. The subset itself is "
+            "unaffected."
+        )
+    else:
+        full_areas = grid.face_areas
+        mean_area_full = float(full_areas.values.mean())
 
     subset_areas = subset.face_areas
     mean_area_subset = (
@@ -1989,7 +2007,9 @@ def remote_subset_bbox_plot(
 
     resolution_ratio = (
         mean_area_full / mean_area_subset
-        if mean_area_subset and not math.isnan(mean_area_subset)
+        if mean_area_full is not None
+        and mean_area_subset
+        and not math.isnan(mean_area_subset)
         else None
     )
 
@@ -2169,6 +2189,7 @@ def remote_subset_bbox_plot(
         "n_face_subset": n_face_subset,
         "fraction_of_mesh": n_face_subset / n_face_total if n_face_total else None,
         "mean_area_full_sr": mean_area_full,
+        "mean_area_full_skipped": mean_area_full_skipped,
         "mean_area_subset_sr": mean_area_subset,
         "resolution_ratio": resolution_ratio,
         "uxarray_version": ux_version,
