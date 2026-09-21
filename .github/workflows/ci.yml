@@ -229,8 +229,9 @@ jobs:
     - name: Preflight the build script
       # --check exits non-zero with the missing prerequisite named, so a
       # tooling gap is reported as itself rather than as a compile error 300
-      # lines into make.
-      run: ./scripts/build_yac_local.sh --check
+      # lines into make. --python must match the interpreter the build step
+      # targets: the prerequisites went into .venv, not the system python.
+      run: ./scripts/build_yac_local.sh --check --python "$(pwd)/.venv/bin/python"
 
     - name: Build YAC and link it into the venv
       # --link-into-venv writes the .pth, which is the part that has to keep
