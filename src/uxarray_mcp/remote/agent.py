@@ -68,6 +68,29 @@ def _normalize_remote_error(exc: Exception, config: Any) -> Exception:
     if isinstance(exc, TimeoutError) or "TimeoutError" in type(exc).__name__:
         return exc
 
+    # A killed worker. Globus appends a generic "one common cause is a Python
+    # version mismatch" footer, so the *last* line is boilerplate and taking it
+    # threw away the only informative part -- the caller saw "Remote execution
+    # failed on chrysalis: *****" and had to bypass this server entirely to
+    # learn anything. In practice on a shared node this is the OOM killer:
+    # calculate_area on a 300M-face mesh needs ~120 GiB of grid resident while
+    # it works, and the node's memory is divided between worker slots.
+    if "WorkerLost" in text or "Task failure due to loss of worker" in text:
+        host = re.search(r"on host (\S+)", text)
+        worker = re.search(r"loss of worker (\d+)", text)
+        where = (
+            f" (worker {worker.group(1)} on {host.group(1)})" if host and worker else ""
+        )
+        return RuntimeError(
+            f"The worker on {endpoint} died while running this task{where}. "
+            "The usual cause is memory: the worker was killed, not the task. "
+            "Check the mesh size against the node, remembering that the node's "
+            "memory is shared between worker slots, and prefer an operation "
+            "that does not materialize per-face values (inspect_mesh skips "
+            "face areas above 50M faces; calculate_area cannot). Subsetting "
+            "first is the reliable fix."
+        )
+
     # Unknown failure: keep the cause line, drop the frames.
     if len(text) > 600:
         return RuntimeError(f"Remote execution failed on {endpoint}: {final}")
