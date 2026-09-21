@@ -753,7 +753,11 @@ class UXarrayComputeAgent(_AcademyAgent):
 
         # Attach provenance with the correct HPC venue — the remote functions
         # are self contained and don't call attach_provenance themselves.
-        from uxarray_mcp.provenance import _get_uxarray_version, attach_provenance
+        from uxarray_mcp.provenance import (
+            _get_server_version,
+            _get_uxarray_version,
+            attach_provenance,
+        )
 
         endpoint_label = self.config.endpoint_name or "configured"
 
@@ -780,6 +784,29 @@ class UXarrayComputeAgent(_AcademyAgent):
                 f"UXarray version drift: local={local_uxarray}, "
                 f"remote(worker)={worker_uxarray}. Numerical results may differ "
                 "between local and remote runs; compare with care."
+            )
+
+        # The same question about *this server*, which the UXarray check above
+        # does not answer. A worker can carry a current uxarray and a months-old
+        # uxarray_mcp, and then a fix that is merged, released and green on the
+        # submitter is simply absent from the cluster -- the operation keeps
+        # failing and nothing says why. Observed: the worker ran uxarray_mcp
+        # 0.1.0 against 2026.9.0 locally, so a merged large-SCRIP fix never took
+        # effect and the failure looked like the bug was never fixed.
+        worker_server = worker_runtime.get("mcp_server_version")
+        local_server = _get_server_version()
+        if (
+            worker_server
+            and worker_server != "unknown"
+            and local_server != "unknown"
+            and worker_server != local_server
+        ):
+            drift_warnings.append(
+                f"uxarray-mcp version drift: local={local_server}, "
+                f"remote(worker)={worker_server}. The worker is running "
+                "different server code than the one that submitted this task, "
+                "so fixes present here may be absent there. Redeploy "
+                "uxarray-mcp on the endpoint and restart it."
             )
 
         # Fold any warnings the remote function itself produced (e.g. vector
@@ -814,6 +841,7 @@ class UXarrayComputeAgent(_AcademyAgent):
             "python_version",
             "xarray_version",
             "numpy_version",
+            "mcp_server_version",
             "slurm_job_id",
             "pbs_job_id",
         ):

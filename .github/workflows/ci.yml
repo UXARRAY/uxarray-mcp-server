@@ -62,7 +62,7 @@ jobs:
       # old --ignore=tests/test_remote_agent.py was too blunt: that file
       # imports fine without academy-py and most of it was runnable here.
       run: |
-        uv run pytest tests/ -v -m "not hpc and not live"
+        uv run pytest tests/ -v -m "not hpc and not live and not yac"
 
   cli-smoke:
     # Smoke-tests the installed `uxarray-mcp` CLI against the user-home config
@@ -176,7 +176,75 @@ jobs:
       # lives. Naming the two files meant a new hpc-marked test in a third
       # file would never run.
       run: |
-        uv run pytest tests/ -v -m "hpc"
+        uv run pytest tests/ -v -m "hpc and not yac"
+
+  test-yac:
+    # The conservative remap is the most accurate method this server offers
+    # (the ERA5 case study measured ~4x less drift in the field mean than
+    # nearest neighbour) and the only one that needs a from-source build. Every
+    # other YAC test in the suite passes with YAC absent -- they check routing
+    # and refusal messages -- so without this lane the backend could break and
+    # nothing would go red.
+    #
+    # This runs scripts/build_yac_local.sh rather than open-coding the build,
+    # so CI exercises the same path a contributor is told to use. A drift
+    # between the documented build and the tested one is exactly the failure
+    # this is meant to prevent.
+    runs-on: ubuntu-latest
+    # Non-blocking for now: a from-source MPI build against an upstream GitLab
+    # is a real external dependency, and a DKRZ outage should not wedge every
+    # unrelated PR. Revisit once it has a track record.
+    continue-on-error: true
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install build prerequisites
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential gfortran autoconf automake libtool pkg-config \
+          libopenmpi-dev openmpi-bin
+
+    - name: Install project dependencies
+      run: uv sync --dev
+
+    - name: Install the binding build dependencies
+      # YAC's Python bindings are Cython-generated, and its configure probes
+      # mpi4py to confirm the interpreter and the MPI agree; setuptools is absent
+      # from a uv-made venv and configure needs it too; pip because YAC's own
+      # make install shells out to `python -m pip`. None belong in the
+      # project dependencies -- they are only needed to *build* YAC.
+      run: uv pip install "cython>=3.0.0" mpi4py setuptools pip
+
+    - name: Preflight the build script
+      # --check exits non-zero with the missing prerequisite named, so a
+      # tooling gap is reported as itself rather than as a compile error 300
+      # lines into make.
+      run: ./scripts/build_yac_local.sh --check
+
+    - name: Build YAC and link it into the venv
+      # --link-into-venv writes the .pth, which is the part that has to keep
+      # working: YAC was hand-installed into .venv once and `uv sync` deleted
+      # it, which is why the flag exists.
+      run: |
+        ./scripts/build_yac_local.sh \
+          --python "$(pwd)/.venv/bin/python" \
+          --link-into-venv \
+          --jobs 2
+
+    - name: Run the YAC tests
+      # -m yac, so this lane runs exactly what every other lane deselects.
+      run: uv run pytest tests/ -v -m yac
 
   docs:
     runs-on: ubuntu-latest

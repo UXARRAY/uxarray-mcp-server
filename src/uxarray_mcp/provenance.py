@@ -21,6 +21,20 @@ def _get_uxarray_version() -> str:
         return "unknown"
 
 
+def _get_server_version() -> str:
+    """Return this server's own installed version, or ``unknown``.
+
+    Separate from the UXarray version because they answer different
+    questions, and a worker can be current on one and stale on the other.
+    """
+    try:
+        import importlib.metadata
+
+        return importlib.metadata.version("uxarray-mcp")
+    except Exception:
+        return "unknown"
+
+
 def attach_provenance(
     result: dict[str, Any],
     tool: str,

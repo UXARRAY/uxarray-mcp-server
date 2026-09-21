@@ -11,6 +11,7 @@ from uxarray_mcp.domain import (
     load_grid,
     parse_healpix_zoom,
 )
+from uxarray_mcp.domain.remap_backend import UXARRAY_METHODS, YAC_METHODS
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.config import load_config
 
@@ -60,6 +61,23 @@ def _uxarray_supports(attr_path: str) -> bool:
             return False
         obj = getattr(obj, part)
     return True
+
+
+def _yac_importable() -> bool:
+    """Whether the YAC bindings can be imported in *this* process.
+
+    Only the spec is looked up, deliberately. Importing ``yac`` calls
+    ``MPI_Init``, and under MPICH that aborts the process outright when it is
+    not launched by ``srun`` -- which would turn a capability question into a
+    crashed worker. ``find_spec`` answers "is it installed" without running
+    any of it.
+    """
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("yac") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def _local_grid_facts(grid_path: str, data_path: Optional[str]) -> Dict[str, Any]:
@@ -514,18 +532,29 @@ def get_capabilities(
             "grid.get_faces_containing_point(lon, lat)",
         ]
 
-    # Remapping — requires face-centered data
-    if has_face_centered_vars:
+    # Remapping — requires face-centered data.
+    #
+    # The YAC methods are listed too, and conservative in particular, because
+    # leaving them out told a caller asking "what can I do with this?" that
+    # conservative remapping does not exist. It is the only method here that
+    # preserves a field's areal integral -- on a HEALPix round trip it holds
+    # the field mean roughly four times tighter than nearest neighbour -- so
+    # omitting it steers flux work onto the wrong method by silence.
+    #
+    # Whether YAC is *importable* is a property of the venue, not of the mesh,
+    # so it is reported rather than used to hide the methods: a caller whose
+    # grid is fine but whose worker lacks the build needs to see the method
+    # and the reason it is currently unreachable, not an empty list.
+    if has_faces:
+        suffix = "" if has_face_centered_vars else "  [needs face-centered data]"
         uxarray_capabilities["remapping"] = [
-            "var.remap.nearest_neighbor(dest_grid)",
-            "var.remap.inverse_distance_weighted(dest_grid)",
-            "var.remap.bilinear(dest_grid)",
+            f"var.remap.{name}(dest_grid){suffix}" for name in UXARRAY_METHODS
         ]
-    elif has_faces:
-        uxarray_capabilities["remapping"] = [
-            "var.remap.nearest_neighbor(dest_grid)  [needs face-centered data]",
-            "var.remap.inverse_distance_weighted(dest_grid)  [needs face-centered data]",
-            "var.remap.bilinear(dest_grid)  [needs face-centered data]",
+        yac_note = "" if _yac_importable() else "  [yac not importable here]"
+        uxarray_capabilities["remapping"] += [
+            f'var.remap(dest_grid, backend="yac", yac_method="{name}")'
+            f"{suffix}{yac_note}"
+            for name in YAC_METHODS
         ]
 
     # Vector calculus — requires face-centered data

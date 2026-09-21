@@ -31,23 +31,45 @@ reproduce the original field closely:
 | nnn (nearest-neighbor) | YAC | 0.0015 | 0.0861 | 0.941 |
 | average | YAC | 0.0016 | 0.0835 | 0.943 |
 
-(Original field: mean 0.176 mm/day, range 0–2.48 mm/day.) Bias is
-essentially zero for all six — the mesh is coarser than ERA5's native grid
-(1,867 cells vs. 31,581 grid points inside the same CONUS box), so the round
-trip is fundamentally lossy in the same way any downsample-then-upsample is,
-but it isn't systematically biased high or low. **YAC's conservative method
-is the best of all six** on both RMSE and correlation — consistent with it
-being the only method here that guarantees areal-integral preservation
-during the forward remap, rather than picking or interpolating point values.
-UXarray's own IDW is the best of the three non-conservative methods, since it
-averages over multiple nearby source points instead of picking one (nearest
-neighbor) or interpolating across a single element (bilinear). YAC's `nnn`
-and UXarray's `nearest_neighbor` land on effectively identical numbers, as
-expected — both are the same nearest-neighbor operation, just via different
-implementations. The error is not noise — it concentrates exactly where the
+(Original field: mean 0.176 mm/day, range 0–2.48 mm/day.)
+
+**The headline: conservative remapping measurably wins.** YAC's conservative
+method is the best of all six on every metric — 12.5% lower RMSE and 43%
+lower bias than nearest neighbour, and the highest pattern correlation. It is
+also the only method that nearly halves the drift in the field's own mean:
+
+| method | round-trip drift in CONUS mean precip |
+|---|---:|
+| **conservative** (YAC) | **+0.48%** |
+| nearest_neighbor / nnn | +0.83% |
+| inverse_distance_weighted | +0.87% |
+| average (YAC) | +0.92% |
+| bilinear | +0.97% |
+
+That is the result to take away for anyone remapping a flux: precipitation is
+an areal quantity, and only the conservative method is built to preserve its
+integral rather than sample point values. The other five are not wrong, they
+are answering a slightly different question, and the 2× difference in mean
+drift is the size of the gap that opens between those two questions on a real
+field. It is also a concrete argument for paying the Step 7a build cost —
+that method is the one you cannot get without it.
+
+Two supporting observations. UXarray's own IDW is the best of the three
+non-conservative methods, since it averages over several nearby source points
+rather than picking one (nearest neighbour) or interpolating within a single
+element (bilinear). And YAC's `nnn` and UXarray's `nearest_neighbor` agree to
+eight significant figures (RMSE 0.086061075 both ways) — two independent
+implementations, one written in C and reached through MPI, the other in
+Python, landing on the same answer. Nothing forced that agreement, so it is a
+genuine cross-check on both.
+
+Bias is small for all six: the mesh is coarser than ERA5's native grid (1,867
+cells vs. 31,581 grid points in the same CONUS box), so the round trip is
+lossy the way any downsample-then-upsample is, but not systematically high or
+low. The residual error is not noise — it concentrates exactly where the
 physics has sharp spatial gradients (Pacific Northwest orographic bands,
 frontal precipitation streaks along the Ohio Valley and Gulf Coast), and is
-near zero over smooth, low-gradient areas. See
+near zero over smooth areas. See
 [`images/roundtrip_bias_all_methods.png`](images/roundtrip_bias_all_methods.png).
 
 ## Step 1 — enabling and probing the RODA MCP server
@@ -265,6 +287,15 @@ manual `reset_index` step first, and the error message gives no hint that a
 
 ## Step 7a — getting YAC working
 
+**Why bother:** YAC's conservative remap turned out to be the most accurate
+of the six methods tested — 12.5% lower RMSE and 43% lower bias than nearest
+neighbour, and the only method that keeps the field's areal integral. It is
+also the only one of the six that is not available out of the box. Getting it
+built is what made that comparison possible at all, and the steps below are
+now automated in
+[`scripts/build_yac_local.sh`](../../scripts/build_yac_local.sh) so nobody
+has to rediscover them.
+
 `import yac` raised `ModuleNotFoundError` in this project's own `.venv`
 (the one this whole case study otherwise runs in). YAC is not a
 pip-installable wheel: its Python bindings are Cython-generated and built
@@ -336,6 +367,12 @@ Net result: the MCP server's own `.venv` can now use the YAC backend
 directly — no separate conda environment needed. A future YAC-backed
 `run_analysis` call through the MCP tool has everything it needs already
 installed in this project's environment.
+
+Both fixes are now in `scripts/build_yac_local.sh` rather than only in this
+write-up: the generated `libtool` is patched automatically, guarded so it is
+a no-op on toolchains that never had the problem. The one-time cost of
+working this out buys the conservative remap for everyone who runs that
+script — which, on the evidence in Step 8, is the method worth having.
 
 ## Step 8 — forward remap and round trip
 

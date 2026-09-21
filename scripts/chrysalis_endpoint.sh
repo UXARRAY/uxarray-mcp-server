@@ -284,9 +284,35 @@ _start() {
 # restart
 # ---------------------------------------------------------------------------
 
+_warn_if_template_is_stale() {
+  # `restart` re-reads user_config_template.yaml.j2; it does not regenerate it.
+  # So bumping YAC_VERSION in this file and restarting changes nothing, and the
+  # worker keeps serving whatever prefix was baked in the last time `configure`
+  # ran. That is not hypothetical: the endpoint served yac-3.18 for weeks after
+  # the default here moved to 3.20.2, through several restarts, and the only
+  # symptom was a version string nobody was looking at.
+  local tmpl="$HOME/.globus_compute/$ENDPOINT_NAME/user_config_template.yaml.j2"
+  [[ -f "$tmpl" ]] || return 0
+  grep -q -- "$YAC_LOCAL_PREFIX" "$tmpl" && return 0
+
+  local baked
+  baked="$(grep -o 'yac-[0-9][^/"]*' "$tmpl" | head -1)"
+  echo
+  echo "WARNING: the endpoint template does not match this script's YAC_VERSION." >&2
+  echo "  this script wants : $(basename "$YAC_LOCAL_PREFIX")" >&2
+  echo "  template contains : ${baked:-<no yac- path>}" >&2
+  echo "  A restart re-reads that template but never rewrites it, so the worker" >&2
+  echo "  will keep using ${baked:-the old prefix}. To actually move versions:" >&2
+  echo >&2
+  echo "      $0 configure <single-host|slurm-debug>   # rewrites the template" >&2
+  echo "      $0 restart" >&2
+  echo >&2
+}
+
 _restart() {
   _check_endpoint_dir
   _activate_env
+  _warn_if_template_is_stale
   echo "==> Stopping endpoint: $ENDPOINT_NAME"
   globus-compute-endpoint stop "$ENDPOINT_NAME" 2>/dev/null || true
   rm -f "$HOME/.globus_compute/$ENDPOINT_NAME/daemon.pid"
@@ -301,6 +327,18 @@ _restart() {
 _status() {
   _activate_env
   globus-compute-endpoint list
+  # Which YAC the workers will actually get, read from the template rather
+  # than from this script's variables -- those two disagreeing is the whole
+  # failure mode, so reporting the one we *want* would defeat the purpose.
+  local tmpl="$HOME/.globus_compute/$ENDPOINT_NAME/user_config_template.yaml.j2"
+  if [[ -f "$tmpl" ]]; then
+    local baked
+    baked="$(grep -o 'yac-[0-9][^/"]*' "$tmpl" | head -1)"
+    echo
+    echo "YAC prefix baked into the endpoint template: ${baked:-<none>}"
+    echo "YAC prefix this script would configure:      $(basename "$YAC_LOCAL_PREFIX")"
+  fi
+  _warn_if_template_is_stale
 }
 
 _check_yac() {
@@ -318,6 +356,7 @@ _check_yac() {
   trap 'rm -f "$smoke"' RETURN
   cat > "$smoke" <<'PY'
 import json
+import os
 import sys
 import time
 import traceback
@@ -328,6 +367,18 @@ try:
 
     out["yac_core_ok"] = True
     out["yac_file"] = getattr(yc, "__file__", None)
+    # Which YAC, not just that there is one. Printing the path alone means
+    # noticing "3.18" inside a 90-character string; comparing it here turns
+    # that into a field that says yes or no.
+    out["yac_prefix_loaded"] = next(
+        (p for p in (out["yac_file"] or "").split(os.sep) if p.startswith("yac-")),
+        None,
+    )
+    out["yac_prefix_expected"] = os.environ.get("YAC_EXPECTED_PREFIX") or None
+    if out["yac_prefix_expected"]:
+        out["yac_version_matches"] = (
+            out["yac_prefix_loaded"] == out["yac_prefix_expected"]
+        )
 except Exception as exc:
     out["yac_core_ok"] = False
     out["yac_core_error"] = f"{type(exc).__name__}: {exc}"
@@ -360,10 +411,16 @@ except Exception as exc:
     out["remap_traceback"] = traceback.format_exc()
 
 print(json.dumps(out, indent=2))
-raise SystemExit(0 if out.get("yac_core_ok") and out.get("remap_ok") else 1)
+raise SystemExit(
+    0
+    if out.get("yac_core_ok")
+    and out.get("remap_ok")
+    and out.get("yac_version_matches", True)
+    else 1
+)
 PY
   echo "==> Running YAC smoke through Slurm"
-  srun --ntasks 1 bash -lc "PATH='$PATH' PYTHONPATH='$PYTHONPATH' LD_LIBRARY_PATH='$LD_LIBRARY_PATH' python '$smoke'"
+  srun --ntasks 1 bash -lc "PATH='$PATH' PYTHONPATH='$PYTHONPATH' LD_LIBRARY_PATH='$LD_LIBRARY_PATH' YAC_EXPECTED_PREFIX='$(basename "$YAC_LOCAL_PREFIX")' python '$smoke'"
 }
 
 _logs() {
