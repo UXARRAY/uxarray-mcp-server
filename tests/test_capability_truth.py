@@ -111,7 +111,9 @@ class TestWorkerReportsItsOwnVersion:
 
         Driving ``_run_on_hpc`` rather than re-deriving the comparison here:
         a test that rebuilds the warning string it is checking would pass even
-        if the shipped code never emitted one.
+        if the shipped code never emitted one. That path imports
+        ``globus_compute_sdk``, which only the ``hpc`` extra installs, so the
+        two callers carry the ``hpc`` marker.
         """
         from unittest.mock import MagicMock, patch
 
@@ -141,6 +143,7 @@ class TestWorkerReportsItsOwnVersion:
             result = await agent.calculate_area_remote("test.nc", use_remote=True)
         return result["_provenance"].get("warnings") or [], result
 
+    @pytest.mark.hpc
     @pytest.mark.asyncio
     async def test_a_stale_worker_produces_a_warning_naming_both_versions(self):
         """The drift has to be reported, not merely recorded.
@@ -168,6 +171,7 @@ class TestWorkerReportsItsOwnVersion:
         # And the raw fact is inspectable even by a caller that ignores warnings.
         assert result["_provenance"]["remote_mcp_server_version"] == "0.1.0"
 
+    @pytest.mark.hpc
     @pytest.mark.asyncio
     async def test_matching_versions_are_silent(self):
         """No warning when the worker is current -- noise trains people to ignore it."""

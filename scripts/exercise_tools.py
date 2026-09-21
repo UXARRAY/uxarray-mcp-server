@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 import traceback
 from typing import Any, Callable
@@ -61,7 +60,9 @@ def _local_checks() -> list[Check]:
         tools = [t["name"] for t in r["mcp_server_tools"] if t["applicable"]]
         if not tools:
             return _no("no applicable tools reported for a valid mesh")
-        return _ok(f"{len(tools)} applicable tools, n_face={r['grid_summary']['n_face']}")
+        return _ok(
+            f"{len(tools)} applicable tools, n_face={r['grid_summary']['n_face']}"
+        )
 
     def q_how_do_i_remap_a_flux() -> Any:
         return get_capabilities("healpix:2")["uxarray_capabilities"]["remapping"]
@@ -132,9 +133,7 @@ def _local_checks() -> list[Check]:
                 method=method,
             )
             handle = get_result(res["result_handle"])
-            mean = float(
-                xr.open_dataset(handle["artifact_path"])["flux"].values.mean()
-            )
+            mean = float(xr.open_dataset(handle["artifact_path"])["flux"].values.mean())
             drifts[method] = abs(mean - source_mean) / source_mean * 100
             drifts[f"{method}_backend"] = res["backend"]
         return drifts
@@ -161,7 +160,12 @@ def _local_checks() -> list[Check]:
         )
 
     return [
-        ("What can I do with this mesh?", "get_capabilities", q_what_can_i_do, a_what_can_i_do),
+        (
+            "What can I do with this mesh?",
+            "get_capabilities",
+            q_what_can_i_do,
+            a_what_can_i_do,
+        ),
         (
             "How should I remap a flux?",
             "get_capabilities",
@@ -269,7 +273,9 @@ def _remote_checks(endpoint: str) -> list[Check]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--endpoint", help="also run the remote checks against this endpoint")
+    ap.add_argument(
+        "--endpoint", help="also run the remote checks against this endpoint"
+    )
     ap.add_argument("--json", action="store_true", help="emit JSON instead of a table")
     args = ap.parse_args()
 
@@ -285,7 +291,11 @@ def main() -> int:
             passed, detail = judge(answer)
             error = None
         except Exception as exc:
-            passed, detail, error = False, f"{type(exc).__name__}: {exc}", traceback.format_exc()[-800:]
+            passed, detail, error = (
+                False,
+                f"{type(exc).__name__}: {exc}",
+                traceback.format_exc()[-800:],
+            )
         rows.append(
             {
                 "question": question,
@@ -304,11 +314,15 @@ def main() -> int:
         print()
         for r in rows:
             mark = "PASS" if r["answerable"] else "GAP "
-            print(f"  [{mark}] {r['question']:<{width}}  ({r['tool']}, {r['seconds']}s)")
+            print(
+                f"  [{mark}] {r['question']:<{width}}  ({r['tool']}, {r['seconds']}s)"
+            )
             print(f"         {r['detail']}")
         gaps = [r for r in rows if not r["answerable"]]
         print()
-        print(f"  {len(rows) - len(gaps)}/{len(rows)} questions answerable through tools")
+        print(
+            f"  {len(rows) - len(gaps)}/{len(rows)} questions answerable through tools"
+        )
         if gaps:
             print("  Gaps are features the server does not yet expose:")
             for g in gaps:

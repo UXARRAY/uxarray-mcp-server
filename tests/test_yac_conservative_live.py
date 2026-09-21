@@ -155,9 +155,7 @@ def test_conservative_remap_runs_and_conserves_the_mean(healpix_pair, state_dir)
     )
 
 
-def test_conservative_beats_nearest_neighbour_on_conservation(
-    healpix_pair, state_dir
-):
+def test_conservative_beats_nearest_neighbour_on_conservation(healpix_pair, state_dir):
     """The claim that justifies building YAC at all, as a test.
 
     The ERA5 case study measured conservative as roughly halving the drift in
