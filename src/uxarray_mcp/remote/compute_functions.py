@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional
 def remote_runtime_probe() -> Dict[str, Any]:
     """Return lightweight runtime diagnostics from the remote worker."""
     import getpass
+    import importlib.metadata
     import importlib.util
     import os
     import platform
@@ -46,6 +47,24 @@ def remote_runtime_probe() -> Dict[str, Any]:
         yac_info["package_available"] = yac_spec is not None
         if yac_spec is not None:
             yac_info["package_origin"] = yac_spec.origin
+            # Which YAC, not merely whether one. The endpoint script bakes a
+            # prefix into worker_init at configure time, so bumping its default
+            # does nothing until the endpoint is reconfigured -- a worker can
+            # serve 3.18 while the config says 3.20.2, and nothing said so.
+            # There is no reliable yac.__version__, so report both the path and
+            # the dist metadata rather than pick a winner; they can disagree.
+            yac_info["version_from_path"] = next(
+                (
+                    part
+                    for part in (yac_spec.origin or "").split(os.sep)
+                    if part.startswith("yac-")
+                ),
+                None,
+            )
+            try:
+                yac_info["version_from_metadata"] = importlib.metadata.version("yac")
+            except Exception:
+                yac_info["version_from_metadata"] = None
     except Exception as exc:
         yac_info["package_available"] = False
         yac_info["package_error"] = f"{type(exc).__name__}: {exc}"
@@ -65,6 +84,9 @@ def remote_runtime_probe() -> Dict[str, Any]:
             "uxarray_version": (modules.get("uxarray") or {}).get("version")
             or "unknown",
             "xarray_version": (modules.get("xarray") or {}).get("version") or "unknown",
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
             "pbs_job_id": os.environ.get("PBS_JOBID"),
         },
@@ -146,6 +168,9 @@ def remote_probe_path(file_path: str, inspect_netcdf: bool = True) -> Dict[str, 
         "python_version": __import__("platform").python_version(),
         "uxarray_version": _ux_version,
         "xarray_version": _xr_version,
+        "mcp_server_version": __import__(
+            "importlib.metadata", fromlist=["version"]
+        ).version("uxarray-mcp"),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "pbs_job_id": os.environ.get("PBS_JOBID"),
     }
@@ -196,7 +221,26 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
             "lon_extent": None,
             "lat_extent": None,
         }
-        if _steradians is None:
+        # A separate, much higher cap than _MAX_FACES: summing face areas is
+        # vectorized and cheap through ~50M faces, so it is worth keeping long
+        # after the closure loop has abstained. Mirrors AREA_MAX_FACES in
+        # domain/mesh_coverage.py; tests/test_remote_mesh_coverage.py holds the
+        # two in step.
+        _MAX_AREA_FACES = 50_000_000
+        if _steradians is None and int(_grid.n_face) > _MAX_AREA_FACES:
+            # face_areas computes an area per face from every corner. On a
+            # 300M-face np4 SCRIP grid that is 3.6 billion corners of work on
+            # top of the ~118 GiB the coordinates already cost, and the worker
+            # is killed outright -- the caller sees WorkerLost, which names
+            # neither memory nor this line. Skip it and say so, the same way
+            # the closure check below already does, rather than die computing
+            # a summary field nobody asked to pay that much for.
+            _cov["sphere_fraction_skipped"] = (
+                f"{int(_grid.n_face)} faces exceeds the {_MAX_AREA_FACES}-face "
+                "limit for summing face areas; sphere_fraction not computed. "
+                "Subset the mesh first if you need it."
+            )
+        elif _steradians is None:
             try:
                 _steradians = float(_np.asarray(_grid.face_areas).sum())
             except Exception:
@@ -305,21 +349,45 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
     else:
         grid = ux.open_grid(file_path, **open_kwargs)
 
-    return {
-        "n_face": int(grid.n_face),
+    # n_edge is not free: unless the file stored edges, reading it builds the
+    # whole edge_node_connectivity. At 300M faces x 12 corners that is the
+    # difference between a summary that returns and a worker that is killed.
+    # The count is reported when it is cheap and named as skipped when it is
+    # not -- silently omitting it would make a partial answer look complete.
+    _n_face = int(grid.n_face)
+    _result: Dict[str, Any] = {
+        "n_face": _n_face,
         "n_node": int(grid.n_node),
-        "n_edge": int(grid.n_edge),
         "source": file_path,
-        "mesh_coverage": _mesh_coverage(grid),
-        "_worker_runtime": {
-            "hostname": __import__("socket").gethostname(),
-            "python_version": __import__("platform").python_version(),
-            "uxarray_version": getattr(ux, "__version__", "unknown"),
-            "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
-            "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
-        },
     }
+    if _n_face <= 250_000 or "edge_node_connectivity" in getattr(grid, "_ds", {}):
+        _result["n_edge"] = int(grid.n_edge)
+    else:
+        _result["n_edge"] = None
+        _result["n_edge_skipped"] = (
+            f"{_n_face} faces exceeds the 250000-face limit for constructing "
+            "edge connectivity, and the file does not store it; n_edge was "
+            "not computed."
+        )
+    _result.update(
+        {
+            "mesh_coverage": _mesh_coverage(grid),
+            "_worker_runtime": {
+                "hostname": __import__("socket").gethostname(),
+                "python_version": __import__("platform").python_version(),
+                "uxarray_version": getattr(ux, "__version__", "unknown"),
+                "xarray_version": getattr(
+                    __import__("xarray"), "__version__", "unknown"
+                ),
+                "mcp_server_version": __import__(
+                    "importlib.metadata", fromlist=["version"]
+                ).version("uxarray-mcp"),
+                "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
+                "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
+            },
+        }
+    )
+    return _result
 
 
 def remote_validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
@@ -394,6 +462,9 @@ def remote_validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -443,7 +514,26 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
             "lon_extent": None,
             "lat_extent": None,
         }
-        if _steradians is None:
+        # A separate, much higher cap than _MAX_FACES: summing face areas is
+        # vectorized and cheap through ~50M faces, so it is worth keeping long
+        # after the closure loop has abstained. Mirrors AREA_MAX_FACES in
+        # domain/mesh_coverage.py; tests/test_remote_mesh_coverage.py holds the
+        # two in step.
+        _MAX_AREA_FACES = 50_000_000
+        if _steradians is None and int(_grid.n_face) > _MAX_AREA_FACES:
+            # face_areas computes an area per face from every corner. On a
+            # 300M-face np4 SCRIP grid that is 3.6 billion corners of work on
+            # top of the ~118 GiB the coordinates already cost, and the worker
+            # is killed outright -- the caller sees WorkerLost, which names
+            # neither memory nor this line. Skip it and say so, the same way
+            # the closure check below already does, rather than die computing
+            # a summary field nobody asked to pay that much for.
+            _cov["sphere_fraction_skipped"] = (
+                f"{int(_grid.n_face)} faces exceeds the {_MAX_AREA_FACES}-face "
+                "limit for summing face areas; sphere_fraction not computed. "
+                "Subset the mesh first if you need it."
+            )
+        elif _steradians is None:
             try:
                 _steradians = float(_np.asarray(_grid.face_areas).sum())
             except Exception:
@@ -575,6 +665,9 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -692,6 +785,9 @@ def remote_inspect_variable(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -798,6 +894,9 @@ def remote_plot_mesh(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -986,6 +1085,9 @@ def remote_plot_variable(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -1358,6 +1460,9 @@ def remote_temporal_mean_map(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -1508,6 +1613,9 @@ def remote_plot_zonal_mean(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -1650,6 +1758,9 @@ def remote_calculate_zonal_mean(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -1964,6 +2075,9 @@ def remote_subset_bbox_plot(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": ux_version,
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2158,6 +2272,9 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(__import__("uxarray"), "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
             "pbs_job_id": os.environ.get("PBS_JOBID"),
         },
@@ -2337,6 +2454,9 @@ def remote_calculate_gradient(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2532,6 +2652,9 @@ def remote_calculate_curl(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2722,6 +2845,9 @@ def remote_calculate_divergence(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2846,6 +2972,9 @@ def remote_calculate_azimuthal_mean(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -2918,6 +3047,9 @@ def remote_grid_facts(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -3150,6 +3282,9 @@ def remote_remap_variable(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -3347,6 +3482,9 @@ def remote_regrid_dataset(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -3514,6 +3652,9 @@ def remote_remap_to_rectilinear(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },
@@ -3600,6 +3741,9 @@ def remote_calculate_zonal_anomaly(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
+            "mcp_server_version": __import__(
+                "importlib.metadata", fromlist=["version"]
+            ).version("uxarray-mcp"),
             "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
             "pbs_job_id": __import__("os").environ.get("PBS_JOBID"),
         },

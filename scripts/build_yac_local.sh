@@ -26,6 +26,7 @@ BUILD_ROOT=""
 PYTHON="${PYTHON:-}"
 JOBS=""
 CHECK_ONLY=0
+LINK_INTO_VENV=0
 
 usage() {
   cat <<'EOF'
@@ -38,6 +39,10 @@ Usage: build_yac_local.sh [options]
   --yaxt-version TAG  YAXT git tag (default: v0.11.5.1)
   --jobs N            Parallel make jobs (default: detected core count)
   --check             Run preflight checks and exit without building
+  --link-into-venv    Also write a .pth into --python's site-packages, so that
+                      interpreter finds YAC with no environment variables and
+                      survives `uv sync` (which would delete a hand-installed
+                      package but leaves a .pth alone)
   -h, --help          This message
 
 Supported: macOS (Homebrew), Debian/Ubuntu, RHEL/Fedora/Rocky, Arch, SUSE.
@@ -55,6 +60,7 @@ while [[ $# -gt 0 ]]; do
     --yaxt-version)  YAXT_VERSION="$2"; shift 2 ;;
     --jobs)          JOBS="$2"; shift 2 ;;
     --check)         CHECK_ONLY=1; shift ;;
+    --link-into-venv) LINK_INTO_VENV=1; shift ;;
     -h|--help)       usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -148,6 +154,27 @@ _first_of() {
   return 1
 }
 
+_strip_no_fixup_chains() {
+  # Homebrew's gfortran bakes -Wl,-no_fixup_chains into the libtool script it
+  # generates (allow_undefined_flag), a workaround for a Big Sur arm64
+  # code-signing bug. Current Xcode ld does not know the flag, so every shared
+  # library link fails with "ld: unknown option: -no_fixup_chains".
+  #
+  # LDFLAGS=-Wl,-ld_classic is the obvious fix and is worse: it satisfies the C
+  # link and then breaks Fortran's own configure-time link probe, because
+  # mpifort/collect2 route the flag differently than mpicc does. Patching the
+  # *generated* libtool is narrower -- it touches the one place the bad flag is
+  # emitted, after configure has finished probing.
+  #
+  # No-op unless the flag is really there, so this stays inert on Linux and on
+  # toolchains that never had the problem.
+  local lt="$1"
+  [[ -f "$lt" ]] || return 0
+  grep -q -- '-no_fixup_chains' "$lt" || return 0
+  echo "    patching $(basename "$lt"): dropping -no_fixup_chains (unknown to this ld)"
+  perl -pi -e 's/\Q\$wl\E-no_fixup_chains\s*//g; s/-Wl,-no_fixup_chains\s*//g' "$lt"
+}
+
 _fc_accepts() {
   # gfortran >= 10 rejects the argument-mismatch patterns YAXT relies on
   # unless told not to; older gfortran and non-GNU compilers reject the flag
@@ -195,8 +222,15 @@ if ! command -v "$PYTHON" &>/dev/null; then
 else
   PYTHON="$(command -v "$PYTHON")"
   # The bindings are Cython-built against this interpreter, and YAC's
-  # configure checks for both of these by name.
-  for _mod in "cython>=3.0.0" "mpi4py"; do
+  # configure checks for each of these by name. setuptools is on the list
+  # because a venv made by `uv` (or `python -m venv --without-pip`) does not
+  # ship it, unlike the system interpreters this build is usually run against
+  # -- so YAC's configure fails with "Python module 'setuptools' needed to
+  # build the Python bindings is not available" several minutes in, after
+  # YAXT has already compiled. Cheaper to say so up front.
+  # pip is checked separately below: it is not merely imported, YAC's
+  # `make install` shells out to `$PYTHON -m pip install .` for the bindings.
+  for _mod in "cython>=3.0.0" "mpi4py" "setuptools"; do
     if ! "$PYTHON" -c "
 import sys
 from importlib.metadata import version, PackageNotFoundError
@@ -211,6 +245,18 @@ except PackageNotFoundError:
       _missing=1
     fi
   done
+
+  # YAC's `make install` runs `$PYTHON -m pip install .` to place the
+  # bindings, so pip has to be importable *by that interpreter* -- having
+  # `pip` or `uv` on PATH is not enough. A uv-created venv has no pip by
+  # default, and the failure lands at the very end of a long build with
+  # "No module named pip", after YAXT and all of YAC have compiled.
+  if ! "$PYTHON" -c "import pip" 2>/dev/null; then
+    echo "MISSING: pip inside $PYTHON" >&2
+    echo "  YAC's make install calls '\$PYTHON -m pip install .' for the bindings." >&2
+    echo "  try: uv pip install --python '$PYTHON' pip" >&2
+    _missing=1
+  fi
 fi
 
 if [[ "$_missing" -ne 0 ]]; then
@@ -263,6 +309,7 @@ _bootstrap
 mkdir -p build && cd build
 ../configure --prefix="$PREFIX" --without-regard-for-quality \
     CC="$MPICC" FC="$MPIF90" FCFLAGS="$FCFLAGS"
+_strip_no_fixup_chains libtool
 make -j"$JOBS"
 make install
 cd "$BUILD_ROOT"
@@ -301,6 +348,33 @@ EOF
 echo "==> Installed"
 find "$PREFIX" \( -name 'core*.so' -o -name '_yac*.so' \) -print
 echo "  activate: source $PREFIX/activate-yac.sh"
+
+if [[ "$LINK_INTO_VENV" == "1" ]]; then
+  # A .pth beats both alternatives for an interpreter you own. Sourcing
+  # activate-yac.sh only lasts as long as the shell, and anything installed
+  # *into* site-packages by hand is deleted the next time `uv sync` reconciles
+  # the environment against the lockfile -- which is how YAC silently vanished
+  # from this project's .venv once already. uv does not manage .pth files it
+  # did not write, so this survives.
+  #
+  # Only sys.path is needed. The compiled extension records absolute paths to
+  # its own libyac/libyaxt at link time (verifiable with otool -L / ldd), so
+  # the loader resolves them without DYLD_/LD_LIBRARY_PATH -- which is just as
+  # well, since macOS SIP strips DYLD_* from child processes and an .pth could
+  # not have fixed that anyway.
+  TARGET_SITE="$("$PYTHON" -c 'import sysconfig;print(sysconfig.get_paths()["purelib"])')"
+  PTH="$TARGET_SITE/_uxarray_mcp_yac.pth"
+  # A .pth line is executed only if it begins with "import ", and must be a
+  # single physical line.
+  printf 'import sys; sys.path.insert(0, %s)\n' "\"$SITE\"" > "$PTH"
+  echo "  linked:   $PTH"
+  if PYTHONPATH= "$PYTHON" -c 'import yac' 2>/dev/null; then
+    echo "            verified: '$PYTHON -c \"import yac\"' works with no env vars"
+  else
+    echo "            NOTE: import still needs a launcher here (MPICH), but the"
+    echo "            path is wired; try: mpirun -n 1 $PYTHON -c 'import yac'"
+  fi
+fi
 
 echo "==> Verifying import"
 # Importing yac calls MPI_Init. Open MPI initialises fine as a singleton;
