@@ -33,10 +33,22 @@ reproduce the original field closely:
 
 (Original field: mean 0.176 mm/day, range 0–2.48 mm/day.)
 
-**The headline: conservative remapping measurably wins.** YAC's conservative
-method is the best of all six on every metric — 12.5% lower RMSE and 43%
-lower bias than nearest neighbour, and the highest pattern correlation. It is
-also the only method that nearly halves the drift in the field's own mean:
+**The headline: conservative remapping measurably wins — on this kind of
+field.** YAC's conservative method is the best of all six on every metric
+here: 12.5% lower RMSE and 43% lower bias than nearest neighbour, and the
+highest pattern correlation. It is also the only method that nearly halves
+the drift in the field's own mean.
+
+The qualifier is earned rather than defensive. A later sweep of all seven
+methods on Chrysalis (HEALPix z4 -> z2) found conservative sitting *mid-pack*
+on a smooth analytic field — `dnn` .062%, `average` .070%, IDW .075%,
+bilinear .083%, conservative .095% — and winning decisively on a
+discontinuity: conservative .416% against IDW's 1.49% and nearest
+neighbour's 7.14%. Precipitation is the discontinuous case. It is patchy,
+bounded below by zero, and organised into fronts and orographic bands, which
+is exactly where smearing a flux across a cell boundary costs you. A smooth
+test field would have ranked these methods differently and misled anyone who
+took the ranking at face value:
 
 | method | round-trip drift in CONUS mean precip |
 |---|---:|
