@@ -1995,11 +1995,29 @@ def remote_subset_bbox_plot(
             corner_lon = _as_query(
                 np.asarray(ds.variables["grid_corner_lon"][candidates, :])
             )
+
+            # Containment, matching faces_within_lat_bounds exactly -- a face
+            # is kept only when its own bounds fall wholly inside the box.
+            #
+            # This deliberately reproduces one uxarray quirk. A face whose
+            # longitude bounds straddle the antimeridian is stored min > max,
+            # so `min >= lon_lo and max <= lon_hi` is false even for a
+            # whole-globe box: uxarray returns 368 of 384 faces for
+            # lon=[-180, 180] on outCSne8. Including those 16 faces is
+            # arguably the better answer, but a subset tool that quietly
+            # disagrees with the library underneath it is worse than one that
+            # shares a known limitation. Matched here, and worth fixing
+            # upstream rather than diverging.
+            lon_min = corner_lon.min(axis=1)
+            lon_max = corner_lon.max(axis=1)
+            straddles = (lon_max - lon_min) > 180.0
+
             inside = (
                 (corner_lat.min(axis=1) >= lat_lo)
                 & (corner_lat.max(axis=1) <= lat_hi)
-                & (corner_lon.min(axis=1) >= lon_lo)
-                & (corner_lon.max(axis=1) <= lon_hi)
+                & (lon_min >= lon_lo)
+                & (lon_max <= lon_hi)
+                & ~straddles
             )
             return candidates[inside]
         finally:
