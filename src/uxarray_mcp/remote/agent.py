@@ -777,6 +777,7 @@ class UXarrayComputeAgent(_AcademyAgent):
         # Attach provenance with the correct HPC venue — the remote functions
         # are self contained and don't call attach_provenance themselves.
         from uxarray_mcp.provenance import (
+            _get_server_commit,
             _get_server_version,
             _get_uxarray_version,
             attach_provenance,
@@ -830,6 +831,28 @@ class UXarrayComputeAgent(_AcademyAgent):
                 "different server code than the one that submitted this task, "
                 "so fixes present here may be absent there. Redeploy "
                 "uxarray-mcp on the endpoint and restart it."
+            )
+
+        # The version alone cannot see drift *within* a release, and that is
+        # the common case: the string is hardcoded in pyproject.toml and only
+        # moves when someone cuts a release, so every merge between releases
+        # carries the same number. Observed: a worker reported 2026.9.0 while
+        # missing three merged PRs, and the version check called it current.
+        # Comparing commits catches what the version cannot.
+        worker_commit = worker_runtime.get("mcp_server_commit")
+        local_commit = _get_server_commit()
+        if (
+            worker_commit
+            and worker_commit != "unknown"
+            and local_commit != "unknown"
+            and worker_commit != local_commit
+        ):
+            drift_warnings.append(
+                f"uxarray-mcp commit drift: local={local_commit}, "
+                f"remote(worker)={worker_commit}. Both may report the same "
+                "version while differing by many merges, so compare commits "
+                "before trusting a remote result. Redeploy and restart the "
+                "endpoint."
             )
 
         # Fold any warnings the remote function itself produced (e.g. vector

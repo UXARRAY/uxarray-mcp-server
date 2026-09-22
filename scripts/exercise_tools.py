@@ -232,7 +232,7 @@ def _remote_checks(endpoint: str) -> list[Check]:
         )
 
     def a_is_the_worker_running_current_server_code(r: Any) -> tuple[bool, str]:
-        from uxarray_mcp.provenance import _get_server_version
+        from uxarray_mcp.provenance import _get_server_commit, _get_server_version
 
         runtime = (r.get("remote_probe") or {}).get("_worker_runtime") or {}
         worker = runtime.get("mcp_server_version")
@@ -247,7 +247,25 @@ def _remote_checks(endpoint: str) -> list[Check]:
                 f"worker is on uxarray-mcp {worker}, submitter on {local}. "
                 "Fixes merged here are absent there; redeploy and restart."
             )
-        return _ok(f"worker and submitter both on {worker}")
+
+        # Matching versions are not enough. The string only moves at release,
+        # so a worker many merges behind still reports the current number --
+        # this check passed against a worker missing three merged PRs before
+        # it compared commits.
+        worker_commit = runtime.get("mcp_server_commit")
+        local_commit = _get_server_commit()
+        if not worker_commit or worker_commit == "unknown":
+            return _no(
+                f"both report {worker}, but the worker does not report a "
+                "commit, so drift within a release is invisible"
+            )
+        if worker_commit != local_commit:
+            return _no(
+                f"both report {worker}, but the worker is at commit "
+                f"{worker_commit} and the submitter at {local_commit}. "
+                "Merged fixes are absent there; redeploy and restart."
+            )
+        return _ok(f"worker and submitter both on {worker} @ {worker_commit}")
 
     return [
         (
