@@ -87,6 +87,24 @@ def remote_runtime_probe() -> Dict[str, Any]:
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -178,6 +196,24 @@ def remote_probe_path(file_path: str, inspect_netcdf: bool = True) -> Dict[str, 
         "mcp_server_version": __import__(
             "importlib.metadata", fromlist=["version"]
         ).version("uxarray-mcp"),
+        "mcp_server_commit": (
+            lambda _d: (
+                __import__("subprocess")
+                .run(
+                    ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                )
+                .stdout.strip()
+                or "unknown"
+            )
+        )(
+            str(
+                __import__("importlib.metadata", fromlist=["distribution"])
+                .distribution("uxarray-mcp")
+                .locate_file("")
+            )
+        ),
         "peak_rss_gib": round(
             __import__("resource")
             .getrusage(__import__("resource").RUSAGE_SELF)
@@ -396,6 +432,24 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
                 "mcp_server_version": __import__(
                     "importlib.metadata", fromlist=["version"]
                 ).version("uxarray-mcp"),
+                "mcp_server_commit": (
+                    lambda _d: (
+                        __import__("subprocess")
+                        .run(
+                            ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
+                    )
+                )(
+                    str(
+                        __import__("importlib.metadata", fromlist=["distribution"])
+                        .distribution("uxarray-mcp")
+                        .locate_file("")
+                    )
+                ),
                 "peak_rss_gib": round(
                     __import__("resource")
                     .getrusage(__import__("resource").RUSAGE_SELF)
@@ -486,6 +540,24 @@ def remote_validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -696,6 +768,24 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -823,6 +913,24 @@ def remote_inspect_variable(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -939,6 +1047,24 @@ def remote_plot_mesh(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -1137,6 +1263,24 @@ def remote_plot_variable(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -1519,6 +1663,24 @@ def remote_temporal_mean_map(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -1679,6 +1841,24 @@ def remote_plot_zonal_mean(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -1831,6 +2011,24 @@ def remote_calculate_zonal_mean(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -2332,6 +2530,24 @@ def remote_subset_bbox_plot(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -2537,6 +2753,24 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -2726,6 +2960,24 @@ def remote_calculate_gradient(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -2931,6 +3183,24 @@ def remote_calculate_curl(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -3131,6 +3401,24 @@ def remote_calculate_divergence(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -3265,6 +3553,24 @@ def remote_calculate_azimuthal_mean(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -3347,6 +3653,24 @@ def remote_grid_facts(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -3589,6 +3913,24 @@ def remote_remap_variable(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -3796,6 +4138,24 @@ def remote_regrid_dataset(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -3973,6 +4333,24 @@ def remote_remap_to_rectilinear(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)
@@ -4069,6 +4447,24 @@ def remote_calculate_zonal_anomaly(
             "mcp_server_version": __import__(
                 "importlib.metadata", fromlist=["version"]
             ).version("uxarray-mcp"),
+            "mcp_server_commit": (
+                lambda _d: (
+                    __import__("subprocess")
+                    .run(
+                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
+                )
+            )(
+                str(
+                    __import__("importlib.metadata", fromlist=["distribution"])
+                    .distribution("uxarray-mcp")
+                    .locate_file("")
+                )
+            ),
             "peak_rss_gib": round(
                 __import__("resource")
                 .getrusage(__import__("resource").RUSAGE_SELF)

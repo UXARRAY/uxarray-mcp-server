@@ -35,6 +35,30 @@ def _get_server_version() -> str:
         return "unknown"
 
 
+def _get_server_commit() -> str:
+    """This server's git commit, or ``unknown`` outside a checkout.
+
+    The version string moves only at release, so two builds many merges apart
+    report the same number. The commit is what distinguishes them, and is the
+    difference between "the worker is current" and "the worker is missing
+    three merged fixes but says the same version".
+    """
+    try:
+        import subprocess
+        from pathlib import Path
+
+        here = Path(__file__).resolve().parent
+        result = subprocess.run(
+            ["git", "-C", str(here), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
 def attach_provenance(
     result: dict[str, Any],
     tool: str,
