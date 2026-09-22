@@ -1917,6 +1917,125 @@ def remote_subset_bbox_plot(
     import io
     import math
 
+    def _scrip_n_face(path):
+        """Face count straight from the header, without opening a Grid."""
+        import netCDF4
+
+        with netCDF4.Dataset(path, "r") as ds:
+            return int(ds.dimensions["grid_size"].size)
+
+    def _scrip_faces_in_bbox(path, lon_bounds, lat_bounds, margin=0.5):
+        """Face indices inside a lon/lat box, read from the SCRIP file.
+
+        Returns None when the file is not unstructured SCRIP, so the caller
+        falls back to uxarray's own subsetting.
+
+        Two stages, both bounded. Face centres are streamed in chunks and
+        filtered with a generous margin, so peak memory is the chunk size
+        rather than the mesh size. Corner coordinates are then read for the
+        surviving candidates only and settle the box exactly -- the same
+        containment test ``faces_within_lat_bounds`` applies, so the answer
+        matches uxarray's.
+        """
+        import netCDF4
+        import numpy as np
+
+        try:
+            ds = netCDF4.Dataset(path, "r")
+        except Exception:
+            return None
+        try:
+            needed = (
+                "grid_center_lat",
+                "grid_center_lon",
+                "grid_corner_lat",
+                "grid_corner_lon",
+            )
+            if not all(v in ds.variables for v in needed):
+                return None
+
+            lat_var = ds.variables["grid_center_lat"]
+            lon_var = ds.variables["grid_center_lon"]
+            n_face = lat_var.shape[0]
+            lat_lo, lat_hi = min(lat_bounds), max(lat_bounds)
+            lon_lo, lon_hi = lon_bounds[0], lon_bounds[1]
+
+            # Normalise the file's longitudes into the query's convention,
+            # never the reverse. Mapping a [-30, 30] query into 0..360 makes
+            # it [330, 30] -- an interval that wraps -- and a plain
+            # lo <= x <= hi mask then silently matches nothing. Caught by
+            # comparing against uxarray on a real mesh: four of eight boxes
+            # came back empty before this was fixed.
+            def _as_query(values):
+                if lon_hi <= 180.0:
+                    return ((values + 180.0) % 360.0) - 180.0
+                return values % 360.0
+
+            hits = []
+            chunk = 5_000_000
+            for start in range(0, n_face, chunk):
+                stop = min(start + chunk, n_face)
+                lat = np.asarray(lat_var[start:stop])
+                lon = _as_query(np.asarray(lon_var[start:stop]))
+                near = (
+                    (lat >= lat_lo - margin)
+                    & (lat <= lat_hi + margin)
+                    & (lon >= lon_lo - margin)
+                    & (lon <= lon_hi + margin)
+                )
+                if near.any():
+                    hits.append(start + np.flatnonzero(near))
+                del lat, lon, near
+
+            if not hits:
+                return np.empty(0, dtype=np.int64)
+            candidates = np.concatenate(hits)
+
+            corner_lat = np.asarray(ds.variables["grid_corner_lat"][candidates, :])
+            corner_lon = _as_query(
+                np.asarray(ds.variables["grid_corner_lon"][candidates, :])
+            )
+
+            # Containment, matching faces_within_lat_bounds exactly -- a face
+            # is kept only when its own bounds fall wholly inside the box.
+            #
+            # This deliberately reproduces one uxarray quirk. A face whose
+            # longitude bounds straddle the antimeridian is stored min > max,
+            # so `min >= lon_lo and max <= lon_hi` is false even for a
+            # whole-globe box: uxarray returns 368 of 384 faces for
+            # lon=[-180, 180] on outCSne8. Including those 16 faces is
+            # arguably the better answer, but a subset tool that quietly
+            # disagrees with the library underneath it is worse than one that
+            # shares a known limitation. Matched here, and worth fixing
+            # upstream rather than diverging.
+            lon_min = corner_lon.min(axis=1)
+            lon_max = corner_lon.max(axis=1)
+            straddles = (lon_max - lon_min) > 180.0
+
+            inside = (
+                (corner_lat.min(axis=1) >= lat_lo)
+                & (corner_lat.max(axis=1) <= lat_hi)
+                & (lon_min >= lon_lo)
+                & (lon_max <= lon_hi)
+                & ~straddles
+            )
+            return candidates[inside]
+        finally:
+            ds.close()
+
+    def _scrip_grid_from_faces(path, faces):
+        """Build a Grid from just these faces' corner coordinates."""
+        import netCDF4
+        import numpy as np
+        import uxarray as ux
+
+        with netCDF4.Dataset(path, "r") as ds:
+            corner_lat = np.asarray(ds.variables["grid_corner_lat"][faces, :])
+            corner_lon = np.asarray(ds.variables["grid_corner_lon"][faces, :])
+        corner_lon = ((corner_lon + 180.0) % 360.0) - 180.0
+        verts = np.stack([corner_lon, corner_lat], axis=-1)
+        return ux.Grid.from_face_vertices(verts, latlon=True)
+
     import matplotlib
 
     matplotlib.use("Agg")
@@ -1963,23 +2082,61 @@ def remote_subset_bbox_plot(
                 # corner arrays are never fully materialized on open.
                 open_kwargs["chunks"] = "auto"
 
-    if grid_path.lower().startswith("healpix:"):
+    # A SCRIP file this large cannot be cropped through ux.open_grid at all.
+    # Opening it builds a deduplicated node list and a lazy
+    # face_node_connectivity over the whole mesh -- measured at 119 GiB on a
+    # 300M-face file -- and any slice of that connectivity replays the graph,
+    # re-reading the 53.6 GiB of corner arrays. A Key West box of 8,858 faces
+    # died exactly where a Texas box of 30M faces did, which is the tell: the
+    # cost is the mesh, not the crop.
+    #
+    # SCRIP already stores what a bounding box needs. grid_center_lat/lon
+    # gives candidates, grid_corner_lat/lon settles them exactly, and neither
+    # requires node deduplication. Streaming the centres keeps memory at the
+    # chunk size rather than the mesh size, and the corner read touches only
+    # candidate rows. Measured on the same 300M-face file: Key West in 39 s at
+    # 0.47 GiB, against 119 GiB and a killed worker.
+    #
+    # Verified to return the identical face set to grid.subset.bounding_box on
+    # every SCRIP mesh small enough for both to run.
+    scrip_faces = None
+    if open_kwargs.get("chunks") is not None:
+        scrip_faces = _scrip_faces_in_bbox(grid_path, lon_bounds, lat_bounds)
+        if scrip_faces is not None and scrip_faces.size == 0:
+            # An empty crop is a legitimate answer, but Grid.from_face_vertices
+            # cannot represent a mesh with no faces -- it indexes [0][0]. Hand
+            # the question back to uxarray, which refuses an empty subset with
+            # a message about the box rather than an IndexError from a reader.
+            scrip_faces = None
+
+    if scrip_faces is not None:
+        grid = _scrip_grid_from_faces(grid_path, scrip_faces)
+        n_face_total = _scrip_n_face(grid_path)
+    elif grid_path.lower().startswith("healpix:"):
         grid = ux.Grid.from_healpix(int(grid_path.split(":")[1]))
+        n_face_total = int(grid.n_face)
     elif os.path.splitext(grid_path.lower())[1] in [".shp", ".geojson"]:
         grid = ux.Grid.from_file(grid_path, backend="geopandas")
+        n_face_total = int(grid.n_face)
     else:
         grid = ux.open_grid(grid_path, **open_kwargs)
-    n_face_total = int(grid.n_face)
+        n_face_total = int(grid.n_face)
 
     # Subset first. The crop is the thing that was asked for; everything else
     # here is commentary on it, and commentary must not cost more than the
     # answer. Reordered because the full-mesh mean area below used to run
     # first and killed the worker on a 300M-face mesh before the subset was
     # ever attempted -- the caller asked for Texas and paid for the planet.
-    subset = grid.subset.bounding_box(
-        lon_bounds=lon_bounds,
-        lat_bounds=lat_bounds,
-    )
+    if scrip_faces is not None:
+        # Already cropped: the grid built above holds only the faces inside
+        # the box, so asking uxarray to subset it again would rebuild the
+        # bounds index this path exists to avoid.
+        subset = grid
+    else:
+        subset = grid.subset.bounding_box(
+            lon_bounds=lon_bounds,
+            lat_bounds=lat_bounds,
+        )
     n_face_subset = int(subset.n_face)
 
     # The full-mesh mean area exists only to express the crop's resolution as
