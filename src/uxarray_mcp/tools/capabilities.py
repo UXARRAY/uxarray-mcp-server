@@ -7,6 +7,7 @@ import uxarray as ux
 
 from uxarray_mcp.domain import (
     is_healpix_spec,
+    is_remote_uri,
     load_dataset,
     load_grid,
     parse_healpix_zoom,
@@ -95,8 +96,7 @@ def _local_grid_facts(grid_path: str, data_path: Optional[str]) -> Dict[str, Any
             raise RuntimeError(f"Failed to create HEALPix grid: {e}") from e
         grid_format = "HEALPix"
     else:
-        grid_file = Path(grid_path)
-        if not grid_file.exists():
+        if not is_remote_uri(grid_path) and not Path(grid_path).exists():
             raise FileNotFoundError(f"Grid file not found: {grid_path}")
         try:
             grid = load_grid(grid_path)
@@ -112,8 +112,7 @@ def _local_grid_facts(grid_path: str, data_path: Optional[str]) -> Dict[str, Any
     }
 
     if data_path is not None:
-        data_file = Path(data_path)
-        if not data_file.exists():
+        if not is_remote_uri(data_path) and not Path(data_path).exists():
             raise FileNotFoundError(f"Data file not found: {data_path}")
         try:
             uxds = load_dataset(grid_path, data_path)

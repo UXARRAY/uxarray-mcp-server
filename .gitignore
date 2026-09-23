@@ -261,3 +261,8 @@ artifacts/parked-cache-tier/
 artifacts/payload_audit/
 artifacts/repair_ablation/
 evals/tool_retrieval/compare_retrievers.py
+
+# Case-study inputs downloaded from a data archive (GDEX, ESGF, ...). These are
+# gigabyte-scale netCDF files reproducible from the URLs recorded in the case
+# study's methods section, so they are fetched, not tracked.
+data/

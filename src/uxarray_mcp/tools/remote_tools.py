@@ -17,7 +17,11 @@ from uxarray_mcp.content_blocks import (
     resource_link_block,
     text_block,
 )
-from uxarray_mcp.domain.mesh import is_healpix_spec, parse_healpix_zoom
+from uxarray_mcp.domain.mesh import (
+    is_healpix_spec,
+    is_remote_uri,
+    parse_healpix_zoom,
+)
 from uxarray_mcp.json_safe import json_text
 from uxarray_mcp.state import CURRENT_OPERATION, OperationTracker
 
@@ -77,15 +81,17 @@ def _path_is_locally_reachable(path_hint: str | None) -> bool:
     """True when local fallback can plausibly handle ``path_hint``.
 
     Returns True for None (tools without a path, like HEALPix specs handled
-    inside the tool body), pseudo-paths (``healpix:<zoom>``), and any string
-    that exists on the local filesystem. Returns False when the path looks
-    like a real filesystem path that does not exist locally — that is the
-    case where falling back to a local read would surface a misleading
-    ``FileNotFoundError`` instead of the actual endpoint-state problem.
+    inside the tool body), pseudo-paths (``healpix:<zoom>``), remote URIs
+    (which the local path opens through fsspec, so they are reachable from
+    anywhere with network), and any string that exists on the local
+    filesystem. Returns False when the path looks like a real filesystem path
+    that does not exist locally — that is the case where falling back to a
+    local read would surface a misleading ``FileNotFoundError`` instead of
+    the actual endpoint-state problem.
     """
     if path_hint is None:
         return True
-    if is_healpix_spec(path_hint):
+    if is_healpix_spec(path_hint) or is_remote_uri(path_hint):
         return True
     try:
         return Path(path_hint).exists()
