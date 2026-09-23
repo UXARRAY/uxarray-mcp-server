@@ -296,7 +296,9 @@ class TestPlotDatasetReachesBothNewKinds:
         assert isinstance(blocks, list) and blocks
         assert any(b.get("type") == "image" for b in blocks if isinstance(b, dict))
 
-    def test_subset_bbox_without_a_box_is_refused(self, state_dir, structured_mesh_files):
+    def test_subset_bbox_without_a_box_is_refused(
+        self, state_dir, structured_mesh_files
+    ):
         from uxarray_mcp.tools import plot_dataset
 
         grid_file, _ = structured_mesh_files
