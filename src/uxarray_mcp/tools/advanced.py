@@ -20,7 +20,12 @@ from uxarray_mcp.domain.export_fidelity import (
     export_fidelity,
     measure_written_csv,
 )
-from uxarray_mcp.domain.mesh import load_dataset, load_grid
+from uxarray_mcp.domain.mesh import (
+    is_remote_uri,
+    load_dataset,
+    load_grid,
+    open_remote_store,
+)
 from uxarray_mcp.domain.remap_coverage import (
     compute_scattered_coverage,
     compute_target_coverage,
@@ -1500,17 +1505,38 @@ def calculate_temporal_mean(
     data_path: str,
     variable_name: str,
     groupby: str | None = None,
+    time_min: str | None = None,
+    time_max: str | None = None,
     session_id: str | None = None,
     result_name: str | None = None,
 ) -> dict[str, Any]:
-    """Take the time average of a variable over the time dimension (temporal mean / time-mean climatology, optionally grouped by month or season)."""
+    """Take the time average of a variable over the time dimension (temporal mean / time-mean climatology, optionally grouped by month or season).
+
+    ``time_min``/``time_max`` restrict the average to a closed label range
+    (ISO-8601, e.g. ``"1980-01"``/``"1989-12"``) before reducing. Without
+    them the mean covers every step in the file, which is wrong whenever the
+    file -- or an ARCO reference aggregating a whole stream -- spans more
+    than the period of interest.
+    """
     tracker = OperationTracker("calculate_temporal_mean", session_id=session_id)
-    ds = xr.open_dataset(data_path)
+    ds = (
+        open_remote_store(data_path)
+        if is_remote_uri(data_path)
+        else xr.open_dataset(data_path)
+    )
     if variable_name not in ds:
         raise ValueError(f"Variable '{variable_name}' not found in {data_path}.")
     data = ds[variable_name]
     if "time" not in data.dims:
         raise ValueError("Temporal mean requires a variable with a 'time' dimension.")
+    if time_min is not None or time_max is not None:
+        data = data.sel(time=slice(time_min, time_max))
+        if data.sizes.get("time", 0) == 0:
+            raise ValueError(
+                f"No time steps fall in [{time_min}, {time_max}]. The file covers "
+                f"{ds[variable_name]['time'].min().values} to "
+                f"{ds[variable_name]['time'].max().values}."
+            )
     tracker.stage("aggregating", "Computing temporal mean.")
     if groupby is None:
         result_data = data.mean(dim="time")
@@ -1541,6 +1567,8 @@ def calculate_temporal_mean(
             "data_path": data_path,
             "variable_name": variable_name,
             "groupby": groupby,
+            "time_min": time_min,
+            "time_max": time_max,
             "session_id": session_id,
         },
     )

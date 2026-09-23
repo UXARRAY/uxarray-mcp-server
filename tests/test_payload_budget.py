@@ -84,12 +84,27 @@ SIGNAL_FRACTION_FLOOR = 0.30
 #: larger than the ``get_schemas()`` output this used to read. Ratcheted from
 #: 42000 after #146 trimmed ``toolcall_reason`` and the Pydantic ``title``
 #: annotations: 40748 served bytes before the trim, 35475 after.
-TOOL_SPEC_BYTE_BUDGET = 36000
+#:
+#: Raised from 36000 for ``run_analysis``'s ``time_min``/``time_max``; see
+#: RUN_ANALYSIS_SCHEMA_BUDGET below for what the bytes bought. This total is
+#: that schema's growth and nothing else.
+TOOL_SPEC_BYTE_BUDGET = 36200
 
 #: Upper bound for the two largest individual tool schemas (#89). Ratcheted
 #: from 6000/4200 on the same measurement; ``run_analysis`` alone was 5994
 #: served bytes before the trim, six under a budget it was never tested on.
-RUN_ANALYSIS_SCHEMA_BUDGET = 5000
+#:
+#: Raised from 5000 for ``time_min``/``time_max``: ~180 bytes of schema for
+#: the two properties, plus what survives of their prose after the long
+#: version moved to docs/tools.md. The 5000 ratchet left 167 bytes of head
+#: room, so two nullable strings could not be added under it at any prose
+#: length -- the choice was this or no date bound on ``temporal_mean``, which
+#: until now averaged whatever a file happened to contain. An ARCO reference
+#: aggregates an entire output stream, so a ten-year request silently
+#: returned a multi-decade mean: a wrong number wearing the right units,
+#: which is the failure this budget exists to be traded against, not the one
+#: it should win.
+RUN_ANALYSIS_SCHEMA_BUDGET = 5200
 GET_CAPABILITIES_SCHEMA_BUDGET = 3500
 
 

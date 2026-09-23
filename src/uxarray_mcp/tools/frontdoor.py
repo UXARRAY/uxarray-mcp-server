@@ -625,6 +625,8 @@ def run_analysis(
     backend: str = "uxarray",
     yac_method: str | None = None,
     groupby: str | None = None,
+    time_min: str | None = None,
+    time_max: str | None = None,
     baseline: str = "temporal_mean",
     output_path: str | None = None,
     output_format: str = "netcdf",
@@ -665,6 +667,10 @@ def run_analysis(
     ``time_index``/``level_index`` select one slice of a ``(time, lev,
     n_face)`` variable for the derivative and profile operations; each
     reaches only its own kind of axis.
+
+    ``time_min``/``time_max`` bound ``temporal_mean`` to a closed ISO-8601
+    label range; the default averages every step present, which for an ARCO
+    reference is a whole output stream.
 
     ``lat_spec`` for the zonal operations: a number is one latitude, a list
     is explicit latitudes (band edges when ``conservative``). For a regular
@@ -966,6 +972,8 @@ def run_analysis(
             data_path=_require(data_path, "data_path", op),
             variable_name=_require(variable_name, "variable_name", op),
             groupby=groupby,
+            time_min=time_min,
+            time_max=time_max,
             session_id=session_id,
             result_name=result_name,
         )

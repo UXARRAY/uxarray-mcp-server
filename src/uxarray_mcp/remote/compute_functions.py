@@ -1534,7 +1534,131 @@ def remote_temporal_mean_map(
             xr.open_mfdataset(data_paths, combine="by_coords"), uxgrid=_grid
         )
     else:
-        uxds = ux.open_mfdataset(grid_path, data_paths, combine="by_coords")
+        try:
+            uxds = ux.open_mfdataset(grid_path, data_paths, combine="by_coords")
+        except Exception as _direct_error:
+            # The only ne120-class "grid" some archives publish is a remap
+            # *weights* file, which carries the full source mesh under names no
+            # grid reader recognises. Renaming them recovers the mesh. Two
+            # conventions are in circulation and share no variable names:
+            # SCRIP prefixes the plain names with src_, ESMF uses an _a suffix
+            # (xc/yc centers, xv/yv corners, dims n_a/nv_a).
+            #
+            # Inlined rather than imported from uxarray_mcp.domain.mesh because
+            # this function is shipped to a worker that has no uxarray_mcp.
+            # Keep the two copies in step.
+            import xarray as xr
+
+            _CONVENTIONS = {
+                "scrip": (
+                    {"src_grid_corner_lat", "src_grid_corner_lon"},
+                    {
+                        "src_grid_dims": "grid_dims",
+                        "src_grid_center_lat": "grid_center_lat",
+                        "src_grid_center_lon": "grid_center_lon",
+                        "src_grid_corner_lat": "grid_corner_lat",
+                        "src_grid_corner_lon": "grid_corner_lon",
+                        "src_grid_imask": "grid_imask",
+                        "src_grid_area": "grid_area",
+                    },
+                    {
+                        "src_grid_size": "grid_size",
+                        "src_grid_corners": "grid_corners",
+                        "src_grid_rank": "grid_rank",
+                    },
+                ),
+                "esmf": (
+                    {"xv_a", "yv_a"},
+                    {
+                        "src_grid_dims": "grid_dims",
+                        "yc_a": "grid_center_lat",
+                        "xc_a": "grid_center_lon",
+                        "yv_a": "grid_corner_lat",
+                        "xv_a": "grid_corner_lon",
+                        "mask_a": "grid_imask",
+                        "area_a": "grid_area",
+                    },
+                    {
+                        "n_a": "grid_size",
+                        "nv_a": "grid_corners",
+                        "num_vertices": "grid_corners",
+                        "src_grid_rank": "grid_rank",
+                    },
+                ),
+            }
+            try:
+                _peek = xr.open_dataset(grid_path)
+            except Exception:
+                raise _direct_error from None
+            _names = set(_peek.variables)
+            _match = next(
+                (
+                    (var_map, dim_map)
+                    for required, var_map, dim_map in _CONVENTIONS.values()
+                    if required <= _names
+                ),
+                None,
+            )
+            if _match is None:
+                # "Failed to parse uxgrid information" on its own gives the
+                # caller nothing to act on; name what the file actually holds.
+                raise ValueError(
+                    f"{_direct_error} Variables present: {sorted(_names)[:40]}"
+                ) from _direct_error
+            _var_map, _dim_map = _match
+            _rename = {k: v for k, v in _var_map.items() if k in _peek.variables}
+            # Keep only the source grid: the weight arrays (S, row, col) and the
+            # whole destination grid are the bulk of the file and irrelevant to
+            # topology, so dropping them also keeps a remote read small.
+            _src = _peek[list(_rename)].rename(_rename)
+            _dims = {k: v for k, v in _dim_map.items() if k in _src.dims}
+            if _dims:
+                _src = _src.rename_dims(_dims)
+            # SCRIP readers switch on the units attribute to decide whether to
+            # convert from radians. ESMF writes degrees but does not always
+            # label them, and an unlabelled radian assumption would silently
+            # collapse the mesh toward the origin.
+            for _coord in (
+                "grid_center_lat",
+                "grid_center_lon",
+                "grid_corner_lat",
+                "grid_corner_lon",
+            ):
+                if _coord in _src and "units" not in _src[_coord].attrs:
+                    _src[_coord].attrs["units"] = "degrees"
+            _src.attrs["Conventions"] = "SCRIP"
+            _grid = ux.open_grid(_src)
+
+            _ds = xr.open_mfdataset(data_paths, combine="by_coords")
+            # ux.open_dataset renames the model's spatial dim (CAM ncol, MPAS
+            # nCells, ...) to the UGRID name; building a UxDataset by hand
+            # skips that, and the result looks fine until an operation asks
+            # whether a variable is face-centered and is told no. Map by
+            # dimension length, since the source name is model-specific.
+            _sizes = {
+                _n: int(getattr(_grid, _n))
+                for _n in ("n_face", "n_node", "n_edge")
+                if getattr(_grid, _n, None)
+            }
+            _ambiguous = len(set(_sizes.values())) != len(_sizes)
+            _dim_rename = {}
+            for _dim, _length in _ds.sizes.items():
+                if _dim in _sizes:
+                    continue
+                _hits = [_n for _n, _c in _sizes.items() if _c == _length]
+                if not _hits:
+                    continue
+                if _ambiguous and len(_hits) > 1:
+                    # Silently picking one would mislocate the data onto the
+                    # wrong mesh elements, so refuse instead of guessing.
+                    raise ValueError(
+                        f"Cannot map dimension {_dim!r} (length {_length}): the "
+                        f"mesh has equal counts for {_hits}."
+                    )
+                _dim_rename[_dim] = _hits[0]
+            if _dim_rename:
+                _ds = _ds.rename_dims(_dim_rename)
+            uxds = ux.UxDataset(_ds, uxgrid=_grid)
     n_face_total = int(uxds.uxgrid.n_face)
 
     if variable_name not in uxds.data_vars:

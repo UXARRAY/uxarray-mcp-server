@@ -5,7 +5,20 @@ Functions here contain the pure domain logic used by both local tools
 """
 
 from .area import compute_area_stats
-from .mesh import is_healpix_spec, load_dataset, load_grid, parse_healpix_zoom
+from .mesh import (
+    attach_grid,
+    is_healpix_spec,
+    is_kerchunk_reference,
+    is_opendap_uri,
+    is_remote_uri,
+    is_scrip_weights,
+    load_dataset,
+    load_grid,
+    open_grid_object,
+    open_remote_store,
+    parse_healpix_zoom,
+    scrip_grid_from_weights,
+)
 from .mesh_coverage import (
     compute_mesh_coverage,
     mesh_coverage_warning_codes,
@@ -33,6 +46,14 @@ __all__ = [
     "load_grid",
     "load_dataset",
     "is_healpix_spec",
+    "is_remote_uri",
+    "is_opendap_uri",
+    "is_kerchunk_reference",
+    "open_remote_store",
+    "is_scrip_weights",
+    "scrip_grid_from_weights",
+    "open_grid_object",
+    "attach_grid",
     "parse_healpix_zoom",
     "compute_area_stats",
     "compute_mesh_coverage",

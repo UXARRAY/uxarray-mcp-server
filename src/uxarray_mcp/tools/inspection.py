@@ -14,6 +14,7 @@ from uxarray_mcp.domain import (
     compute_zonal_anomaly_stats,
     compute_zonal_mean_stats,
     is_healpix_spec,
+    is_remote_uri,
     load_dataset,
     load_grid,
 )
@@ -79,11 +80,17 @@ def _inspect_mesh_local(file_path: str) -> Dict[str, Any]:
         except Exception as e:
             raise RuntimeError(f"Failed to generate HEALPix mesh: {str(e)}")
 
-    path = Path(file_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Mesh file not found: {file_path}")
+    if is_remote_uri(file_path):
+        # Size is not knowable without a HEAD request, and a byte-range read
+        # never transfers the whole object anyway, so reporting 0.0 here would
+        # be a lie. None says "not measured".
+        file_size_mb = None
+    else:
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Mesh file not found: {file_path}")
 
-    file_size_mb = path.stat().st_size / (1024 * 1024)
+        file_size_mb = path.stat().st_size / (1024 * 1024)
 
     try:
         grid = load_grid(file_path)
@@ -97,7 +104,9 @@ def _inspect_mesh_local(file_path: str) -> Dict[str, Any]:
             "n_node": int(grid.n_node),
             "n_edge": int(grid.n_edge),
             "n_max_face_nodes": int(grid.n_max_face_nodes),
-            "file_size_mb": round(file_size_mb, 2),
+            "file_size_mb": (
+                round(file_size_mb, 2) if file_size_mb is not None else None
+            ),
             "mesh_coverage": compute_mesh_coverage(grid),
             "recommended_next_steps": [
                 call("calculate_area", "grid_path"),
@@ -160,9 +169,13 @@ def _inspect_variable_local(
             "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
         }
     """
-    if not is_healpix_spec(grid_path) and not Path(grid_path).exists():
+    if (
+        not is_healpix_spec(grid_path)
+        and not is_remote_uri(grid_path)
+        and not Path(grid_path).exists()
+    ):
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if not Path(data_path).exists():
+    if not is_remote_uri(data_path) and not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     try:
@@ -241,7 +254,7 @@ def _calculate_area_local(
             "n_face": 40962
         }
     """
-    if not is_healpix_spec(file_path):
+    if not is_healpix_spec(file_path) and not is_remote_uri(file_path):
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Mesh file not found: {file_path}")
@@ -327,9 +340,13 @@ def _calculate_zonal_mean_local(
             "grid_info": {"n_face": 40962, "n_node": 20480, "n_edge": 61440}
         }
     """
-    if not is_healpix_spec(grid_path) and not Path(grid_path).exists():
+    if (
+        not is_healpix_spec(grid_path)
+        and not is_remote_uri(grid_path)
+        and not Path(grid_path).exists()
+    ):
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if not Path(data_path).exists():
+    if not is_remote_uri(data_path) and not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     try:
@@ -427,9 +444,13 @@ def calculate_zonal_anomaly(
     }
 
     def _local() -> Dict[str, Any]:
-        if not is_healpix_spec(grid_path) and not Path(grid_path).exists():
+        if (
+            not is_healpix_spec(grid_path)
+            and not is_remote_uri(grid_path)
+            and not Path(grid_path).exists()
+        ):
             raise FileNotFoundError(f"Grid file not found: {grid_path}")
-        if not Path(data_path).exists():
+        if not is_remote_uri(data_path) and not Path(data_path).exists():
             raise FileNotFoundError(f"Data file not found: {data_path}")
         uxds = load_dataset(grid_path, data_path)
         result = compute_zonal_anomaly_stats(
@@ -512,9 +533,13 @@ def validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
             ]
         }
     """
-    if not is_healpix_spec(grid_path) and not Path(grid_path).exists():
+    if (
+        not is_healpix_spec(grid_path)
+        and not is_remote_uri(grid_path)
+        and not Path(grid_path).exists()
+    ):
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if not Path(data_path).exists():
+    if not is_remote_uri(data_path) and not Path(data_path).exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     try:

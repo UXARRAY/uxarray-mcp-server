@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from uxarray_mcp.domain.mesh import is_healpix_spec
+from uxarray_mcp.domain.mesh import is_healpix_spec, is_remote_uri
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.state import (
     OperationTracker,
@@ -56,9 +56,17 @@ def register_dataset(
     name: str | None = None,
 ) -> dict[str, Any]:
     """Register a grid/data pair in a persistent session."""
-    if not is_healpix_spec(grid_path) and not Path(grid_path).exists():
+    if (
+        not is_healpix_spec(grid_path)
+        and not is_remote_uri(grid_path)
+        and not Path(grid_path).exists()
+    ):
         raise FileNotFoundError(f"Grid file not found: {grid_path}")
-    if data_path is not None and not Path(data_path).exists():
+    if (
+        data_path is not None
+        and not is_remote_uri(data_path)
+        and not Path(data_path).exists()
+    ):
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     dataset = register_dataset_record(

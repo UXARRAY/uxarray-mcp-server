@@ -69,8 +69,9 @@ Common parameters include `grid_path`, `data_path`, `variable_name`,
 `target_grid_path`, `data_path_a`, `data_path_b`, `data_paths`, `lon_bounds`,
 `lat_bounds`, `method`, `backend`, `yac_method`, `remap_to`, `target_lon`,
 `target_lat`, `sphere_radius`, `lat_spec`, `lat_step`, `time_index`,
-`level_index`, `session_id`, and `dataset_handle`. Each operation validates the
-parameters it requires and returns a clear error if one is missing.
+`time_min`, `time_max`, `level_index`, `session_id`, and `dataset_handle`. Each
+operation validates the parameters it requires and returns a clear error if one
+is missing.
 
 **Remap methods and backends.** The three remap operations take `method`.
 `nearest_neighbor`, `inverse_distance_weighted` and `bilinear` run on
@@ -283,6 +284,20 @@ top of the mesh, so it is told to widen, not to move. `cross_section` is the one
 case UXarray already caught: it raises rather than returning empty, and that
 error is turned into the same refusal so the extent reaches the caller. Any
 other error still propagates.
+
+`temporal_mean` takes **`time_min`/`time_max`**, a closed ISO-8601 label range
+(`"1980-01"`, `"1989-12"`) applied before the reduction. Without them the mean
+covers every step present, which is silently wrong whenever the input spans
+more than the period asked for — most sharply for an ARCO (kerchunk/zarr)
+reference, which aggregates a whole output stream, so a request for one decade
+quietly averages several. A range that selects nothing **refuses**, and the
+error names the coverage the file actually has, since "no data" alone leaves
+the caller unable to tell whether the range or the file is wrong. Both bounds
+land in `_provenance.inputs`, so the period behind a number survives into a
+methods section. Note that models often timestamp an averaging interval at its
+**end** (CAM writes monthly means that way), so a decade of monthly output can
+carry a step labelled the following January — check the file's own bounds
+before assuming `time_max="1989-12"` keeps December 1989.
 
 `temporal_mean` and `anomaly` both reduce along `time`, and both return a
 full-length array whatever went in. Both report a **`temporal_coverage`** block
