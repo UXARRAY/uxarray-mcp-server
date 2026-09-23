@@ -15,7 +15,11 @@ hpc:
   # "hpc"   — always require HPC (fail if no endpoint configured)
   execution_mode: "auto"
 
-  timeout_seconds: 300
+  # How long to wait on a remote execution before giving up. The old 300 s
+  # default fired on work that had already succeeded — a ten-year CONUS
+  # precipitation mean runs ~464 s — so the result was thrown away rather
+  # than merely unfinished. Raise it further for whole-ensemble reductions.
+  timeout_seconds: 1800
 
   # ---- Canonical multi-endpoint schema ----
   # Define one or more named endpoints. Tools accept ``endpoint: "<name>"`` to
