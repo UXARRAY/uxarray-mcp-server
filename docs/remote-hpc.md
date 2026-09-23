@@ -252,11 +252,13 @@ cross-checks that remote and local summary statistics agree.
 | `qsub: command not found` (PBS sites) | The endpoint's worker environment doesn't have scheduler commands on `PATH` | Fix in the endpoint's `worker_init` / environment, not on your laptop. |
 | A path is readable in an interactive shell but not from the worker | You typed a login-node shell alias or symlink, not the canonical shared path | Run `readlink -f /path/to/file` and use the resolved path (e.g. the real `/gpfs/...` target). |
 
-For deeper diagnostics:
+For deeper diagnostics from the shell:
 
 ```bash
-uxarray-mcp diagnose-endpoint --endpoint NAME --action validate
+uxarray-mcp doctor --endpoint NAME
 ```
+
+or, from an MCP client, `diagnose_endpoint(endpoint="NAME", action="validate")`.
 
 ---
 

@@ -677,12 +677,9 @@ def enforce(
             }
         )
 
-    if overridden:
-        status = "overridden"
-    elif failed:  # pragma: no cover - unreachable; kept for explicitness
-        status = "failed"
-    else:
-        status = "satisfied"
+    # Every failure without an override raised above, so what remains is
+    # either overridden or clean; there is no third state to name here.
+    status = "overridden" if overridden else "satisfied"
 
     return {
         "status": status,

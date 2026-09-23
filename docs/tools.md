@@ -503,6 +503,8 @@ Supported `plot_type` values:
 - `mesh_geo`
 - `variable`
 - `zonal_mean`
+- `temporal_mean` (alias `mean_map`)
+- `subset_bbox`
 
 Common parameters include `grid_path`, `data_path`, `variable_name`, `width`,
 `height`, `cmap`, `vmin`, `vmax`, `title`, `time_index`, `level_index`,
@@ -553,12 +555,15 @@ silent local fallback would otherwise produce a confusing local
 
 | Supports `use_remote` | Does not (yet) |
 |---|---|
-| `inspect_mesh`, `inspect_variable`, `calculate_area`, `calculate_zonal_mean`, `zonal_anomaly`, `gradient`, `curl`, `divergence`, `azimuthal_mean`, `remap_variable`, `regrid_dataset`, `remap_to_rectilinear` | `validate_dataset`, `subset_bbox`, `subset_polygon`, `cross_section`, `compare_fields`, `bias`, `rmse`, `pattern_correlation`, `temporal_mean`, `anomaly`, `ensemble_mean`, `ensemble_spread`, `export` |
+| `inspect_mesh`, `inspect_variable`, `validate_dataset`, `calculate_area`, `calculate_zonal_mean`, `zonal_anomaly`, `gradient`, `curl`, `divergence`, `azimuthal_mean`, `remap_variable`, `regrid_dataset`, `remap_to_rectilinear` | `subset_bbox`, `subset_polygon`, `cross_section`, `compare_fields`, `bias`, `rmse`, `pattern_correlation`, `temporal_mean`, `anomaly`, `ensemble_mean`, `ensemble_spread`, `export` |
 
 For an operation in the right-hand column, stage the file locally first (or
 run it on a machine that can already read the facility path directly).
-`plot_dataset(plot_type=...)` has the same split: `mesh`, `variable`, and
-`zonal_mean` support `use_remote`; `mesh_geo` does not yet.
+`plot_dataset(plot_type=...)` has the same split: `mesh`, `variable`,
+`zonal_mean`, `temporal_mean`, and `subset_bbox` support `use_remote`;
+`mesh_geo` does not yet. Note the asymmetry: `run_analysis(operation=
+"subset_bbox")` and `"temporal_mean"` are local-only, while the
+`plot_dataset` kinds of the same name crop and render on the worker.
 
 ### `diagnose_endpoint`
 

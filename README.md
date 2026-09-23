@@ -327,7 +327,8 @@ Intent-shaped tools, not raw UXarray bindings — all local by default:
   integral, and it needs YAC importable where the remap runs — build it with
   `scripts/build_yac_local.sh` on a laptop or `scripts/hpc_build_yac.py` on a
   worker, and put its `site-packages` on `PYTHONPATH`.
-- `plot_dataset` — `plot_type` of `mesh`, `mesh_geo`, `variable`, or `zonal_mean`.
+- `plot_dataset` — `plot_type` of `mesh`, `mesh_geo`, `variable`, `zonal_mean`,
+  `temporal_mean`, or `subset_bbox`.
 - `run_workflow`, `resume_workflow`, `get_status`, `get_result`, `manage_session` —
   persisted sessions and multi-step workflows.
 
@@ -392,7 +393,7 @@ auditable and the server actively flags common scientific pitfalls:
 | Command | Purpose |
 |---|---|
 | `uxarray-mcp serve` | Run the MCP server (used by your AI client); `--profile core\|deferred-full`, `--transport stdio\|sse\|http` — see [docs/serving.md](docs/serving.md) |
-| `uxarray-mcp openapi` | Print the OpenAPI document for the HTTP transport |
+| `uxarray-mcp openapi` | Run the OpenAPI/REST server (`--host`, `--port`, `--profile`) |
 | `uxarray-mcp setup` | Write a starter config |
 | `uxarray-mcp endpoints add NAME UUID` | Register a Globus Compute endpoint |
 | `uxarray-mcp endpoints list` / `remove NAME` | Show or drop configured endpoints |
