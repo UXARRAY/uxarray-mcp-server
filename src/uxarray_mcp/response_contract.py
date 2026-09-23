@@ -241,7 +241,7 @@ _CONTRACTS: dict[str, dict[str, Any]] = {
 #:
 #: The ``remote_*`` entries are the same operation run on a worker, and the
 #: contract is about what the caller receives, not where it was computed.
-#: Without them ``_has_contract`` was false for every HPC result, so
+#: Without them ``_contract_name`` was ``None`` for every HPC result, so
 #: ``attach_provenance`` skipped the required ``operation`` field and
 #: ``validate_response`` returned ``verdict: malformed_envelope`` for a reply
 #: whose science was fine. An SDK validating ``structuredContent`` against

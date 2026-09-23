@@ -153,11 +153,6 @@ def _contract_name(tool: str) -> str | None:
         return None
 
 
-def _has_contract(tool: str) -> bool:
-    """Whether this operation declares a response contract."""
-    return _contract_name(tool) is not None
-
-
 def attach_scientific_status(
     result: dict[str, Any],
     *,

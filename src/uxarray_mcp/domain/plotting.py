@@ -31,7 +31,7 @@ from typing import Any
 
 import matplotlib
 
-from uxarray_mcp.domain.dims import face_slice_selection
+from uxarray_mcp.domain.dims import face_slice_selection, reduce_to_face
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -356,23 +356,6 @@ def render_mesh_geo(
     return png_bytes, render_info
 
 
-def _reduce_to_face(
-    uxda: Any, time_index: int = 0, level_index: int = 0
-) -> tuple[Any, dict[str, dict[str, Any]]]:
-    """Squeeze or isel any non-face extra dims so uxda is 1-D face-centered.
-
-    Returns ``(reduced_array, reduced_dims)``. Each dimension is collapsed
-    according to what it is -- see :mod:`uxarray_mcp.domain.dims`; a vertical
-    axis is not a time axis and must not be indexed with ``time_index``.
-    """
-    selection, reduced = face_slice_selection(
-        uxda.sizes, time_index=time_index, level_index=level_index
-    )
-    if not selection:
-        return uxda, reduced
-    return uxda.isel(**selection), reduced
-
-
 def describe_reduction(
     uxda: Any, time_index: int = 0, level_index: int = 0
 ) -> dict[str, dict[str, Any]]:
@@ -432,7 +415,9 @@ def render_variable(
 
     # Reduce first: the open end of a one-sided vmin/vmax must come from the
     # slice actually being drawn, not from the whole multi-time-step array.
-    uxda, _reduced = _reduce_to_face(uxda, time_index, level_index)
+    uxda, _reduced = reduce_to_face(
+        uxda, time_index=time_index, level_index=level_index
+    )
 
     kwargs: dict[str, Any] = {"backend": "matplotlib", "cmap": cmap}
     if vmin is not None:

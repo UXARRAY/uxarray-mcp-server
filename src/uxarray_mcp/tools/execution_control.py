@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List
@@ -13,6 +11,12 @@ import yaml
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.config import normalize_execution_mode
 from uxarray_mcp.state import OperationTracker
+
+# One copy of the sync bridge, not two. This module used to carry its own
+# ``_run_sync`` that did not copy the contextvars into the worker thread, so a
+# probe made from inside the MCP server's loop lost the tracker that records
+# its operation handle. remote_tools owns the version that carries the context.
+from uxarray_mcp.tools.remote_tools import _run_sync
 
 _VALID_MODES = ("local", "hpc", "auto")
 _CONFIG_PATH: Path | None = None
@@ -272,17 +276,6 @@ def _exception_details(exc: Exception) -> Dict[str, Any]:
         details["context_repr"] = repr(context)
 
     return details
-
-
-def _run_sync(awaitable_factory) -> Dict[str, Any]:
-    """Run an async call from sync code in CLI and server contexts."""
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(awaitable_factory())
-
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        return pool.submit(lambda: asyncio.run(awaitable_factory())).result()
 
 
 def probe_path_access(

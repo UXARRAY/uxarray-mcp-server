@@ -197,7 +197,6 @@ class HPCConfig:
         # part of the type rather than an attribute that appears out of
         # nowhere on some instances and not others.
         self.routed_by_default_guess: bool = False
-        self.routed_path: str | None = None
 
     @property
     def has_endpoint(self) -> bool:
@@ -314,7 +313,6 @@ class HPCConfig:
         scoped.routed_by_default_guess = bool(
             path and getattr(self, "_last_route_was_guess", False)
         )
-        scoped.routed_path = path
         return scoped
 
 

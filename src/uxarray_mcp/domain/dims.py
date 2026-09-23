@@ -83,3 +83,28 @@ def face_slice_selection(
         reduced[name] = {"kind": kind, "index": index, "size": size}
 
     return selection, reduced
+
+
+def reduce_to_face(
+    var: Any,
+    *,
+    time_index: int = 0,
+    level_index: int = 0,
+) -> tuple[Any, dict[str, dict[str, Any]]]:
+    """Select a single time/level slice so ``var`` is 1-D face-centered.
+
+    Applies :func:`face_slice_selection` to ``var.sizes`` and performs the
+    ``isel``. Returns ``(reduced_var, reduced_dims)``; the second element
+    names every axis that was collapsed, the index used, and how many were
+    available, because a derivative or a map from one level of a 40-level
+    field is not the field's, and the caller cannot tell from the numbers.
+
+    Shared by plotting and vector calculus so the two cannot disagree about
+    what ``time_index`` and ``level_index`` reach.
+    """
+    selection, reduced = face_slice_selection(
+        var.sizes, time_index=time_index, level_index=level_index
+    )
+    if not selection:
+        return var, reduced
+    return var.isel(**selection), reduced

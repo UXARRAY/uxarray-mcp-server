@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings as _warnings_module
 from typing import Any, Callable, TypeVar
 
-from uxarray_mcp.domain.dims import face_slice_selection
+from uxarray_mcp.domain.dims import reduce_to_face
 from uxarray_mcp.domain.profile_coverage import compute_profile_coverage
 from uxarray_mcp.domain.zonal import extract_profile
 
@@ -49,39 +49,6 @@ _VELOCITY_LIKE_UNIT_HINTS = (
     "pa/s",
     "n/m2",
 )
-
-
-def _reduce_to_face(
-    var: Any,
-    *,
-    time_index: int = 0,
-    level_index: int = 0,
-) -> tuple[Any, dict]:
-    """Select a single time/level slice so ``var`` is 1-D face-centered.
-
-    UXarray's vector-calculus operators (``.curl()``, ``.divergence()``,
-    ``.gradient()``) require a single face-centered dimension with no leading
-    time/level/ensemble axes. Real model output almost always carries at
-    least a time dimension, and 3-D fields (e.g. atmospheric wind) also carry
-    a vertical dimension, so gateway tools take explicit ``time_index`` /
-    ``level_index`` selectors rather than requiring the caller to pre-slice
-    the file themselves.
-
-    Any extra dimension not recognized as time-like or level-like, and not
-    size-1, is squeezed via index 0.
-
-    Returns ``(reduced_var, reduced_dims)``. The second element names every
-    axis that was collapsed, the index used, and how many were available --
-    a derivative computed from one level of a 40-level field is not the
-    field's derivative, and the caller cannot tell the difference from the
-    numbers alone.
-    """
-    selection, reduced = face_slice_selection(
-        var.sizes, time_index=time_index, level_index=level_index
-    )
-    if not selection:
-        return var, reduced
-    return var.isel(**selection), reduced
 
 
 def _vector_component_warnings(
@@ -252,7 +219,7 @@ def compute_gradient(
             f"Variable '{variable_name}' is not face-centered. "
             "Gradient requires face-centered data."
         )
-    var, reduced_dims = _reduce_to_face(
+    var, reduced_dims = reduce_to_face(
         var, time_index=time_index, level_index=level_index
     )
     radius_basis = _apply_sphere_radius(uxds, sphere_radius)
@@ -367,8 +334,8 @@ def compute_curl(
                 f"Variable '{name}' is not face-centered. "
                 "Curl requires face-centered vector components."
             )
-    u, u_reduced = _reduce_to_face(u, time_index=time_index, level_index=level_index)
-    v, v_reduced = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    u, u_reduced = reduce_to_face(u, time_index=time_index, level_index=level_index)
+    v, v_reduced = reduce_to_face(v, time_index=time_index, level_index=level_index)
     # Both components are sliced the same way whenever they share dims, which
     # is the normal case; merging covers the mismatched one rather than
     # reporting only whatever u happened to have.
@@ -497,8 +464,8 @@ def compute_divergence(
                 f"Variable '{name}' is not face-centered. "
                 "Divergence requires face-centered vector components."
             )
-    u, u_reduced = _reduce_to_face(u, time_index=time_index, level_index=level_index)
-    v, v_reduced = _reduce_to_face(v, time_index=time_index, level_index=level_index)
+    u, u_reduced = reduce_to_face(u, time_index=time_index, level_index=level_index)
+    v, v_reduced = reduce_to_face(v, time_index=time_index, level_index=level_index)
     reduced_dims = {**u_reduced, **v_reduced}
 
     import numpy as np

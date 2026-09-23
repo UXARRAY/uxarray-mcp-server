@@ -3150,7 +3150,7 @@ def remote_calculate_gradient(
         )
 
     # Select a single time/level slice so gradient() sees 1-D face-centered
-    # data, mirroring the local domain.vector_calc._reduce_to_face behavior.
+    # data, mirroring the local domain.dims.reduce_to_face behavior.
     # Inlined (not imported) since this function is serialized whole and
     # shipped to Globus Compute workers.
     _face_dims = {"n_face", "nCells"}
@@ -3354,7 +3354,7 @@ def remote_calculate_curl(
             )
 
     # Select a single time/level slice so curl() sees 1-D face-centered data,
-    # mirroring the local domain.vector_calc._reduce_to_face behavior.
+    # mirroring the local domain.dims.reduce_to_face behavior.
     # Inlined (not imported) since this function is serialized whole and
     # shipped to Globus Compute workers.
     _face_dims = {"n_face", "nCells"}
@@ -3591,7 +3591,7 @@ def remote_calculate_divergence(
             )
 
     # Select a single time/level slice so divergence() sees 1-D face-centered
-    # data, mirroring the local domain.vector_calc._reduce_to_face behavior.
+    # data, mirroring the local domain.dims.reduce_to_face behavior.
     # Inlined (not imported) since this function is serialized whole and
     # shipped to Globus Compute workers.
     _face_dims = {"n_face", "nCells"}
