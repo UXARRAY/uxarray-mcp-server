@@ -97,7 +97,7 @@ class TestAnEmptySelectionIsAnError:
     def test_the_error_names_the_coverage_the_file_actually_has(
         self, two_decade_series
     ):
-        """"No data" alone leaves the caller guessing whether the range or the
+        """ "No data" alone leaves the caller guessing whether the range or the
         file is wrong. The message must show what is there.
         """
         with pytest.raises(ValueError) as excinfo:

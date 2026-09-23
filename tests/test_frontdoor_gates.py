@@ -105,7 +105,9 @@ class TestVerdictPolicyIsValidatedBeforeAnyWork:
                 assert check["caller_must_supply"] == ["residual", "passed"]
         assert block["independent_verification"] is (policy == "reference_only")
 
-    def test_the_policy_survives_a_dash_spelling(self, state_dir, structured_mesh_files):
+    def test_the_policy_survives_a_dash_spelling(
+        self, state_dir, structured_mesh_files
+    ):
         grid_file, _ = structured_mesh_files
         result = run_analysis(
             operation="calculate_area",
@@ -121,7 +123,14 @@ class TestPlotKindsRefuseWhatTheyCannotHonor:
         with pytest.raises(ValueError) as excinfo:
             plot_dataset(plot_type="hexbin", grid_path="x.nc")
         message = str(excinfo.value)
-        for kind in ("mesh", "mesh_geo", "variable", "zonal_mean", "temporal_mean", "subset_bbox"):
+        for kind in (
+            "mesh",
+            "mesh_geo",
+            "variable",
+            "zonal_mean",
+            "temporal_mean",
+            "subset_bbox",
+        ):
             assert kind in message
 
     def test_mesh_refuses_a_box_and_names_the_kind_that_crops(self):
@@ -205,7 +214,14 @@ class TestManageSessionActions:
         with pytest.raises(ValueError) as excinfo:
             manage_session(action="destroy")
         message = str(excinfo.value)
-        for action in ("create", "register_dataset", "get", "reset", "list_operations", "dataset"):
+        for action in (
+            "create",
+            "register_dataset",
+            "get",
+            "reset",
+            "list_operations",
+            "dataset",
+        ):
             assert action in message
 
     def test_the_action_is_normalised(self, state_dir):
@@ -215,7 +231,9 @@ class TestManageSessionActions:
 
 
 class TestGetStatusKinds:
-    def test_operation_status_after_a_tracked_call(self, state_dir, structured_mesh_files):
+    def test_operation_status_after_a_tracked_call(
+        self, state_dir, structured_mesh_files
+    ):
         grid_file, _ = structured_mesh_files
         result = run_analysis(operation="inspect_mesh", grid_path=grid_file)
         operation_id = result["_provenance"]["operation_id"]
