@@ -89,20 +89,34 @@ def remote_runtime_probe() -> Dict[str, Any]:
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -198,20 +212,34 @@ def remote_probe_path(file_path: str, inspect_netcdf: bool = True) -> Dict[str, 
         ).version("uxarray-mcp"),
         "mcp_server_commit": (
             lambda _d: (
-                __import__("subprocess")
-                .run(
-                    ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                    capture_output=True,
-                    text=True,
+                (
+                    __import__("subprocess")
+                    .run(
+                        [
+                            "git",
+                            "-C",
+                            __import__("os").path.dirname(_d),
+                            "rev-parse",
+                            "--short",
+                            "HEAD",
+                        ],
+                        capture_output=True,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    or "unknown"
                 )
-                .stdout.strip()
-                or "unknown"
+                if _d
+                else "unknown"
             )
         )(
             str(
-                __import__("importlib.metadata", fromlist=["distribution"])
-                .distribution("uxarray-mcp")
-                .locate_file("")
+                getattr(
+                    __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                    "origin",
+                    "",
+                )
+                or ""
             )
         ),
         "peak_rss_gib": round(
@@ -434,20 +462,34 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
                 ).version("uxarray-mcp"),
                 "mcp_server_commit": (
                     lambda _d: (
-                        __import__("subprocess")
-                        .run(
-                            ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                            capture_output=True,
-                            text=True,
+                        (
+                            __import__("subprocess")
+                            .run(
+                                [
+                                    "git",
+                                    "-C",
+                                    __import__("os").path.dirname(_d),
+                                    "rev-parse",
+                                    "--short",
+                                    "HEAD",
+                                ],
+                                capture_output=True,
+                                text=True,
+                            )
+                            .stdout.strip()
+                            or "unknown"
                         )
-                        .stdout.strip()
-                        or "unknown"
+                        if _d
+                        else "unknown"
                     )
                 )(
                     str(
-                        __import__("importlib.metadata", fromlist=["distribution"])
-                        .distribution("uxarray-mcp")
-                        .locate_file("")
+                        getattr(
+                            __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                            "origin",
+                            "",
+                        )
+                        or ""
                     )
                 ),
                 "peak_rss_gib": round(
@@ -542,20 +584,34 @@ def remote_validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -770,20 +826,34 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -915,20 +985,34 @@ def remote_inspect_variable(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -1049,20 +1133,34 @@ def remote_plot_mesh(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -1265,20 +1363,34 @@ def remote_plot_variable(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -1665,20 +1777,34 @@ def remote_temporal_mean_map(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -1843,20 +1969,34 @@ def remote_plot_zonal_mean(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -2013,20 +2153,34 @@ def remote_calculate_zonal_mean(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -2532,20 +2686,34 @@ def remote_subset_bbox_plot(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -2755,20 +2923,34 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -2962,20 +3144,34 @@ def remote_calculate_gradient(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -3185,20 +3381,34 @@ def remote_calculate_curl(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -3403,20 +3613,34 @@ def remote_calculate_divergence(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -3555,20 +3779,34 @@ def remote_calculate_azimuthal_mean(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -3655,20 +3893,34 @@ def remote_grid_facts(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -3915,20 +4167,34 @@ def remote_remap_variable(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -4140,20 +4406,34 @@ def remote_regrid_dataset(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -4335,20 +4615,34 @@ def remote_remap_to_rectilinear(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
@@ -4449,20 +4743,34 @@ def remote_calculate_zonal_anomaly(
             ).version("uxarray-mcp"),
             "mcp_server_commit": (
                 lambda _d: (
-                    __import__("subprocess")
-                    .run(
-                        ["git", "-C", _d, "rev-parse", "--short", "HEAD"],
-                        capture_output=True,
-                        text=True,
+                    (
+                        __import__("subprocess")
+                        .run(
+                            [
+                                "git",
+                                "-C",
+                                __import__("os").path.dirname(_d),
+                                "rev-parse",
+                                "--short",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                        )
+                        .stdout.strip()
+                        or "unknown"
                     )
-                    .stdout.strip()
-                    or "unknown"
+                    if _d
+                    else "unknown"
                 )
             )(
                 str(
-                    __import__("importlib.metadata", fromlist=["distribution"])
-                    .distribution("uxarray-mcp")
-                    .locate_file("")
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
                 )
             ),
             "peak_rss_gib": round(
