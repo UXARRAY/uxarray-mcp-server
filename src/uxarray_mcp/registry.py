@@ -662,6 +662,46 @@ def _trim_wire_schema(tool: Any) -> None:
         params["required"] = [r for r in required if r != "toolcall_reason"]
 
     _drop_title_annotations(params)
+    _type_untyped_unions(params)
+
+
+#: JSON Schema for parameters whose Python annotation toolregistry cannot
+#: express. ``tuple | float | list[Any] | None`` comes out as ``{"default":
+#: null}`` -- no ``type`` at all -- and ``float | list[float] | None`` as
+#: ``{"type": "number"}``, which drops the list. A client reading the first
+#: has nothing to go on and sends the literal text ``"[-60, 60]"``, which
+#: the server's own validator then refuses as neither number nor list. The
+#: parameter was unusable from every MCP client, while direct Python calls
+#: and every test passed. Found on the first remote zonal mean through a
+#: real client.
+_UNTYPED_UNION_SCHEMAS: dict[str, dict[str, Any]] = {
+    "lat_spec": {
+        "anyOf": [
+            {"type": "number"},
+            {"type": "array", "items": {"type": "number"}},
+        ]
+    },
+}
+
+
+def _type_untyped_unions(schema: Any) -> None:
+    """Give a JSON type to union parameters upstream rendered without one.
+
+    Only fills a property that has neither ``type`` nor ``anyOf``; a future
+    toolregistry that renders the union itself makes this a no-op.
+    """
+    if not isinstance(schema, dict):
+        return
+    props = schema.get("properties")
+    if not isinstance(props, dict):
+        return
+    for name, spec in props.items():
+        fix = _UNTYPED_UNION_SCHEMAS.get(name)
+        if fix is None or not isinstance(spec, dict):
+            continue
+        if "type" in spec or "anyOf" in spec:
+            continue
+        spec.update(fix)
 
 
 def _drop_title_annotations(schema: Any) -> None:

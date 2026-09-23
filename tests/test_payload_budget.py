@@ -88,7 +88,10 @@ SIGNAL_FRACTION_FLOOR = 0.30
 #: Raised from 36000 for ``run_analysis``'s ``time_min``/``time_max``; see
 #: RUN_ANALYSIS_SCHEMA_BUDGET below for what the bytes bought. This total is
 #: that schema's growth and nothing else.
-TOOL_SPEC_BYTE_BUDGET = 36200
+#:
+#: Raised from 36200 to type ``lat_spec`` (``anyOf`` number | array) on both
+#: ``run_analysis`` and ``plot_dataset``: 79 bytes each. Measured 36271.
+TOOL_SPEC_BYTE_BUDGET = 36300
 
 #: Upper bound for the two largest individual tool schemas (#89). Ratcheted
 #: from 6000/4200 on the same measurement; ``run_analysis`` alone was 5994
@@ -104,7 +107,13 @@ TOOL_SPEC_BYTE_BUDGET = 36200
 #: returned a multi-decade mean: a wrong number wearing the right units,
 #: which is the failure this budget exists to be traded against, not the one
 #: it should win.
-RUN_ANALYSIS_SCHEMA_BUDGET = 5200
+#:
+#: Raised from 5200 for ``lat_spec``'s JSON type. Upstream renders the union
+#: with no ``type`` at all, and a client with nothing to follow sends the
+#: literal text "[-60, 60]", which the validator refuses. 79 bytes buys a
+#: parameter that works from an MCP client instead of only from Python.
+#: Measured 5236.
+RUN_ANALYSIS_SCHEMA_BUDGET = 5250
 GET_CAPABILITIES_SCHEMA_BUDGET = 3500
 
 
