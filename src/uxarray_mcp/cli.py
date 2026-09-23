@@ -25,6 +25,7 @@ from typing import Any
 import yaml
 
 from uxarray_mcp.remote.config import (
+    DEFAULT_TIMEOUT_SECONDS,
     USER_CONFIG_PATH,
     discover_config_path,
     discover_config_search_paths,
@@ -112,7 +113,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     starter: dict[str, Any] = {
         "hpc": {
             "execution_mode": args.execution_mode,
-            "timeout_seconds": 300,
+            "timeout_seconds": DEFAULT_TIMEOUT_SECONDS,
             "default_endpoint": None,
             "endpoints": {},
         }

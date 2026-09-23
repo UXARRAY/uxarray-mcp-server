@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from uxarray_mcp.remote.agent import UXarrayComputeAgent
-from uxarray_mcp.remote.config import EndpointProfile, HPCConfig, load_config
+from uxarray_mcp.remote.config import (
+    DEFAULT_TIMEOUT_SECONDS,
+    EndpointProfile,
+    HPCConfig,
+    load_config,
+)
 
 try:
     import academy  # noqa: F401
@@ -66,7 +71,10 @@ class TestHPCConfig:
         config = load_config(config_file)
         assert config.endpoint_id is None
         assert config.execution_mode == "local"
-        assert config.timeout_seconds == 300
+        # Asserted against the constant, not a literal: the point is that an
+        # empty file inherits the shipped default, and pinning the number here
+        # again only guarantees a second place to forget to change.
+        assert config.timeout_seconds == DEFAULT_TIMEOUT_SECONDS
 
     def test_config_load_named_endpoints(self, tmp_path):
         """Named endpoint profiles are loaded and selected explicitly."""

@@ -12,6 +12,21 @@ import yaml
 
 USER_CONFIG_PATH = Path.home() / ".config" / "uxarray-mcp" / "config.yaml"
 
+#: How long to wait on a remote execution before giving up.
+#:
+#: The old default of 300 s was below the cost of an ordinary science request:
+#: the ten-year CONUS precipitation mean in docs/demo-gdex-conus-precip.md runs
+#: 464 s, so it raised "timed out after 300 seconds" *after* the worker had
+#: already done the work — the result was discarded, not unfinished. A timeout
+#: that fires on correct, completed work teaches users to raise it blindly, so
+#: the default now sits above a realistic multi-decade reduction. It is still a
+#: bound, not an absence of one: a genuinely stuck job fails within the hour.
+#:
+#: This governs *remote* (Globus Compute) dispatch only. The separate limit on
+#: how long an MCP tool call may take belongs to the MCP client, not to this
+#: server, and cannot be raised from here.
+DEFAULT_TIMEOUT_SECONDS = 1800
+
 
 def discover_config_path() -> Path | None:
     """Return the first existing config file in the discovery order.
@@ -165,7 +180,7 @@ class HPCConfig:
         self,
         endpoint_id: Optional[str] = None,
         execution_mode: str = "local",
-        timeout_seconds: int = 300,
+        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         endpoints: dict[str, EndpointProfile] | None = None,
         default_endpoint: str | None = None,
         endpoint_name: str | None = None,
@@ -436,7 +451,7 @@ def load_config(config_path: Optional[Path] = None) -> HPCConfig:
     return HPCConfig(
         endpoint_id=endpoint_id,
         execution_mode=hpc_config.get("execution_mode", "local"),
-        timeout_seconds=hpc_config.get("timeout_seconds", 300),
+        timeout_seconds=hpc_config.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS),
         endpoints=endpoints,
         default_endpoint=default_endpoint,
         endpoint_name=endpoint_name,
