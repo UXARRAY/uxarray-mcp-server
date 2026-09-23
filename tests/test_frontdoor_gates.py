@@ -345,3 +345,62 @@ class TestRemoteUrisPassTheToolGuardsIntact:
         assert _path_is_locally_reachable("healpix:3")
         assert _path_is_locally_reachable(None)
         assert not _path_is_locally_reachable("/nonexistent/grid.nc")
+
+
+class TestLatSpecHasAWireType:
+    """``lat_spec`` reached clients with no JSON type at all.
+
+    toolregistry renders ``tuple | float | list[Any] | None`` as
+    ``{"default": null}``. A client with no type to follow sends the literal
+    text ``"[-60, 60]"``, and the server's validator refuses it as neither a
+    number nor a list -- so the parameter worked from Python and from every
+    test, and from no MCP client. The served schema must say what it is,
+    and a JSON array must get through the registry's own validation.
+    """
+
+    @pytest.fixture(scope="class")
+    def served(self):
+        from toolregistry_server.route_table import RouteTable
+
+        from uxarray_mcp.app import make_registry
+
+        registry = make_registry(profile="core")
+        routes = {r.tool_name: r for r in RouteTable(registry).list_routes()}
+        return registry, routes
+
+    @pytest.mark.parametrize("tool", ["run_analysis", "plot_dataset"])
+    def test_the_served_schema_names_number_or_array(self, served, tool):
+        _, routes = served
+        spec = routes[tool].parameters_schema["properties"]["lat_spec"]
+        kinds = {v.get("type") for v in spec["anyOf"]}
+        assert kinds == {"number", "array"}, spec
+
+    def test_a_json_array_survives_registry_validation(self, served, state_dir):
+        import json
+
+        registry, _ = served
+        # Bogus grid path: if validation passes, the tool body raises a
+        # FileNotFoundError about the file, not a schema error about lat_spec.
+        result = registry.execute_tool_calls(
+            [
+                {
+                    "id": "c1",
+                    "function": {
+                        "name": "run_analysis",
+                        "arguments": json.dumps(
+                            {
+                                "operation": "calculate_zonal_mean",
+                                "grid_path": "/nonexistent/grid.nc",
+                                "data_path": "/nonexistent/data.nc",
+                                "variable_name": "t",
+                                "lat_spec": [-60, 60],
+                                "lat_step": 30,
+                            }
+                        ),
+                    },
+                }
+            ]
+        )
+        text = str(getattr(result["c1"], "result", result["c1"]))
+        assert "validation error" not in text.lower(), text
+        assert "lat_spec" not in text, text
