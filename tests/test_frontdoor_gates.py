@@ -141,6 +141,20 @@ class TestPlotKindsRefuseWhatTheyCannotHonor:
         with pytest.raises(ValueError, match="cannot honor"):
             plot_dataset(plot_type="mesh", grid_path="x.nc", lat_bounds=[0, 10])
 
+    def test_mesh_refuses_a_title_rather_than_dropping_it(self):
+        # plot_mesh renders through holoviews and has no title argument, so
+        # one passed here went nowhere: the PNG came back correct and
+        # unlabelled, with nothing saying the title had been ignored.
+        with pytest.raises(ValueError, match="cannot set a"):
+            plot_dataset(plot_type="mesh", grid_path="x.nc", title="anything")
+
+    def test_mesh_without_a_title_still_reaches_plot_mesh(self):
+        # The guard must not fire on the default. Reaching plot_mesh means
+        # failing on the missing file, not on the title check.
+        with pytest.raises(Exception) as excinfo:
+            plot_dataset(plot_type="mesh", grid_path="x.nc")
+        assert "cannot set a" not in str(excinfo.value)
+
     def test_variable_refuses_a_box_and_names_temporal_mean(self):
         with pytest.raises(ValueError, match="plot_type='temporal_mean'"):
             plot_dataset(

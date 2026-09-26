@@ -6,6 +6,42 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
 
+## 2026.9.1 — 2026-09-25
+### Changed
+- Floors `uxarray[geo,viz]>=2026.9.1`. Upstream 2026.9.1 moved cartopy,
+  healpix, hvplot, geopandas and the rest of the plotting and geospatial
+  stack out of uxarray's required dependencies and into extras
+  (UXARRAY/uxarray#1548). This server imports cartopy directly in four
+  modules, opens `healpix:<zoom>` grids in most tools, and renders through
+  hvplot, all of which arrived transitively before and would have gone
+  missing on the next resolve. Installing 2026.9.1 without the extras fails
+  95 tests with `OptionalDependencyNotFoundError`. `prepare_release.py` now
+  reads the extras out of the shipped pin rather than assuming there are
+  none, so an automated release cannot silently drop them.
+- The floor also picks up upstream's dask-native SCRIP corner dedup
+  (UXARRAY/uxarray#1775), which is what lets a SCRIP grid larger than memory
+  open with `chunks=` at all: the 300M-face CONUS RRM grid went from a failed
+  computation to a complete connectivity build. The server's own SCRIP guards
+  in `remote_subset_bbox_plot` and its siblings are unchanged.
+
+### Fixed
+- `plot_dataset(plot_type="mesh", title=...)` refuses instead of dropping the
+  title. `plot_mesh` renders through holoviews and has no title argument, so
+  the PNG came back correct and unlabelled with nothing saying the title had
+  been ignored — the same shape of defect as the bounding box that branch
+  already refuses. Found on a live UCAR worker.
+- The daily release workflow deselects `yac`-marked tests, as `ci.yml`
+  already does. It does not build YAC, and those tests are marked rather than
+  `importorskip`ed precisely so a missing YAC is a visible deselection, so
+  they failed there every run. That blocked every release from 2026-09-20 on
+  and opened six identical "blocked by uxarray 2026.9.0" issues, none of
+  which named a real upstream incompatibility. The `lon_0` failures in the
+  same runs were real, and are fixed by the floor above
+  (UXARRAY/uxarray#1771, cartopy 0.26).
+- Two `test_upstream_roundtrip` cases asserted an upstream defect that
+  UXARRAY/uxarray#1751 has now fixed, one of them as a strict xfail. They
+  assert the fixed behaviour and would catch a regression.
+
 ## 2026.9.0 — 2026-09-12
 ### Added
 - YAC remapping is reachable. `docs/ucar.md` has said since the endpoint was

@@ -1,6 +1,6 @@
 [project]
 name = "uxarray-mcp"
-version = "2026.9.0"
+version = "2026.9.1"
 description = "MCP server for analyzing unstructured meshes with UXarray"
 readme = "README.md"
 keywords = ["uxarray", "mcp", "unstructured grids", "scientific computing", "globus compute"]
@@ -63,7 +63,15 @@ dependencies = [
     # floor we actually declare, and had failed on it every run since
     # 2026-08-10.
     "pyyaml>=6.0.1",
-    "uxarray>=2026.9.0,<2026.10",
+    # `[geo,viz]`, not a bare `uxarray`. 2026.9.1 moved cartopy, healpix,
+    # hvplot, geopandas and the rest out of uxarray's required set and into
+    # extras (UXARRAY/uxarray#1548). This server imports cartopy directly in
+    # four modules, opens `healpix:<zoom>` grids in most tools, and renders
+    # through hvplot, so it needs both groups; they arrived transitively
+    # before and would have gone missing silently on the next resolve.
+    # Installing 2026.9.1 without them fails 95 tests with
+    # OptionalDependencyNotFoundError.
+    "uxarray[geo,viz]>=2026.9.1,<2026.10",
 ]
 
 [project.optional-dependencies]
