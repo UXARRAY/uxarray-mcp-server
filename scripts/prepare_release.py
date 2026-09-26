@@ -126,15 +126,27 @@ def _next_version(base: str, upstream: str) -> str:
     return f"{up_year}.{up_month}.0"
 
 
+def _current_uxarray_extras() -> str:
+    """The `[geo,viz]` part of the shipped pin, or `""` if it carries none.
+
+    Read rather than hardcoded so that adding or dropping an extra is a
+    pyproject edit alone. Rewriting the pin without it would silently drop
+    the extras on the next automated release, and uxarray 2026.9.1 moved
+    cartopy, healpix and hvplot behind them.
+    """
+    match = re.search(r'"uxarray(\[[^\]]*\])?>=', PYPROJECT.read_text())
+    return match.group(1) if match and match.group(1) else ""
+
+
 def _uxarray_pin(upstream: str) -> str:
     """The pin a release against `upstream` should carry, both ends moved."""
     year, month, _ = _parse_version(upstream)
     ceiling = f"{year + 1}.1" if month == 12 else f"{year}.{month + 1}"
-    return f"uxarray>={upstream},<{ceiling}"
+    return f"uxarray{_current_uxarray_extras()}>={upstream},<{ceiling}"
 
 
 def _current_uxarray_floor() -> str | None:
-    match = re.search(r'"uxarray>=([^",<]+)', PYPROJECT.read_text())
+    match = re.search(r'"uxarray(?:\[[^\]]*\])?>=([^",<]+)', PYPROJECT.read_text())
     return match.group(1) if match else None
 
 

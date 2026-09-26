@@ -172,20 +172,23 @@ class TestInt32ConnectivityCannotBeWritten:
 
 
 class TestTopologyAttrsLeakBetweenGrids:
-    """``_encode_ugrid`` mutates a module-level dict instead of copying it.
+    """``_encode_ugrid`` used to mutate a module-level dict instead of copying.
 
-    The first grid a process exports leaves its connectivity names on the
-    shared template, so a later, plainer grid is written claiming variables it
-    does not have. Nothing complains until someone reopens the file, which is
-    why this survived: in a fresh process the first grid always round-trips.
+    The first grid a process exported left its connectivity names on the
+    shared template, so a later, plainer grid was written claiming variables
+    it did not have, and nothing complained until someone reopened the file.
+    Fixed upstream in UXARRAY/uxarray#1751, released in uxarray 2026.9.1,
+    which this package now floors. These two cases asserted the broken
+    behaviour and so began failing on the fix -- the second as a strict
+    XPASS. They now assert the fix, and would catch a regression.
     """
 
-    def test_a_plain_grid_is_encoded_claiming_variables_it_lacks(self, tmp_path):
-        """The leak itself, without asserting on the shared dict.
+    def test_a_plain_grid_is_encoded_without_the_previous_grids_names(self, tmp_path):
+        """Not asserted through ``BASE_GRID_TOPOLOGY_ATTRS``.
 
-        Asserting on ``BASE_GRID_TOPOLOGY_ATTRS`` directly would depend on
-        whether anything else in the process exported a grid first, which is
-        exactly the property that makes this defect hard to see.
+        Reading the shared dict directly would depend on whether anything
+        else in the process exported a grid first, which is exactly the
+        property that made this defect hard to see.
         """
         import uxarray as ux
 
@@ -197,18 +200,14 @@ class TestTopologyAttrsLeakBetweenGrids:
         )
 
         attrs = encoded["grid_topology"].attrs
-        assert attrs["face_edge_connectivity"] == "face_edge_connectivity"
+        assert "face_edge_connectivity" not in attrs
         assert "face_edge_connectivity" not in encoded.variables
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="uxarray leaks one grid's topology attributes onto the next",
-        raises=ValueError,
-    )
-    def test_upstream_second_grid_cannot_be_reopened(self, tmp_path):
+    def test_the_second_grid_reopens(self, tmp_path):
         import uxarray as ux
 
-        # Order matters: the rich grid poisons the template for the plain one.
+        # Order matters: the rich grid used to poison the template for the
+        # plain one, and the file below could then not be reopened at all.
         ux.open_grid(_write_icon_grid(tmp_path / "icon.nc")).to_xarray(
             grid_format="ugrid"
         )
@@ -216,7 +215,7 @@ class TestTopologyAttrsLeakBetweenGrids:
         out = tmp_path / "plain_out.nc"
         plain.to_xarray(grid_format="ugrid").to_netcdf(out)
 
-        ux.open_grid(str(out))
+        assert ux.open_grid(str(out)).n_face == 1
 
     def test_our_writer_drops_what_the_grid_does_not_have(self, tmp_path, state_dir):
         import uxarray as ux

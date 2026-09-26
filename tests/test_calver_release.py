@@ -102,16 +102,56 @@ class TestZeroPaddingIsRefused:
             _next_version("2026.8.0", "2026.09.0")
 
 
+@pytest.fixture
+def pin_without_extras(tmp_path, monkeypatch):
+    """Point the pin helpers at a pyproject whose uxarray pin has no extras.
+
+    `_uxarray_pin` reads the shipped extras so an automated release cannot
+    drop them; these cases are about the version arithmetic, so they fix the
+    extras at none rather than tracking whatever pyproject.toml carries.
+    """
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text('dependencies = [\n    "uxarray>=2026.9.0,<2026.10",\n]\n')
+    monkeypatch.setattr(prepare_release, "PYPROJECT", pyproject)
+    return pyproject
+
+
 class TestThePinMovesBothEnds:
-    def test_the_ceiling_is_the_month_after_upstream(self):
+    def test_the_ceiling_is_the_month_after_upstream(self, pin_without_extras):
         assert _uxarray_pin("2026.9.0") == "uxarray>=2026.9.0,<2026.10"
 
-    def test_the_floor_is_the_upstream_being_released_against(self):
+    def test_the_floor_is_the_upstream_being_released_against(self, pin_without_extras):
         assert _uxarray_pin("2026.10.2").startswith("uxarray>=2026.10.2,")
 
-    def test_december_rolls_the_ceiling_into_the_next_year(self):
+    def test_december_rolls_the_ceiling_into_the_next_year(self, pin_without_extras):
         """`<2026.13` is not a version anyone will ever publish."""
         assert _uxarray_pin("2026.12.0") == "uxarray>=2026.12.0,<2027.1"
+
+    def test_the_shipped_extras_survive_a_rewrite(self, tmp_path, monkeypatch):
+        """uxarray 2026.9.1 put cartopy, healpix and hvplot behind extras.
+
+        A rewrite that dropped `[geo,viz]` would leave the next release
+        installable and broken, failing only at the first plot or
+        `healpix:<zoom>` open.
+        """
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            'dependencies = [\n    "uxarray[geo,viz]>=2026.9.1,<2026.10",\n]\n'
+        )
+        monkeypatch.setattr(prepare_release, "PYPROJECT", pyproject)
+
+        assert _uxarray_pin("2026.10.0") == "uxarray[geo,viz]>=2026.10.0,<2026.11"
+
+        prepare_release._write_uxarray_pin("2026.10.0")
+        assert '"uxarray[geo,viz]>=2026.10.0,<2026.11",' in pyproject.read_text()
+
+    def test_the_floor_is_read_through_the_extras(self, tmp_path, monkeypatch):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            'dependencies = [\n    "uxarray[geo,viz]>=2026.9.1,<2026.10",\n]\n'
+        )
+        monkeypatch.setattr(prepare_release, "PYPROJECT", pyproject)
+        assert prepare_release._current_uxarray_floor() == "2026.9.1"
 
     def test_the_pin_is_rewritten_whole_in_pyproject(self, tmp_path, monkeypatch):
         """A floor raised without its ceiling is the bug this guards.
@@ -134,8 +174,8 @@ class TestThePinMovesBothEnds:
         assert '"uxarray>=2026.10.0,<2026.11",' in pyproject.read_text()
         assert '"pyyaml>=6.0.1",' in pyproject.read_text()
 
-    def test_a_bare_floor_gains_a_ceiling(self):
-        """What `pyproject.toml` carries today is a floor and nothing else."""
+    def test_a_bare_floor_gains_a_ceiling(self, pin_without_extras):
+        """A pin carrying a floor alone still comes back with both ends."""
         text = 'dependencies = [\n    "uxarray>=2026.9.0",\n]\n'
         assert (
             prepare_release.UXARRAY_PIN_RE.sub(

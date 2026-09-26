@@ -1116,6 +1116,18 @@ def plot_dataset(
                 "'mesh_geo' for a regional wireframe with coastlines "
                 "(local only)."
             )
+        if title is not None:
+            # Same failure as the bounding box above: plot_mesh renders
+            # through holoviews and has nowhere to put a title, so one
+            # passed here was dropped and the caller got an untitled plot
+            # back with no indication it had been ignored. Found on a live
+            # UCAR worker, where the PNG came back correct and unlabelled.
+            raise ValueError(
+                "plot_type='mesh' renders a bare wireframe and cannot set a "
+                "title. Use plot_type='subset_bbox', which titles the plot "
+                "and crops when given lon_bounds/lat_bounds (and works with "
+                "use_remote=True)."
+            )
         return plot_mesh(
             grid_path=grid_path,
             width=width,
