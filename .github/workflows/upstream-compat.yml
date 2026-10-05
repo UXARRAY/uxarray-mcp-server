@@ -95,7 +95,14 @@ jobs:
         # 6.0.3 (the locked version) while `uv run --no-sync` reported 6.0.1.
         # Every green run of this workflow before this change proved only that
         # the lockfile passes its own test suite.
-        run: uv run --no-sync pytest tests/ -m "not hpc and not live" -v --tb=long
+        #
+        # `not yac` for the same reason ci.yml excludes it: this runner never
+        # builds YAC, and the yac-marked tests are deliberately unguarded by
+        # `importorskip` so a missing build fails loudly rather than skipping
+        # green. Only the dedicated job in ci.yml (which builds YAC first) may
+        # select them; here they would fail in every matrix target at once and
+        # mask the upstream break this workflow exists to find.
+        run: uv run --no-sync pytest tests/ -m "not hpc and not live and not yac" -v --tb=long
 
       - name: Report failure
         if: failure()
@@ -138,5 +145,6 @@ jobs:
       - name: Run test suite
         # --no-sync for the same reason as the job above: a bare `uv run`
         # re-syncs to `uv.lock` and would install the newest compatible
-        # versions over the floor this job just resolved.
-        run: uv run --no-sync pytest tests/ -m "not hpc and not live" -v --tb=long
+        # versions over the floor this job just resolved. `not yac` likewise:
+        # this runner has no YAC build either.
+        run: uv run --no-sync pytest tests/ -m "not hpc and not live and not yac" -v --tb=long
