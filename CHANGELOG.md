@@ -6,6 +6,7 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
 
+## 2026.9.2 — 2026-10-06
 ## 2026.9.1 — 2026-09-25
 ### Changed
 - Floors `uxarray[geo,viz]>=2026.9.1`. Upstream 2026.9.1 moved cartopy,
