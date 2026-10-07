@@ -156,7 +156,10 @@ jobs:
           # No tag, no GitHub release, no dispatch to release.yml. The tag is
           # cut from the merge commit by a human; nothing here can reach PyPI.
           branch="release/${RELEASE_VERSION}"
-          git checkout -b "$branch"
+          # -B, not -b: a rerun for the same version must not die on "branch
+          # already exists". The branch is a disposable restatement of what
+          # this run just computed from main, so recreating it is correct.
+          git checkout -B "$branch"
           git add pyproject.toml src/uxarray_mcp/__init__.py \
             conda/recipe/meta.yaml CHANGELOG.md uv.lock
           if git diff --cached --quiet; then
@@ -164,7 +167,23 @@ jobs:
             exit 0
           fi
           git commit -m "Release ${RELEASE_VERSION}"
-          git push origin "$branch"
+          # --force-with-lease, because a rerun builds a fresh commit off main
+          # with no ancestry to the one a previous run pushed, and a plain push
+          # is then rejected non-fast-forward. That is exactly how this job
+          # wedged: it kept re-proposing a version whose branch already
+          # existed. The lease still refuses if the remote moved since we read
+          # it, so a human's edits on the release branch are not clobbered
+          # silently.
+          git fetch origin "$branch" || true
+          git push --force-with-lease origin "$branch"
+
+          # An open PR for this branch already tracks it; pushing updated it,
+          # and `gh pr create` would fail with "already exists".
+          if gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
+               --json state --jq .state 2>/dev/null | grep -qx OPEN; then
+            echo "PR for ${branch} is already open; the push above updated it."
+            exit 0
+          fi
           {
             echo "Release ${RELEASE_VERSION} against uxarray ${UPSTREAM:-unchanged}, ${CHANGED_COMMITS} commit(s) since ${PREVIOUS_TAG:-the first commit}."
             echo "Checks, build and wheel smoke test passed on this branch before it was opened."

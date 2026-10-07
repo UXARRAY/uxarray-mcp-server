@@ -225,9 +225,15 @@ class TestUpstreamIsReadFromPypi:
 class TestTheDailyPollDecidesWhenToRelease:
     """A daily cron asks this script "is there anything to do today".
 
-    Commits are no longer the only reason to answer yes: a new upstream month
-    is a release even when nothing in this repository changed, because the pin
-    that says which upstream we support is itself the change.
+    A new upstream month is the reason to answer yes, even when nothing in
+    this repository changed, because the pin that says which upstream we
+    support is itself the change.
+
+    Commits of our own are *not* a reason. This project releases with
+    upstream, and most of what lands between mirrors is CI, lockfile and docs
+    work. Gating on a commit count also wedges the job: the count never
+    returns to zero, so the same version gets re-proposed daily until the push
+    collides with the branch left by the run before it.
     """
 
     @pytest.fixture
@@ -295,14 +301,50 @@ class TestTheDailyPollDecidesWhenToRelease:
         assert sandbox["pyproject"].read_text() == before
         assert "## 2026" not in sandbox["changelog"].read_text()
 
-    def test_an_unreachable_pypi_falls_back_to_a_patch_bump(self, sandbox, monkeypatch):
+    def test_our_own_commits_are_not_a_release_on_their_own(self, sandbox, monkeypatch):
+        """Two commits of CI and lockfile work are not a release.
+
+        This is the case that wedged the job for real: upstream sat still on
+        2026.9.1 while a yac-marker fix and an mcp bump landed here, and the
+        poll proposed 2026.9.2 every morning until the push was rejected
+        non-fast-forward against its own leftover branch.
+        """
+        monkeypatch.setattr(prepare_release, "_commits_since", lambda tag: 2)
+        monkeypatch.setattr(prepare_release, "_latest_upstream", lambda: "2026.9.0")
+        before = sandbox["pyproject"].read_text()
+
+        assert prepare_release.main() == 0
+
+        outputs = self._outputs(sandbox)
+        assert outputs["release_needed"] == "false"
+        assert outputs["changed_commits"] == "2"
+        assert sandbox["pyproject"].read_text() == before
+
+    def test_force_still_cuts_a_release_between_upstream_months(
+        self, sandbox, monkeypatch
+    ):
+        """The dispatch input is the deliberate way to release in between."""
+        monkeypatch.setattr(prepare_release, "_commits_since", lambda tag: 2)
+        monkeypatch.setattr(prepare_release, "_latest_upstream", lambda: "2026.9.0")
+        monkeypatch.setattr(sys, "argv", ["prepare_release.py", "--force"])
+
+        assert prepare_release.main() == 0
+
+        assert self._outputs(sandbox)["release_needed"] == "true"
+
+    def test_an_unreachable_pypi_with_force_falls_back_to_a_patch_bump(
+        self, sandbox, monkeypatch
+    ):
         """The version still moves, and the pin is left exactly as it was.
 
         Guessing a ceiling from a version we could not read would be worse
-        than shipping the one that was already reviewed.
+        than shipping the one that was already reviewed. Needs --force now:
+        an unreadable PyPI cannot establish a new upstream month, and commits
+        alone no longer release.
         """
         monkeypatch.setattr(prepare_release, "_commits_since", lambda tag: 3)
         monkeypatch.setattr(prepare_release, "_latest_upstream", lambda: None)
+        monkeypatch.setattr(sys, "argv", ["prepare_release.py", "--force"])
 
         assert prepare_release.main() == 0
 

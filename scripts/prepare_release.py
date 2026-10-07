@@ -311,7 +311,17 @@ def main() -> int:
         upstream and floor and _parse_version(upstream) > _parse_version(floor)
     )
 
-    if commits == 0 and not args.force and not upstream_is_new:
+    # This project releases *with* upstream, so a new upstream month is the
+    # trigger. Commits of our own are not: most of what lands here is CI,
+    # lockfile and docs work that nobody should cut a release for, and a
+    # commit count never returns to zero once it is non-zero, so gating on it
+    # re-proposed the same version every day until the push collided with the
+    # branch the previous run had left behind.
+    #
+    # Our own commits still ride along -- they are on main, so whatever is
+    # there ships with the next upstream mirror. `--force` (the workflow's
+    # dispatch input) remains the way to cut one deliberately in between.
+    if not args.force and not upstream_is_new:
         _github_output(
             release_needed="false",
             previous_tag=latest_tag or "",
