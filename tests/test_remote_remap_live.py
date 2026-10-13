@@ -5,14 +5,20 @@ These tests submit real work to a configured Globus Compute endpoint and are
 (compute on the worker, compact summary back) against a live cluster — the gap
 noted when the remap tools were first added while the endpoint was offline.
 
-Run them explicitly with::
+Run them explicitly with ``-m live``. Paths are on the cluster, not here --
+these are read by the worker. Verified against Chrysalis on 2026-10-13::
 
     UXMCP_LIVE_ENDPOINT=chrysalis \\
-    UXMCP_LIVE_GRID=/home/<user>/uxarray/test/meshfiles/mpas/QU/480/grid.nc \\
-    UXMCP_LIVE_DATA=/home/<user>/uxarray/test/meshfiles/mpas/QU/480/data.nc \\
-    UXMCP_LIVE_TARGET_GRID=/home/<user>/uxarray/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc \\
+    UXMCP_LIVE_GRID=/lcrc/group/e3sm/jain/uxarray-yac-src/test/meshfiles/mpas/QU/480/grid.nc \\
+    UXMCP_LIVE_DATA=/lcrc/group/e3sm/jain/uxarray-yac-src/test/meshfiles/mpas/QU/480/data.nc \\
+    UXMCP_LIVE_TARGET_GRID=/lcrc/group/e3sm/jain/uxarray-yac-src/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc \\
     UXMCP_LIVE_VARIABLE=bottomDepth \\
-    uv run pytest tests/test_remote_remap_live.py -v
+    uv run --no-sync pytest tests/test_remote_remap_live.py -m live -v
+
+``-m live`` is required: pytest.ini does not deselect the marker by itself,
+but every CI lane selects ``not live``, and running the file without the
+marker still works only because the skipif gates it. Being explicit is what
+makes a green run mean the cluster answered.
 
 All five environment variables must be set or the module is skipped.
 """
@@ -42,6 +48,40 @@ pytestmark = [
         ),
     ),
 ]
+
+
+@pytest.fixture(autouse=True)
+def real_endpoint_config(monkeypatch):
+    """Undo the suite-wide offline config for these tests only.
+
+    ``tests/conftest.py`` installs an autouse ``offline_config`` fixture that
+    points ``UXARRAY_MCP_CONFIG`` at a stub with no endpoints and blanks
+    ``USER_CONFIG_PATH``, so that an ordinary test cannot accidentally make a
+    live Globus round-trip against the developer's own cluster. That is the
+    right default and it is why the rest of the suite is fast and hermetic.
+
+    It also made this module impossible to run. These tests exist precisely
+    to talk to a real endpoint, and with the stub in place every one of them
+    failed at ``Unknown endpoint 'chrysalis'. Configured endpoint names:
+    none`` before submitting anything -- so the live lane reported failure
+    whether or not the cluster was healthy, which is indistinguishable from
+    the cluster being broken. The offline fixture landed in #137, two commits
+    after this file; nothing selects ``-m live`` in CI, so it went unnoticed.
+
+    Restoring discovery is enough: the module-level skipif already refuses to
+    run without five explicit ``UXMCP_LIVE_*`` paths, so this cannot fire by
+    accident.
+    """
+    from pathlib import Path
+
+    from uxarray_mcp.remote import config as config_module
+
+    monkeypatch.delenv("UXARRAY_MCP_CONFIG", raising=False)
+    monkeypatch.setattr(
+        config_module,
+        "USER_CONFIG_PATH",
+        Path.home() / ".config" / "uxarray-mcp" / "config.yaml",
+    )
 
 
 def _assert_remote(result: dict) -> None:
