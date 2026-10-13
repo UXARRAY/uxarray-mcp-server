@@ -717,6 +717,52 @@ class TestRemoteErrorNormalization:
 
         assert _normalize_remote_error(original, config) is original
 
+    def test_a_cold_allocation_is_explained_rather_than_blamed_on_config(self):
+        """HTTP 422 after an idle period is the scheduler, not a misconfiguration.
+
+        Globus answers a submit with ``ENDPOINT_NOT_ONLINE`` when the manager
+        is registered but no worker can take the task. On a Slurm-backed
+        endpoint that is normally a cold allocation: the job ended while the
+        endpoint sat idle. Observed on Chrysalis -- one submit failed this
+        way and the identical submit a minute later ran on a new job id.
+
+        Left raw, the message blames ``user_endpoint_config``, which sends the
+        reader to change something that was never wrong. Every other signal
+        agrees the endpoint is fine, so the error text is the only place this
+        can be explained.
+        """
+        from uxarray_mcp.remote.agent import _normalize_remote_error
+
+        raw = (
+            "('POST', 'https://compute.api.globus.org/v3/endpoints/3cca8be6/"
+            "submit', 'Bearer', 422, 'ENDPOINT_NOT_ONLINE', 'User endpoint did "
+            "not signal readiness; this may be for a variety of reasons.  The "
+            "most common reason is a misconfiguration in the request (SDK "
+            "user_endpoint_config={...}). 3cca8be6')"
+        )
+        config = HPCConfig(endpoint_id="b", endpoint_name="chrysalis")
+
+        normalized = _normalize_remote_error(Exception(raw), config)
+
+        message = str(normalized)
+        assert isinstance(normalized, RuntimeError)
+        assert "chrysalis" in message
+        assert "Retry" in message
+        # The misleading advice must not survive into what the agent reads.
+        assert "user_endpoint_config" not in message
+
+    def test_the_readiness_wording_alone_is_enough_to_match(self):
+        """Globus has used this phrasing without the machine-readable code."""
+        from uxarray_mcp.remote.agent import _normalize_remote_error
+
+        config = HPCConfig(endpoint_id="b", endpoint_name="improv")
+        normalized = _normalize_remote_error(
+            Exception("User endpoint did not signal readiness"), config
+        )
+
+        assert "improv" in str(normalized)
+        assert "allocation" in str(normalized)
+
     def test_timeout_is_preserved_for_callers_that_branch_on_it(self):
         from uxarray_mcp.remote.agent import _normalize_remote_error
 
