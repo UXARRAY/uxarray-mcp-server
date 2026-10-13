@@ -1,0 +1,50 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.UXARRAY/uxarray-mcp-server",
+  "title": "UXarray MCP",
+  "description": "Inspect, subset, remap and plot unstructured climate meshes, locally or on HPC.",
+  "version": "2026.9.1",
+  "websiteUrl": "https://uxarray-mcp-server.readthedocs.io",
+  "repository": {
+    "source": "github",
+    "url": "https://github.com/UXARRAY/uxarray-mcp-server"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "uxarray-mcp",
+      "version": "2026.9.1",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--python",
+          "value": "3.12",
+          "description": "uxarray pins a scientific stack that does not resolve on every interpreter; 3.12 is the version CI treats as primary."
+        },
+        {
+          "type": "positional",
+          "value": "uxarray-mcp",
+          "description": "Console script installed by the uxarray-mcp distribution."
+        },
+        {
+          "type": "positional",
+          "value": "serve",
+          "description": "Start the MCP server. Defaults to stdio, which is what a desktop client spawns."
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "named",
+          "name": "--profile",
+          "isRequired": false,
+          "value": "core",
+          "description": "core exposes 33 tools and is the default. deferred-full additionally loads the raw tools behind discover_tools, which costs context but allows direct calls."
+        }
+      ]
+    }
+  ]
+}

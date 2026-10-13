@@ -13,6 +13,7 @@ next upstream month.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -25,6 +26,7 @@ INIT = ROOT / "src" / "uxarray_mcp" / "__init__.py"
 CONDA_RECIPE = ROOT / "conda" / "recipe" / "meta.yaml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 LOCKFILE = ROOT / "uv.lock"
+SERVER_JSON = ROOT / "server.json"
 
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
@@ -205,6 +207,30 @@ def _write_version(version: str) -> None:
         r'^\{%\s*set version = "[^"]+"\s*%\}$',
         f'{{% set version = "{version}" %}}',
     )
+    _write_server_json_version(version)
+
+
+def _write_server_json_version(version: str) -> None:
+    """Move both versions in the MCP registry manifest.
+
+    ``server.json`` carries the version twice: once for the server entry and
+    once for the PyPI package it points at. A registry listing that advertises
+    a version PyPI does not have is worse than no listing, and nothing else in
+    this script would have caught the drift -- the manifest is not imported,
+    not installed, and not covered by the build.
+
+    Rewritten as JSON rather than by regex so the two fields cannot be
+    confused with each other, and so a malformed manifest fails here rather
+    than at publish time.
+    """
+    if not SERVER_JSON.exists():  # pragma: no cover - optional file
+        return
+    manifest = json.loads(SERVER_JSON.read_text())
+    manifest["version"] = version
+    for package in manifest.get("packages", []):
+        if package.get("registryType") == "pypi":
+            package["version"] = version
+    SERVER_JSON.write_text(json.dumps(manifest, indent=2) + "\n")
 
 
 def stamp_changelog(text: str, version: str, today: str) -> str:
