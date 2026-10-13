@@ -1,0 +1,80 @@
+name: Dependency audit
+
+# Thirteen known-vulnerable packages sat in uv.lock -- cryptography with a
+# Bleichenbacher oracle, starlette with request-authority poisoning, urllib3
+# ignoring HTTPS proxy TLS config, and ten more -- because no job ever read an
+# advisory database. zizmor audits the workflow files and upstream-compat
+# probes our four direct upstreams; neither of those is a CVE scan.
+#
+# Runs on a schedule as well as on lockfile changes: an advisory can be
+# published for a version we already pin, which no push will ever trigger.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/audit.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/audit.yml"
+  schedule:
+    # 06:41 UTC Monday, after the Dependabot run that may have already fixed
+    # whatever this would otherwise report.
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Scan the lockfile for known advisories
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to full commit SHAs here rather than to tags. A
+      # tag is mutable: whoever controls the upstream repository can move it
+      # to different code, and this job is the one that would have to catch
+      # that. .github/zizmor.yml exempts the older workflows from
+      # `unpinned-uses` as a tracked follow-up; a security workflow should not
+      # be joining that list.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+
+      # The whole resolved graph, not the installed environment: dev-only and
+      # extra-only packages ship in our Docker image and run in CI, so an
+      # advisory in one of them is still ours. `uv export` includes every
+      # extra and group for exactly that reason.
+      # Written into the workspace, not /tmp. osv-scanner-action is a Docker
+      # action: it bind-mounts GITHUB_WORKSPACE and nothing else, so a file in
+      # the runner's /tmp is simply absent inside the container
+      # (`stat ...: no such file or directory`, exit 127).
+      - name: Export the full dependency graph
+        run: |
+          uv export --format requirements-txt --no-hashes --all-extras --all-groups \
+            > requirements-audit.txt
+          echo "Packages to audit: $(grep -c '==' requirements-audit.txt || true)"
+
+      # osv-scanner rather than pip-audit: pip-audit resolves and installs the
+      # requirements into a throwaway virtualenv, which fails on this graph
+      # (one dependency has no sdist for the resolver's Python). osv-scanner
+      # reads the file and queries OSV directly, so it needs no install step
+      # and covers the same advisory sources.
+      - name: Scan with osv-scanner
+        uses: google/osv-scanner-action/osv-scanner-action@9bb69575e74019c2ad085a1860787043adf47ccb  # v2.2.4
+        with:
+          scan-args: |-
+            --lockfile=requirements.txt:requirements-audit.txt

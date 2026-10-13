@@ -178,6 +178,46 @@ If you suspect endpoint compromise:
 
 ---
 
+## Dependency security
+
+This project sits on a large scientific stack — ~190 resolved packages once
+extras and dev groups are counted — so most of the attack surface we carry is
+someone else's code. Two jobs watch it, and they answer different questions:
+
+| Job | Question it answers |
+|---|---|
+| `.github/workflows/audit.yml` | Does anything we pin have a published advisory? |
+| `.github/dependabot.yml` | Is anything we pin simply out of date? |
+
+The audit scans the **fully exported graph** (`uv export --all-extras
+--all-groups`), not the installed environment. Dev-only and extra-only
+packages run in CI and ship in the Docker image, so an advisory in one of them
+is still ours. It runs on lockfile changes and weekly on a schedule, because
+an advisory can be published against a version we already pin — no push would
+ever trigger that.
+
+Dependabot groups routine minor/patch bumps into one weekly PR, while security
+updates arrive on their own so they are never queued behind routine churn.
+
+### If the audit fails
+
+1. Read which package and advisory. `osv-scanner` prints the OSV/GHSA id and
+   the version that fixes it.
+2. Try the cheap fix first: `uv lock --upgrade-package <name>`. Most
+   advisories are resolved by a patch release already on PyPI.
+3. Re-run the scan locally before pushing:
+   ```bash
+   uv export --format requirements-txt --no-hashes --all-extras --all-groups > /tmp/req.txt
+   osv-scanner --lockfile=requirements.txt:/tmp/req.txt
+   ```
+4. If no fix exists upstream, judge exploitability **for this server** rather
+   than in the abstract. A `starlette` form-parsing advisory matters to the
+   OpenAPI transport and not at all to stdio; a `cryptography` issue matters
+   wherever Globus auth runs. Record the reasoning in the PR — a suppression
+   with no argument behind it is worse than a red check.
+
+---
+
 ## Reporting a vulnerability in uxarray-mcp itself
 
 Email `<maintainer email>` with details. Please do not file public issues
