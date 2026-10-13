@@ -1,0 +1,54 @@
+# Thirteen advisories had accumulated in uv.lock before this file existed --
+# cryptography, starlette, urllib3, aiohttp, pillow and eight more -- because
+# nothing in CI ever looked. zizmor audits the workflows, upstream-compat
+# probes the four packages we sit downstream of, and neither reads an advisory
+# database. This closes that gap.
+#
+# Grouped deliberately: a lockfile this size produces a PR per package
+# otherwise, which is how dependency PRs get ignored. Security updates come
+# through on their own so they are never queued behind a routine bump.
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 5
+    groups:
+      # Everything non-security in one PR per week. CI runs the full matrix
+      # on it, so a group that breaks is still bisectable by reverting the
+      # one PR rather than ten.
+      python-packages:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+
+  # The actions are pinned by major tag (actions/checkout@v4 and friends), so
+  # this mostly catches the Node 20 deprecation class of change rather than
+  # day-to-day churn.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "docker"
+    labels:
+      - "dependencies"
