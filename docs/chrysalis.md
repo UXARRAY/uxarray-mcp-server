@@ -44,6 +44,51 @@ which hosts the E3SM next-generation mesh library.
 | Compute nodes | 251 GB RAM, 128 CPUs |
 | Endpoint name | `uxarray-chrysalis` |
 
+## Keeping the Worker Current
+
+The worker does **not** get `uxarray` or `uxarray-mcp` from the conda
+environment. Both are imported from git checkouts under
+`/lcrc/group/e3sm/$USER`:
+
+| Package | Comes from |
+|---|---|
+| `uxarray` | `/lcrc/group/e3sm/$USER/uxarray-yac-src` (on the worker `PYTHONPATH`) |
+| `uxarray-mcp` | `/lcrc/group/e3sm/$USER/uxarray-mcp-server` |
+
+So `conda update` does nothing for either, and a release merged on your
+laptop is simply absent from the cluster until those checkouts are pulled.
+When they drift, every remote call carries a warning:
+
+```
+UXarray version drift: local=2026.9.1, remote(worker)=2026.9.0.
+uxarray-mcp version drift: local=2026.9.1, remote(worker)=2026.9.0.
+```
+
+That warning is the symptom to act on — a fix that is merged, released and
+green locally can be missing on the worker, and the operation keeps failing
+with nothing to explain why.
+
+On a Chrysalis login node:
+
+```bash
+cd /lcrc/group/e3sm/$USER/uxarray-mcp-server
+git pull --ff-only
+./scripts/chrysalis_update.sh --restart
+```
+
+`chrysalis_update.sh` pulls both checkouts, prints the versions the worker
+will import, and restarts the endpoint. The restart matters: **running
+workers hold the old modules in memory**, so a pull on its own changes
+nothing until the processes are replaced. It refuses to pull a checkout with
+uncommitted changes rather than clobbering someone's work in progress.
+
+Confirm from your laptop afterwards — the drift warnings should be gone:
+
+```bash
+uxarray-mcp doctor --endpoint chrysalis | \
+  python -c "import json,sys; print(json.load(sys.stdin)['remote_probe']['_worker_runtime'])"
+```
+
 ## First-Time Setup
 
 The script assumes four things exist that it does not create for you: the conda
@@ -183,8 +228,20 @@ diagnose_endpoint(action="probe_path", file_path="<path>", endpoint="chrysalis")
 
 ## Troubleshooting
 
-**`ENDPOINT_NOT_ONLINE`** — the Slurm `compute` job timed out (1h walltime).
-Restart with `bash scripts/chrysalis_endpoint.sh restart`.
+**`ENDPOINT_NOT_ONLINE`** — no worker was available to take the task. After
+an idle period this is usually just a cold allocation: the Slurm job ended
+(1h walltime) and the scheduler has not granted a new one yet. The first
+call after idling can take a minute to land, and a retry often succeeds on a
+fresh job id without touching anything.
+
+Note that `endpoint_status` reports `registered` and Globus reports `online`
+throughout, because registration is all that API call can see — neither says
+a worker exists. A submit is the only real test. If retrying keeps failing,
+the job is genuinely gone: restart with
+`bash scripts/chrysalis_endpoint.sh restart`.
+
+The raw Globus message blames `user_endpoint_config`; on a single-user
+endpoint that is a red herring, which is why the server rewrites it.
 
 **Worker probe timeout after `registered`** — the manager is connected, but a
 Slurm worker did not return. Run `bash scripts/chrysalis_endpoint.sh logs` on

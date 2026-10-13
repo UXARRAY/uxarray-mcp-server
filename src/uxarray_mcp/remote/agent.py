@@ -68,6 +68,30 @@ def _normalize_remote_error(exc: Exception, config: Any) -> Exception:
     if isinstance(exc, TimeoutError) or "TimeoutError" in type(exc).__name__:
         return exc
 
+    # HTTP 422 from the submit call: the manager is registered with Globus but
+    # has no worker able to take the task right now. On a Slurm-backed
+    # endpoint this is almost always a cold allocation -- the previous job
+    # ended while the endpoint sat idle, and the next submit has to wait for
+    # the scheduler. Observed on Chrysalis: a submit failed this way, and the
+    # identical submit a minute later succeeded on a fresh job id.
+    #
+    # Worth naming because every other signal says the endpoint is fine:
+    # `endpoint_status` reports "registered" and Globus reports "online",
+    # since registration is all that call can see. Left as the raw
+    # ComputeAPIError this reads as a misconfiguration, and the suggested fix
+    # (user_endpoint_config) is the wrong thing to go and change.
+    if "ENDPOINT_NOT_ONLINE" in text or "did not signal readiness" in text:
+        return RuntimeError(
+            f"{endpoint} accepted no worker for this task. The manager is "
+            "registered, but nothing is available to run on right now -- on a "
+            "Slurm-backed endpoint that usually means the allocation expired "
+            "while idle and the scheduler has not granted a new one yet. "
+            "Retry in a minute; the first call after an idle period can take "
+            "a minute to land. If it keeps failing, check the endpoint is "
+            "started (`chrysalis_endpoint.sh status`) and that the queue is "
+            "not full."
+        )
+
     # A killed worker. Globus appends a generic "one common cause is a Python
     # version mismatch" footer, so the *last* line is boilerplate and taking it
     # threw away the only informative part -- the caller saw "Remote execution
