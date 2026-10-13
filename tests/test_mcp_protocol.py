@@ -40,29 +40,21 @@ class TestTheHandshake:
             assert payload["serverInfo"]["name"] == "UXarray MCP"
             assert payload["protocolVersion"]
 
-    async def test_the_advertised_version_is_empty(self):
-        """Characterises a real bug: clients are told our version is "".
+    async def test_the_advertised_version_is_our_release(self):
+        """Clients are told which release they are talking to.
 
-        ``UXARRAY_IDENTITY.version`` is the package version, and the low-level
-        SDK ``Server`` accepts ``version=``, but neither
-        ``route_table_to_mcp_server`` nor ``MCPAdapter.__init__`` upstream
-        takes one, so nothing ever forwards it. Every client sees an empty
-        string where the release should be -- which breaks the usual way a
-        bug report establishes what was running.
-
-        Fixing it means passing the version through at construction; this
-        test should then assert equality with ``uxarray_mcp.__version__``.
+        This was empty for every client until ``_stamp_version``: the SDK
+        ``Server`` defaults ``version`` to ``""`` and neither upstream
+        constructor forwards our ``ServerIdentity``. An empty version breaks
+        the ordinary way a bug report establishes what was running, which is
+        the first thing anyone asks.
         """
         from uxarray_mcp import __version__
 
         async with connect() as (_session, init):
             advertised = wire(init)["serverInfo"]["version"]
 
-        assert __version__, "the package itself must know its version"
-        assert advertised == "", (
-            "server version is no longer empty on the wire -- good. Change "
-            f"this assertion to == {__version__!r} and drop the comment above."
-        )
+        assert advertised == __version__ != ""
 
     async def test_we_advertise_the_capabilities_we_implement(self):
         async with connect() as (_session, init):
@@ -128,53 +120,132 @@ class TestTheToolList:
             assert json.loads(encoded)["name"] == tool.name
 
 
-class TestToolAnnotationsAreMissing:
-    """Characterises the absence of MCP tool annotations.
+class TestToolAnnotations:
+    """``readOnlyHint`` and friends, as a client receives them.
 
-    ``ToolAnnotations`` carries ``readOnlyHint``, ``destructiveHint``,
-    ``idempotentHint`` and ``openWorldHint``. They are how a client decides
-    what to auto-approve and what to confirm, and large published servers set
-    them widely. We set none, so a client cannot distinguish ``get_capabilities``
-    from a tool that writes files or moves data between machines.
+    These are what a client uses to decide what to auto-approve. A wrong hint
+    is worse than none -- a tool marked read-only that writes gets approved
+    silently -- so the assertions below check both that the hints arrive and
+    that the risky tools are *not* claiming to be safe.
     """
 
-    async def test_no_tool_declares_annotations(self):
-        async with connect() as (session, _init):
-            tools = (await session.list_tools()).tools
-
-        annotated = [t.name for t in tools if t.annotations is not None]
-        assert annotated == [], (
-            "tools now carry annotations: "
-            f"{annotated}. Replace this characterisation with per-tool "
-            "assertions (read-only on inspection, destructive on transfer)."
-        )
-
-    async def test_read_only_tools_do_not_say_so(self):
-        """The clearest instance: a pure capability query is not marked safe."""
+    async def test_a_pure_query_is_marked_read_only(self):
         async with connect() as (session, _init):
             tools = {t.name: t for t in (await session.list_tools()).tools}
 
-        probe = tools.get("get_capabilities")
-        assert probe is not None
-        assert probe.annotations is None
+        hints = wire(tools["get_capabilities"])["annotations"]
+        assert hints["readOnlyHint"] is True
+        assert hints["destructiveHint"] is False
+        assert hints["idempotentHint"] is True
 
+    async def test_transfer_is_marked_destructive_and_open_world(self, monkeypatch):
+        """Uploading lands a file on another machine, over whatever is there.
 
-class TestOutputSchemaCoverage:
-    async def test_almost_no_tool_publishes_an_output_schema(self):
-        """``outputSchema`` lets a client parse results instead of scraping text.
-
-        The machinery exists -- ``registry._apply_output_schema`` and
-        ``typed_results.output_schema_for`` -- but is wired to one tool. This
-        pins the current coverage so that extending it is a visible change.
+        The transfer tools register only when an endpoint declares a
+        ``globus_transfer`` block, and they are deferred rather than listed,
+        so this asserts on the annotation the registry would publish for them
+        rather than on a ``tools/list`` entry that will not be there.
+        ``tests/test_tool_annotations.py`` covers the map directly.
         """
+        from uxarray_mcp.annotations import annotations_for
+
+        monkeypatch.setattr(
+            "uxarray_mcp.registry._transfers_are_configured", lambda: True
+        )
+
+        hints = annotations_for("transfer-transfer_put")
+        assert hints is not None
+        assert hints["destructiveHint"] is True
+        assert hints["readOnlyHint"] is False
+        assert hints["openWorldHint"] is True
+
+    async def test_no_tool_that_writes_claims_to_be_read_only(self):
+        """The failure mode that matters: a false safe-to-run claim.
+
+        Checked against the names rather than the annotation map so that a
+        tool added to ``_READ_ONLY`` by mistake is caught here rather than by
+        a user whose client auto-approved it.
+        """
+        writes = ("transfer_put", "transfer_get", "export_to", "write_result")
+
+        async with connect(profile="deferred-full") as (session, _init):
+            tools = (await session.list_tools()).tools
+
+        for tool in tools:
+            if not any(marker in tool.name for marker in writes):
+                continue
+            hints = wire(tool).get("annotations") or {}
+            assert hints.get("readOnlyHint") is not True, (
+                f"{tool.name} is advertised read-only but its name says it "
+                "writes; a client will auto-approve it"
+            )
+
+    async def test_unclassified_tools_carry_no_annotation_at_all(self):
+        """Absence is the honest answer for anything not deliberately rated.
+
+        An empty ``annotations`` object would read as "classified, no hints
+        apply", which is a different and stronger claim.
+        """
+        from uxarray_mcp.annotations import annotations_for
+
         async with connect() as (session, _init):
             tools = (await session.list_tools()).tools
 
-        with_schema = sorted(t.name for t in tools if t.output_schema is not None)
-        assert with_schema == ["run_analysis"], (
-            f"outputSchema coverage changed: {with_schema}. If this grew on "
-            "purpose, update the expectation."
-        )
+        for tool in tools:
+            if annotations_for(tool.name) is None:
+                assert tool.annotations is None, (
+                    f"{tool.name} is unclassified but carries annotations"
+                )
+
+
+class TestOutputSchemaCoverage:
+    """``outputSchema`` lets a client parse a result instead of scraping text.
+
+    Five operations declare one (``run_analysis`` plus the four contracts in
+    ``typed_results``), and the registry does attach all five -- checked
+    below on the route table. Only ``run_analysis`` reaches ``tools/list``
+    because the other four are deferred: they are reached through
+    ``call_deferred`` rather than listed, so a client never sees their
+    schema during tool selection.
+
+    That is a real gap, but it is a property of the deferral design rather
+    than of the schema plumbing, and widening it means deciding which tools
+    are worth their place in the context window. Pinned here so the decision
+    is visible rather than implicit.
+    """
+
+    async def test_the_listed_tool_with_a_contract_publishes_its_schema(self):
+        async with connect() as (session, _init):
+            tools = {t.name: t for t in (await session.list_tools()).tools}
+
+        schema = wire(tools["run_analysis"])["outputSchema"]
+        assert schema["type"] == "object"
+        assert schema["properties"], "an empty schema promises nothing"
+
+    async def test_deferred_contract_tools_still_carry_their_schema(self):
+        """The plumbing works; the tools are simply not listed.
+
+        Asserted on the route table rather than the wire, because that is
+        where the schema is attached and the point is to show it is not lost
+        before deferral hides the tool.
+        """
+        from toolregistry_server.route_table import RouteTable
+
+        from uxarray_mcp.app import make_registry
+
+        routes = {
+            r.tool_name: r
+            for r in RouteTable(make_registry(profile="deferred-full")).list_routes()
+        }
+        for name in (
+            "inspect-inspect_mesh",
+            "inspect-validate_dataset",
+            "compute-calculate_area",
+            "compute-calculate_zonal_mean",
+        ):
+            assert routes[name].output_schema is not None, (
+                f"{name} declares a response contract but carries no schema"
+            )
 
 
 class TestCallingTools:

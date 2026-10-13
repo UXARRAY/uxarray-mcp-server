@@ -178,6 +178,38 @@ If you suspect endpoint compromise:
 
 ---
 
+## Tool annotations and auto-approval
+
+The server publishes MCP [tool annotations](https://modelcontextprotocol.io/)
+(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) so a
+client can tell a query apart from something that moves data. Clients use
+these to decide what to run without asking.
+
+**They are advisory, not a security control.** The specification lets a client
+ignore them entirely, and nothing here enforces them. Real enforcement is the
+precondition layer, the endpoint's own `remote_read_root` / `remote_write_root`,
+and the Globus consents behind both.
+
+What the three categories mean in `src/uxarray_mcp/annotations.py`:
+
+| Hint | Claim |
+|---|---|
+| `readOnlyHint: true` | No side effect anywhere — writes no file, mutates no session, submits no remote work. Not merely "does not write the file it was given". |
+| `destructiveHint: true` | Can overwrite or relocate data the user cares about: a transfer landing on a cluster path, an export to a caller-supplied filename. |
+| `openWorldHint: true` | The result depends on a machine we cannot see, so a failure is not necessarily a bug in the call. |
+
+A tool that is not deliberately classified carries **no annotation at all**,
+which clients read as "unknown". That is the honest default: a wrong
+`readOnlyHint` is worse than a missing one, because it gets auto-approved and
+the user never sees the prompt that would have caught it.
+
+If you add a tool that writes anywhere, leave it out of `_READ_ONLY`. The
+tests in `tests/test_tool_annotations.py` fail on a tool whose name implies a
+write while claiming to be read-only, but naming is a heuristic and the
+judgement is yours.
+
+---
+
 ## Dependency security
 
 This project sits on a large scientific stack — ~190 resolved packages once
