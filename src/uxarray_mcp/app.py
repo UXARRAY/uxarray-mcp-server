@@ -22,6 +22,7 @@ from toolregistry_server import ServerIdentity
 from toolregistry_server.app import App
 
 from . import __version__
+from .annotations import apply_tool_annotations
 from .registry import Profile
 from .resources import attach_artifact_resources
 
@@ -55,6 +56,28 @@ LIST_TOOLS_TTL_MS = 300_000
 #: The surface depends only on the profile, not on the user or session, so
 #: a shared cache entry is correct.
 LIST_TOOLS_CACHE_SCOPE = "public"
+
+
+def _stamp_version(server: object) -> object:
+    """Put our release into ``serverInfo.version`` on the wire.
+
+    The low-level SDK ``Server`` takes ``version=`` at construction, but
+    neither ``route_table_to_mcp_server`` nor ``MCPAdapter.__init__`` upstream
+    accepts one and neither forwards our ``ServerIdentity``. The default is
+    the empty string, so every client was told this server had no version --
+    which breaks the ordinary way a bug report establishes what was running,
+    and is the first thing asked when a tool misbehaves.
+
+    Setting the attribute after construction rather than patching upstream
+    keeps this to one line that disappears the day either constructor grows a
+    ``version`` parameter. Guarded so that a future SDK which computes the
+    field differently cannot turn a cosmetic detail into an import error.
+    """
+    try:
+        server.version = __version__  # type: ignore[attr-defined]
+    except AttributeError:  # pragma: no cover - defensive
+        pass
+    return server
 
 
 class UXarrayApp(App):
@@ -108,6 +131,8 @@ class UXarrayApp(App):
             list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
             list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
         )
+        _stamp_version(adapter.server)
+        apply_tool_annotations(adapter.server)
         # Large figures go back as ``resource_link``, which is only honest if
         # something answers ``resources/read`` for the URI (#14).
         attach_artifact_resources(adapter.server)
@@ -135,11 +160,12 @@ def make_mcp_server(*, profile: Profile = "core"):
     from toolregistry_server.route_table import RouteTable
 
     registry = make_registry(profile=profile)
-    return attach_artifact_resources(
-        route_table_to_mcp_server(
-            RouteTable(registry),
-            "UXarray MCP",
-            list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
-            list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
-        )
+    server = route_table_to_mcp_server(
+        RouteTable(registry),
+        UXARRAY_IDENTITY.name,
+        list_tools_ttl_ms=LIST_TOOLS_TTL_MS,
+        list_tools_cache_scope=LIST_TOOLS_CACHE_SCOPE,
     )
+    _stamp_version(server)
+    apply_tool_annotations(server)
+    return attach_artifact_resources(server)
