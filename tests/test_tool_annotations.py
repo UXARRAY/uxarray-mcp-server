@@ -65,9 +65,7 @@ def with_transfers(monkeypatch):
     classification is exactly what these tests exist to check, so force them
     on the same way ``test_transfer_tools.py`` does.
     """
-    monkeypatch.setattr(
-        "uxarray_mcp.registry._transfers_are_configured", lambda: True
-    )
+    monkeypatch.setattr("uxarray_mcp.registry._transfers_are_configured", lambda: True)
 
 
 class TestTheMapMatchesTheRealToolSurface:
@@ -110,7 +108,12 @@ class TestTheMapMatchesTheRealToolSurface:
         for name in make_registry(profile="deferred-full").list_tools():
             if not any(
                 marker in name
-                for marker in ("transfer_put", "transfer_get", "export_to", "write_result")
+                for marker in (
+                    "transfer_put",
+                    "transfer_get",
+                    "export_to",
+                    "write_result",
+                )
             ):
                 continue
             hints = annotations_for(name) or {}
