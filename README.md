@@ -268,12 +268,28 @@ verbatim.
 ### Step 4 — Sanity check
 
 ```bash
-uxarray-mcp doctor
+uxarray-mcp doctor --summary
 ```
 
-Prints a JSON diagnostic report. With no endpoints configured it reports a
-passing local setup and skips the remote checks; the process exits `0` when
-`passed` is true.
+One line per check, with the fix printed under anything that failed:
+
+```
+PASS  overall
+      mode: local
+  ok    config: Configured endpoint chrysalis in ~/.config/uxarray-mcp/config.yaml.
+  ok    transfer: No globus_transfer block configured; this endpoint moves no files.
+```
+
+Drop `--summary` for the full JSON report, which is what scripts should
+parse. With no endpoints configured it reports a passing local setup and
+skips the remote checks; the process exits `0` when `passed` is true, in
+either mode.
+
+> **Compute and Transfer are different services.** An endpoint that runs
+> analysis happily may still be unable to copy a file: Globus Transfer has
+> its own login and its own consent. `doctor` says so when it applies. Set it
+> up with `uxarray-mcp transfer setup` only when you actually have a file to
+> move — see [docs/data-transfer.md](docs/data-transfer.md).
 
 ### Step 5 — Ask the AI to do something
 

@@ -242,8 +242,65 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             for path in args.sample_path[1:]
         ]
 
-    print(json.dumps(report, indent=2, sort_keys=True))
+    if getattr(args, "summary", False):
+        print(render_doctor_summary(report))
+    else:
+        print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report.get("passed") else 1
+
+
+def render_doctor_summary(report: dict[str, Any]) -> str:
+    """A short human report over the same structure ``doctor`` already builds.
+
+    The JSON is the contract and stays the default -- scripts parse it. But
+    the first thing a new user runs should not be two hundred lines of nested
+    objects they have to read to find one failing line, so ``--summary`` folds
+    it to one line per check plus the fix.
+
+    Nothing is recomputed here. Every field comes from the report, so the
+    summary cannot disagree with the JSON beside it.
+    """
+    lines: list[str] = []
+    passed = report.get("passed")
+    lines.append("PASS  overall" if passed else "FAIL  overall")
+
+    mode = report.get("mode")
+    if mode:
+        lines.append(f"      mode: {mode}")
+
+    for check in report.get("checks", []):
+        mark = "ok  " if check.get("passed") else "FAIL"
+        name = check.get("name", "?")
+        summary = str(check.get("summary", "")).strip()
+        lines.append(f"  {mark}  {name}: {summary}")
+        guidance = str(check.get("guidance", "") or "").strip()
+        if guidance and not check.get("passed"):
+            for part in guidance.splitlines():
+                if part.strip():
+                    lines.append(f"        {part.strip()}")
+
+    # Compute and Transfer are different services with different consents, and
+    # this is the moment a user discovers that a working endpoint still cannot
+    # move a file. Say so here rather than only in docs/data-transfer.md.
+    transfer = next(
+        (c for c in report.get("checks", []) if c.get("name") == "transfer"), None
+    )
+    if (
+        transfer is not None
+        and "no globus_transfer" in str(transfer.get("summary", "")).lower()
+    ):
+        lines.append("")
+        lines.append(
+            "  Note: this endpoint runs code but moves no files. Globus Transfer"
+        )
+        lines.append(
+            "  is a separate service with its own login and consent; set it up"
+        )
+        lines.append("  with `uxarray-mcp transfer setup` only if you need it.")
+
+    lines.append("")
+    lines.append("  Full detail: uxarray-mcp doctor   (without --summary)")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +510,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-netcdf",
         action="store_true",
         help="Skip opening --sample-path as NetCDF; just check readability.",
+    )
+    doctor.add_argument(
+        "--summary",
+        action="store_true",
+        help="Print a short readable report instead of the full JSON.",
     )
     doctor.set_defaults(func=cmd_doctor)
 
