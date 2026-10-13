@@ -267,3 +267,8 @@ evals/tool_retrieval/compare_retrievers.py
 # gigabyte-scale netCDF files reproducible from the URLs recorded in the case
 # study's methods section, so they are fetched, not tracked.
 data/
+
+# Written by .github/workflows/audit.yml, which exports the resolved graph
+# into the workspace (not /tmp) because osv-scanner-action is a Docker action
+# and only GITHUB_WORKSPACE is mounted into the container.
+requirements-audit.txt

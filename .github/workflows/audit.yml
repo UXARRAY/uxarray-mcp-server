@@ -58,11 +58,15 @@ jobs:
       # extra-only packages ship in our Docker image and run in CI, so an
       # advisory in one of them is still ours. `uv export` includes every
       # extra and group for exactly that reason.
+      # Written into the workspace, not /tmp. osv-scanner-action is a Docker
+      # action: it bind-mounts GITHUB_WORKSPACE and nothing else, so a file in
+      # the runner's /tmp is simply absent inside the container
+      # (`stat ...: no such file or directory`, exit 127).
       - name: Export the full dependency graph
         run: |
           uv export --format requirements-txt --no-hashes --all-extras --all-groups \
-            > /tmp/requirements-audit.txt
-          echo "Packages to audit: $(grep -c '==' /tmp/requirements-audit.txt || true)"
+            > requirements-audit.txt
+          echo "Packages to audit: $(grep -c '==' requirements-audit.txt || true)"
 
       # osv-scanner rather than pip-audit: pip-audit resolves and installs the
       # requirements into a throwaway virtualenv, which fails on this graph
@@ -73,4 +77,4 @@ jobs:
         uses: google/osv-scanner-action/osv-scanner-action@9bb69575e74019c2ad085a1860787043adf47ccb  # v2.2.4
         with:
           scan-args: |-
-            --lockfile=requirements.txt:/tmp/requirements-audit.txt
+            --lockfile=requirements.txt:requirements-audit.txt
