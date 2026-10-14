@@ -4718,6 +4718,27 @@ def remote_remap_to_rectilinear(
         else {"min": None, "max": None, "mean": None}
     )
 
+    # The submitter has to rebuild a DataArray from `values`, and it cannot
+    # guess the shape: a variable carrying a time (or level) dimension comes
+    # back as ('time', 'lat', 'lon'), not ('lat', 'lon'). Reporting the dims
+    # the remap actually produced, plus the coordinate values for any leading
+    # dimension, is what lets that reconstruction be right for both cases.
+    # Without it a 3D result was fed to a hardcoded 2D dims tuple and raised
+    # "different number of dimensions on data and dims: 3 vs 2" -- observed on
+    # DYAMOND 30km `olrtoa`, which has time=1.
+    out_dims = [str(d) for d in remapped.dims]
+    extra_coords: Dict[str, Any] = {}
+    for name in out_dims:
+        if name in ("lat", "lon"):
+            continue
+        if name in getattr(remapped, "coords", {}):
+            try:
+                extra_coords[name] = np.asarray(remapped.coords[name].values).tolist()
+            except Exception:
+                # A coordinate that will not serialise is not worth failing the
+                # remap over; the submitter falls back to a positional index.
+                pass
+
     return {
         "variable_name": variable_name,
         "backend": _backend,
@@ -4729,6 +4750,8 @@ def remote_remap_to_rectilinear(
         "values": vals.tolist(),
         "target_lon": lon,
         "target_lat": lat,
+        "result_dims": out_dims,
+        "result_coords": extra_coords,
         "_worker_runtime": {
             "hostname": __import__("socket").gethostname(),
             "python_version": __import__("platform").python_version(),
