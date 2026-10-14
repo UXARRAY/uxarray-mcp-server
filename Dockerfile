@@ -27,7 +27,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 -- builder. Resolves and compiles into a relocatable venv.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 # A C/C++ toolchain is required, not optional: `healpix` (pulled in by uxarray)
 # publishes no wheel for every platform we build on -- notably linux/arm64 --
@@ -114,7 +114,7 @@ RUN set -eux; \
 # ---------------------------------------------------------------------------
 # Stage 2 -- runtime. Carries the venv and the data, none of the build tools.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 LABEL org.opencontainers.image.title="UXarray MCP Server" \
       org.opencontainers.image.description="MCP server for analyzing unstructured climate meshes with UXarray (local-only build)" \
