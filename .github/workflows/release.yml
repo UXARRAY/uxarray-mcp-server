@@ -18,18 +18,18 @@ jobs:
     if: github.repository == 'UXARRAY/uxarray-mcp-server'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -48,7 +48,7 @@ jobs:
             --command /tmp/uxarray-mcp-wheel/bin/uxarray-mcp
 
       - name: Upload distributions
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/*
@@ -62,7 +62,7 @@ jobs:
       id-token: write
     steps:
       - name: Download distributions
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist
@@ -78,12 +78,12 @@ jobs:
     needs: publish-pypi
     steps:
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -131,19 +131,19 @@ jobs:
 
       - name: Check out source repository
         if: env.CONDA_FEEDSTOCK_REPOSITORY != '' && env.CONDA_FEEDSTOCK_TOKEN != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Install uv
         if: env.CONDA_FEEDSTOCK_REPOSITORY != '' && env.CONDA_FEEDSTOCK_TOKEN != ''
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
 
       - name: Set up Python 3.12
         if: env.CONDA_FEEDSTOCK_REPOSITORY != '' && env.CONDA_FEEDSTOCK_TOKEN != ''
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -153,7 +153,7 @@ jobs:
 
       - name: Check out feedstock
         if: env.CONDA_FEEDSTOCK_REPOSITORY != '' && env.CONDA_FEEDSTOCK_TOKEN != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.CONDA_FEEDSTOCK_REPOSITORY }}
           token: ${{ env.CONDA_FEEDSTOCK_TOKEN }}
