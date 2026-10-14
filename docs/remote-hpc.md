@@ -1,5 +1,14 @@
 # Remote HPC Setup — Connecting to an Existing Endpoint
 
+> **New here? Read [connect-a-cluster.md](connect-a-cluster.md) first.** It
+> covers the same ground in five commands and explains the concepts, for any
+> machine. This page is the long form: every step spelled out, with the
+> reasoning and the failure modes. Come here when the short version is not
+> enough, or when something has gone wrong.
+>
+> If your question is *"where do I get a UUID?"*, the answer is
+> `uxarray-mcp endpoints discover`.
+
 This page is for users who **already have an HPC account** (Argonne, NCAR,
 NERSC, a university cluster, etc.) and want their AI agent to analyze data
 that lives on that machine.
@@ -98,8 +107,21 @@ health checks yet — that's Step 4.)
 
 ## Step 3 — Register the endpoint UUID locally (1 min)
 
-You need a name to refer to the endpoint by, plus the UUID someone gave you
-and the filesystem prefix where the data lives.
+You need a name to refer to the endpoint by, plus the UUID and the
+filesystem prefix where the data lives.
+
+**If you do not have the UUID**, do not go hunting for it — a UUID is
+printed once, when the endpoint first registers, and is easy to lose. Ask
+the service instead:
+
+```bash
+uxarray-mcp endpoints discover
+```
+
+That lists every endpoint your Globus identity can see and prints a
+ready-made `endpoints add` line for each one, with a suggested path prefix.
+An empty list means nobody has started an endpoint for your account yet —
+see [operating-an-endpoint.md](operating-an-endpoint.md).
 
 ```bash
 uxarray-mcp endpoints add NAME UUID --path-prefix /glade/ --set-default

@@ -47,16 +47,30 @@ which hosts the E3SM next-generation mesh library.
 ## Keeping the Worker Current
 
 The worker does **not** get `uxarray` or `uxarray-mcp` from the conda
-environment. Both are imported from git checkouts under
-`/lcrc/group/e3sm/$USER`:
+environment's own site-packages. Both resolve to git checkouts:
 
-| Package | Comes from |
-|---|---|
-| `uxarray` | `/lcrc/group/e3sm/$USER/uxarray-yac-src` (on the worker `PYTHONPATH`) |
-| `uxarray-mcp` | `/lcrc/group/e3sm/$USER/uxarray-mcp-server` |
+| Package | Comes from | How |
+|---|---|---|
+| `uxarray` | `/lcrc/group/e3sm/$USER/uxarray-yac-src` | on the worker `PYTHONPATH` |
+| `uxarray-mcp` | `/home/$USER/uxarray-mcp-server` | **editable install** in the conda env |
+
+> **There are two `uxarray-mcp` clones on this machine.** One under
+> `/home/$USER` and one under `/lcrc/group/e3sm/$USER`. The conda environment
+> carries an *editable* install pointing at the `/home` one, so that is the
+> only one the worker ever imports. Pulling the other changes nothing while
+> appearing to succeed — the login node reports the new version and every
+> task keeps running the old one. `chrysalis_update.sh` resolves the imported
+> path with `importlib.util.find_spec` rather than guessing, and warns when a
+> second clone exists.
+
+> **`uxarray-yac-src` tracks a feature branch**, not `main` — it carries YAC
+> work that is not in a release yet. `git pull` follows that branch, so it
+> will not bring in a newer `uxarray` release. Moving that checkout to a
+> release is a deliberate decision about whether the unreleased YAC support
+> is still needed, not routine maintenance.
 
 So `conda update` does nothing for either, and a release merged on your
-laptop is simply absent from the cluster until those checkouts are pulled.
+laptop is simply absent from the cluster until the right checkout is pulled.
 When they drift, every remote call carries a warning:
 
 ```

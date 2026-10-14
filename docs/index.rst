@@ -23,6 +23,7 @@ HTTP clients) from a single install.
    :maxdepth: 2
    :caption: Running on HPC (optional)
 
+   connect-a-cluster
    remote-hpc
    data-transfer
    operating-an-endpoint

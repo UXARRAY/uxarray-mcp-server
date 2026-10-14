@@ -319,13 +319,24 @@ That's it for local use.
 If you have an HPC account at a national lab or university cluster with
 [Globus Compute](https://www.globus.org/compute) available:
 
+**Start here: [docs/connect-a-cluster.md](docs/connect-a-cluster.md)** — the
+concepts and the five commands, for any machine. First question it answers:
+
+```bash
+uxarray-mcp endpoints discover     # do I already have an endpoint, and what is its UUID?
+```
+
+Nothing is downloaded. Your laptop sends a function to the machine the data
+already lives on, and gets back a number, a summary or a small plot.
+
 | You want to … | Read this |
 |---|---|
-| Connect to an endpoint someone else set up | **[docs/remote-hpc.md](docs/remote-hpc.md)** |
-| Stand up your own endpoint | **[docs/operating-an-endpoint.md](docs/operating-an-endpoint.md)** |
-| Understand the security model first | **[SECURITY.md](SECURITY.md)** |
+| **Connect a cluster for the first time** | **[docs/connect-a-cluster.md](docs/connect-a-cluster.md)** |
+| The long-form version, with every step spelled out | [docs/remote-hpc.md](docs/remote-hpc.md) |
+| Stand up your own endpoint properly | [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md) |
+| Understand the security model first | [SECURITY.md](SECURITY.md) |
 
-Both paths assume you've finished local install above.
+All paths assume you've finished local install above.
 
 ---
 
