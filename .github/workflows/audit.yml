@@ -42,39 +42,36 @@ jobs:
       # that. .github/zizmor.yml exempts the older workflows from
       # `unpinned-uses` as a tracked follow-up; a security workflow should not
       # be joining that list.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+      # No uv and no Python set-up: scanning uv.lock needs neither, and a
+      # security job with fewer moving parts is a security job with less to
+      # go wrong.
 
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
-        with:
-          python-version: "3.12"
-
-      # The whole resolved graph, not the installed environment: dev-only and
-      # extra-only packages ship in our Docker image and run in CI, so an
-      # advisory in one of them is still ours. `uv export` includes every
-      # extra and group for exactly that reason.
-      # Written into the workspace, not /tmp. osv-scanner-action is a Docker
-      # action: it bind-mounts GITHUB_WORKSPACE and nothing else, so a file in
-      # the runner's /tmp is simply absent inside the container
-      # (`stat ...: no such file or directory`, exit 127).
-      - name: Export the full dependency graph
-        run: |
-          uv export --format requirements-txt --no-hashes --all-extras --all-groups \
-            > requirements-audit.txt
-          echo "Packages to audit: $(grep -c '==' requirements-audit.txt || true)"
-
-      # osv-scanner rather than pip-audit: pip-audit resolves and installs the
-      # requirements into a throwaway virtualenv, which fails on this graph
-      # (one dependency has no sdist for the resolver's Python). osv-scanner
-      # reads the file and queries OSV directly, so it needs no install step
-      # and covers the same advisory sources.
+      # osv-scanner reads uv.lock directly, which is both simpler and more
+      # accurate than exporting first. The lockfile already pins every
+      # package across every extra and dev group -- dev-only and extra-only
+      # packages run in CI and ship in the Docker image, so an advisory in
+      # one of them is still ours.
+      #
+      # This used to export to requirements.txt and scan that. osv-scanner
+      # v2.6.0 treats `requirements.txt` as a *transitive* source and tries
+      # to re-resolve it, which fails on a fully-pinned export:
+      #
+      #   failed resolution: requirements conflict:
+      #   filelock: "==4.1.1,>=3.16.1,<=3.19.1,>=3.19.1"
+      #
+      # and then reports "0 packages affected ... from 0 ecosystems" -- it
+      # scanned nothing while exiting non-zero. Scanning the lockfile needs
+      # no resolution step at all, so that failure mode cannot recur.
+      #
+      # osv-scanner rather than pip-audit: pip-audit resolves and installs
+      # the requirements into a throwaway virtualenv, which fails on this
+      # graph (one dependency has no sdist for the resolver's Python).
       - name: Scan with osv-scanner
-        uses: google/osv-scanner-action/osv-scanner-action@9bb69575e74019c2ad085a1860787043adf47ccb  # v2.2.4
+        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc  # v2.6.0
         with:
           scan-args: |-
-            --lockfile=requirements.txt:requirements-audit.txt
+            --lockfile=uv.lock
