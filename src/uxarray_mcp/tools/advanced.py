@@ -1360,10 +1360,37 @@ def remap_to_rectilinear(
             r_lat = remote_result.pop("target_lat", list(target_lat))
             selected = remote_result.get("variable_name", variable_name)
             if values is not None:
+                array = np.asarray(values, dtype=float)
+                # Not always ('lat', 'lon'). A variable with a time or level
+                # dimension remaps to ('time', 'lat', 'lon'), and forcing the
+                # 2D tuple raised "different number of dimensions on data and
+                # dims: 3 vs 2" -- hit on DYAMOND 30km `olrtoa` (time=1), i.e.
+                # ordinary model output rather than an exotic case.
+                #
+                # The worker now reports the dims it produced. Older workers
+                # do not, so fall back to naming the leading axes positionally
+                # rather than failing: a readable dim name is worth less than
+                # the result itself.
+                dims = remote_result.pop("result_dims", None)
+                extra_coords = remote_result.pop("result_coords", None) or {}
+                if not dims or len(dims) != array.ndim:
+                    leading = array.ndim - 2
+                    dims = [f"dim_{i}" for i in range(leading)] + ["lat", "lon"]
+                    extra_coords = {}
+
+                coords: dict[str, Any] = {"lat": r_lat, "lon": r_lon}
+                for axis, name in enumerate(dims[:-2]):
+                    values_for_axis = extra_coords.get(name)
+                    if (
+                        values_for_axis is not None
+                        and len(values_for_axis) == (array.shape[axis])
+                    ):
+                        coords[name] = values_for_axis
+
                 remapped_da = xr.DataArray(
-                    np.asarray(values, dtype=float),
-                    dims=("lat", "lon"),
-                    coords={"lat": r_lat, "lon": r_lon},
+                    array,
+                    dims=tuple(dims),
+                    coords=coords,
                     name=selected,
                 )
                 remapped_ds = remapped_da.to_dataset(name=selected)
