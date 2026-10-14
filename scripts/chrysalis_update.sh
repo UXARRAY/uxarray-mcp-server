@@ -19,9 +19,44 @@
 set -euo pipefail
 
 UXARRAY_YAC_SRC="${UXARRAY_YAC_SRC:-/lcrc/group/e3sm/$USER/uxarray-yac-src}"
-UXARRAY_MCP_SRC="${UXARRAY_MCP_SRC:-/lcrc/group/e3sm/$USER/uxarray-mcp-server}"
 CONDA_ENV="${CONDA_ENV:-$HOME/.conda/envs/uxarray-yac}"
 RESTART=0
+
+# Which uxarray-mcp checkout does the worker actually import?
+#
+# Do not guess this. There are two clones on Chrysalis --
+# /home/$USER/uxarray-mcp-server and /lcrc/group/e3sm/$USER/uxarray-mcp-server
+# -- and the conda environment carries an *editable* install pointing at the
+# first one. Pulling the second changed nothing the worker could see: the
+# login node reported 2026.9.1 @ e0f88a5 while every task still ran
+# 2026.9.0 @ a9468e7, which looks exactly like a restart that did not take.
+#
+# So ask the interpreter where it resolves the package, and update that.
+# An explicit UXARRAY_MCP_SRC still wins, for a layout this cannot infer.
+if [ -z "${UXARRAY_MCP_SRC:-}" ]; then
+  _resolved="$(
+    "$CONDA_ENV/bin/python" - <<'PY' 2>/dev/null || true
+import importlib.util, os
+spec = importlib.util.find_spec("uxarray_mcp")
+origin = getattr(spec, "origin", None) or ""
+if origin:
+    # .../<repo>/src/uxarray_mcp/__init__.py -> <repo>
+    pkg = os.path.dirname(origin)
+    src = os.path.dirname(pkg)
+    repo = os.path.dirname(src)
+    if os.path.isdir(os.path.join(repo, ".git")):
+        print(os.path.realpath(repo))
+PY
+  )"
+  if [ -n "$_resolved" ]; then
+    UXARRAY_MCP_SRC="$_resolved"
+    echo "==> Worker imports uxarray-mcp from: $UXARRAY_MCP_SRC"
+  else
+    UXARRAY_MCP_SRC="/lcrc/group/e3sm/$USER/uxarray-mcp-server"
+    echo "==> Could not resolve the imported checkout; falling back to"
+    echo "    $UXARRAY_MCP_SRC (override with UXARRAY_MCP_SRC=...)"
+  fi
+fi
 
 for arg in "$@"; do
   case "$arg" in
@@ -45,8 +80,19 @@ pull() {
     return
   fi
   echo "==> $name: $dir"
-  local before
+  local before branch
   before="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  branch="$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+  # A feature branch is not a mistake -- uxarray-yac-src deliberately tracks
+  # unreleased YAC work -- but pulling it will not bring in a release, and a
+  # bare "already current" invites the reader to think it did. Observed:
+  # uxarray-yac-src on rajeeja/scrip-dask-lazy-dedup-2 reporting success while
+  # the worker stayed on 2026.9.0 against a >=2026.9.1 floor.
+  case "$branch" in
+    main|master) ;;
+    *) echo "    on branch '$branch', not main -- a pull follows that branch,"
+       echo "    so a newer release will not arrive this way." ;;
+  esac
   # A dirty checkout is a local experiment someone is mid-way through.
   # Clobbering it silently is how an afternoon of debugging disappears.
   if ! git -C "$dir" diff --quiet || ! git -C "$dir" diff --cached --quiet; then
@@ -54,7 +100,13 @@ pull() {
     git -C "$dir" status --short | sed 's/^/      /'
     return
   fi
-  git -C "$dir" pull --ff-only
+  # Not fatal: a detached head or a branch with no upstream is a normal
+  # state for a checkout someone is working in, and the other repository
+  # still deserves its turn. `set -e` would abandon the run here.
+  if ! git -C "$dir" pull --ff-only; then
+    echo "    pull did not succeed; leaving this checkout at $before"
+    return
+  fi
   local after
   after="$(git -C "$dir" rev-parse --short HEAD)"
   if [ "$before" = "$after" ]; then
@@ -66,6 +118,17 @@ pull() {
 
 pull "$UXARRAY_YAC_SRC" "uxarray (YAC source)"
 pull "$UXARRAY_MCP_SRC" "uxarray-mcp (this server)"
+
+# A second clone that is not the one being imported is a trap: pulling it
+# looks like success and changes nothing. Say so rather than leaving the
+# next person to work it out from a version number that will not move.
+for other in "/home/$USER/uxarray-mcp-server" "/lcrc/group/e3sm/$USER/uxarray-mcp-server"; do
+  if [ -d "$other/.git" ] && [ "$(realpath "$other")" != "$(realpath "$UXARRAY_MCP_SRC")" ]; then
+    echo "==> NOTE: another checkout exists at $other"
+    echo "    ($(git -C "$other" rev-parse --short HEAD 2>/dev/null)) -- not the one the worker imports,"
+    echo "    so pulling it would not change what runs."
+  fi
+done
 
 echo
 echo "==> Versions the worker will now import"

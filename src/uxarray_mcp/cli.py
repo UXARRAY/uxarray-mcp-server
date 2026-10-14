@@ -173,6 +173,112 @@ def cmd_endpoints_list(args: argparse.Namespace) -> int:
     return 0
 
 
+#: Filesystem prefixes worth suggesting for a known site. Only a hint: the
+#: user still has to confirm, because an endpoint's useful prefix depends on
+#: where *their* data lives, not on the machine's name.
+_PREFIX_HINTS: dict[str, tuple[str, ...]] = {
+    "casper": ("/glade/",),
+    "derecho": ("/glade/",),
+    "glade": ("/glade/",),
+    "ucar": ("/glade/",),
+    "ncar": ("/glade/",),
+    "chrysalis": ("/lcrc/",),
+    "improv": ("/gpfs/fs1/", "/home/"),
+    "lcrc": ("/lcrc/",),
+    "perlmutter": ("/pscratch/", "/global/"),
+    "nersc": ("/pscratch/", "/global/"),
+}
+
+
+def _suggest_prefixes(endpoint_name: str) -> tuple[str, ...]:
+    lowered = (endpoint_name or "").lower()
+    for marker, prefixes in _PREFIX_HINTS.items():
+        if marker in lowered:
+            return prefixes
+    return ()
+
+
+def cmd_endpoints_discover(args: argparse.Namespace) -> int:
+    """List the Globus Compute endpoints this identity can already see.
+
+    The question every new user hits first is "where do I get a UUID". Until
+    now the answer was "someone gives it to you", which is true for a shared
+    facility endpoint and useless for anyone who just started their own: the
+    UUID is printed once when the endpoint first registers and is easy to
+    lose. The Globus Compute service knows the answer, so ask it.
+    """
+    try:
+        from globus_compute_sdk import Client
+    except ImportError:
+        print(
+            "The HPC extra is not installed. Install it with:\n"
+            "  uv tool install --python 3.12 --extra hpc uxarray-mcp",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        endpoints = Client().get_endpoints()
+    except Exception as exc:  # pragma: no cover - needs a live Globus session
+        print(f"Could not reach Globus Compute: {exc}", file=sys.stderr)
+        print(
+            "\nIf this is an authentication error, the first command that "
+            "needs Globus opens a browser to log in. Try again, or run "
+            "`uxarray-mcp doctor --endpoint <name>`.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.json:
+        print(json.dumps(endpoints, indent=2, default=str))
+        return 0
+
+    if not endpoints:
+        print("No Globus Compute endpoints are visible to your identity.")
+        print("\nThat means one of:")
+        print("  - you have not started an endpoint on the HPC machine yet")
+        print("    (see docs/operating-an-endpoint.md), or")
+        print("  - the endpoint belongs to someone else and they have not")
+        print("    shared it with you -- ask them for the UUID directly.")
+        return 0
+
+    configured = {p.endpoint_id: name for name, p in load_config().endpoints.items()}
+
+    print(f"{len(endpoints)} endpoint(s) visible to your Globus identity:\n")
+    for entry in endpoints:
+        uuid = str(entry.get("uuid", "") or "")
+        name = str(entry.get("name", "") or "(unnamed)")
+        known = configured.get(uuid)
+        mark = f"  [configured as {known!r}]" if known else ""
+        print(f"  {name}{mark}")
+        print(f"    {uuid}")
+        if not known:
+            hint = _suggest_prefixes(name)
+            prefix_args = " ".join(f"--path-prefix {p}" for p in hint) or (
+                "--path-prefix /your/data/root/"
+            )
+            # Prefer the site word over the first token: an endpoint called
+            # "uxarray-chrysalis" should be suggested as `chrysalis`, not
+            # `uxarray`, which says nothing about which machine it is.
+            lowered = name.lower()
+            local = next(
+                (m for m in _PREFIX_HINTS if m in lowered),
+                (name.split("-")[0] or "hpc"),
+            )
+            print(
+                f"    add it:  uxarray-mcp endpoints add {local} {uuid} {prefix_args}"
+            )
+        print()
+
+    if any(str(e.get("uuid")) not in configured for e in endpoints):
+        print(
+            "--path-prefix tells the dispatcher which file paths belong to "
+            "which\nmachine. Check the suggestion against where your data "
+            "actually lives."
+        )
+    return 0
+
+
 def cmd_endpoints_add(args: argparse.Namespace) -> int:
     target = _user_write_target()
     data = _read_user_config(target)
@@ -418,6 +524,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     endpoints = sub.add_parser("endpoints", help="Manage Globus Compute endpoints.")
     ep_sub = endpoints.add_subparsers(dest="endpoints_command", required=True)
+
+    ep_discover = ep_sub.add_parser(
+        "discover",
+        help="Find endpoint UUIDs your Globus identity can already see.",
+        description=(
+            "Ask Globus Compute which endpoints you have access to, and print "
+            "the `endpoints add` line for each one that is not configured yet. "
+            "Use this when you do not know your endpoint's UUID -- it is "
+            "printed once when the endpoint first registers and is easy to lose."
+        ),
+    )
+    ep_discover.add_argument(
+        "--json", action="store_true", help="Print the raw service response."
+    )
+    ep_discover.set_defaults(func=cmd_endpoints_discover)
 
     ep_list = ep_sub.add_parser("list", help="Show configured endpoints.")
     ep_list.set_defaults(func=cmd_endpoints_list)
