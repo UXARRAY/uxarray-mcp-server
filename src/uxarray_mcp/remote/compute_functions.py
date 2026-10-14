@@ -3,6 +3,28 @@
 These functions are serialized and sent to HPC endpoints via AllCodeStrategies.
 They must be FULLY SELF-CONTAINED — only import packages available on the HPC
 environment (uxarray, numpy, etc.). Never import from uxarray_mcp here.
+
+## Reporting the worker's own version
+
+``_worker_runtime["mcp_server_version"]`` reads ``uxarray_mcp.__version__``
+first and falls back to ``importlib.metadata`` only if that is missing.
+
+The order matters. The clusters run this package from a git checkout
+installed editable, and an editable install does not rewrite its
+``.dist-info`` when the checkout is pulled. So after a successful update the
+metadata still reported 2026.9.0 while the code being executed was 2026.9.1,
+and the drift warning kept firing against a worker that was in fact current
+-- which is worse than no warning, because the obvious next step is to redo
+an update that already worked. ``__version__`` comes from the module that is
+actually imported, so it describes the code that will run.
+
+The value is read by locating the source with ``find_spec`` and scanning the
+first ``__version__`` line out of the file, rather than importing the
+module. Importing it would violate the rule above for real: the worker
+resolves ``uxarray_mcp`` against whatever copy it has, so a payload that
+imports the package stops being self-contained, and on a worker without it
+the call raises. ``find_spec`` returns ``None`` instead, which is why
+``tests/test_remote_mesh_coverage.py`` permits that form and nothing else.
 """
 
 from __future__ import annotations
@@ -84,9 +106,34 @@ def remote_runtime_probe() -> Dict[str, Any]:
             "uxarray_version": (modules.get("uxarray") or {}).get("version")
             or "unknown",
             "xarray_version": (modules.get("xarray") or {}).get("version") or "unknown",
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -207,9 +254,34 @@ def remote_probe_path(file_path: str, inspect_netcdf: bool = True) -> Dict[str, 
         "python_version": __import__("platform").python_version(),
         "uxarray_version": _ux_version,
         "xarray_version": _xr_version,
-        "mcp_server_version": __import__(
-            "importlib.metadata", fromlist=["version"]
-        ).version("uxarray-mcp"),
+        "mcp_server_version": (
+            lambda _o: (
+                (
+                    next(
+                        (
+                            _l.split('"')[1]
+                            for _l in open(_o, encoding="utf-8")
+                            if _l.startswith("__version__")
+                        ),
+                        None,
+                    )
+                    if _o
+                    else None
+                )
+                or __import__("importlib.metadata", fromlist=["version"]).version(
+                    "uxarray-mcp"
+                )
+            )
+        )(
+            str(
+                getattr(
+                    __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                    "origin",
+                    "",
+                )
+                or ""
+            )
+        ),
         "mcp_server_commit": (
             lambda _d: (
                 (
@@ -457,9 +529,34 @@ def remote_inspect_mesh(file_path: str) -> Dict[str, Any]:
                 "xarray_version": getattr(
                     __import__("xarray"), "__version__", "unknown"
                 ),
-                "mcp_server_version": __import__(
-                    "importlib.metadata", fromlist=["version"]
-                ).version("uxarray-mcp"),
+                "mcp_server_version": (
+                    lambda _o: (
+                        (
+                            next(
+                                (
+                                    _l.split('"')[1]
+                                    for _l in open(_o, encoding="utf-8")
+                                    if _l.startswith("__version__")
+                                ),
+                                None,
+                            )
+                            if _o
+                            else None
+                        )
+                        or __import__(
+                            "importlib.metadata", fromlist=["version"]
+                        ).version("uxarray-mcp")
+                    )
+                )(
+                    str(
+                        getattr(
+                            __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                            "origin",
+                            "",
+                        )
+                        or ""
+                    )
+                ),
                 "mcp_server_commit": (
                     lambda _d: (
                         (
@@ -579,9 +676,34 @@ def remote_validate_dataset(grid_path: str, data_path: str) -> Dict[str, Any]:
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -821,9 +943,34 @@ def remote_calculate_area(file_path: str) -> Dict[str, Any]:
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -980,9 +1127,34 @@ def remote_inspect_variable(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -1128,9 +1300,34 @@ def remote_plot_mesh(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -1358,9 +1555,34 @@ def remote_plot_variable(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -1896,9 +2118,34 @@ def remote_temporal_mean_map(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -2088,9 +2335,34 @@ def remote_plot_zonal_mean(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -2272,9 +2544,34 @@ def remote_calculate_zonal_mean(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -2805,9 +3102,34 @@ def remote_subset_bbox_plot(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": ux_version,
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -3042,9 +3364,34 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(__import__("uxarray"), "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -3263,9 +3610,34 @@ def remote_calculate_gradient(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -3500,9 +3872,34 @@ def remote_calculate_curl(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -3732,9 +4129,34 @@ def remote_calculate_divergence(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -3898,9 +4320,34 @@ def remote_calculate_azimuthal_mean(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -4012,9 +4459,34 @@ def remote_grid_facts(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -4286,9 +4758,34 @@ def remote_remap_variable(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -4525,9 +5022,34 @@ def remote_regrid_dataset(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -4757,9 +5279,34 @@ def remote_remap_to_rectilinear(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
@@ -4885,9 +5432,34 @@ def remote_calculate_zonal_anomaly(
             "python_version": __import__("platform").python_version(),
             "uxarray_version": getattr(ux, "__version__", "unknown"),
             "xarray_version": getattr(__import__("xarray"), "__version__", "unknown"),
-            "mcp_server_version": __import__(
-                "importlib.metadata", fromlist=["version"]
-            ).version("uxarray-mcp"),
+            "mcp_server_version": (
+                lambda _o: (
+                    (
+                        next(
+                            (
+                                _l.split('"')[1]
+                                for _l in open(_o, encoding="utf-8")
+                                if _l.startswith("__version__")
+                            ),
+                            None,
+                        )
+                        if _o
+                        else None
+                    )
+                    or __import__("importlib.metadata", fromlist=["version"]).version(
+                        "uxarray-mcp"
+                    )
+                )
+            )(
+                str(
+                    getattr(
+                        __import__("importlib.util").util.find_spec("uxarray_mcp"),
+                        "origin",
+                        "",
+                    )
+                    or ""
+                )
+            ),
             "mcp_server_commit": (
                 lambda _d: (
                     (
