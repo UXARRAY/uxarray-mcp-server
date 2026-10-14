@@ -29,7 +29,13 @@ class _FakeClient:
 
 @pytest.fixture
 def discover(monkeypatch):
-    """Run the command against a canned endpoint list."""
+    """Run the command against a canned endpoint list.
+
+    Patching ``globus_compute_sdk.Client`` means importing it, which the
+    core CI lane cannot do -- it installs no optional extras. Hence the
+    ``hpc`` marker on the classes that use this; the pure-logic tests below
+    (prefix hints, alias choice) stay in the core lane where they belong.
+    """
 
     def run(endpoints, *, json_output=False, configured=None):
         import globus_compute_sdk
@@ -56,6 +62,7 @@ def discover(monkeypatch):
     return run
 
 
+@pytest.mark.hpc
 class TestItAnswersWhereDoIGetAUuid:
     def test_a_visible_endpoint_is_listed_with_its_uuid(self, discover, capsys):
         code = discover(
@@ -88,6 +95,7 @@ class TestItAnswersWhereDoIGetAUuid:
         assert "endpoints add" not in out
 
 
+@pytest.mark.hpc
 class TestTheSuggestedNameNamesTheMachine:
     """``uxarray-chrysalis`` should suggest ``chrysalis``, not ``uxarray``.
 
@@ -140,6 +148,7 @@ class TestPrefixHints:
         assert _suggest_prefixes("some-random-endpoint") == ()
 
 
+@pytest.mark.hpc
 class TestWhenThereIsNothingToShow:
     def test_an_empty_list_explains_both_reasons(self, discover, capsys):
         """ "No endpoints" has two very different causes; name them both."""
@@ -151,6 +160,7 @@ class TestWhenThereIsNothingToShow:
         assert "belongs to someone else" in out
 
 
+@pytest.mark.hpc
 class TestTheRawResponseIsAvailable:
     def test_json_prints_the_service_payload(self, discover, capsys):
         import json
