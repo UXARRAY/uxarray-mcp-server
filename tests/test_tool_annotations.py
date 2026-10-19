@@ -11,6 +11,8 @@ caught whether or not a profile happens to advertise that tool today.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from uxarray_mcp.annotations import (
@@ -118,3 +120,77 @@ class TestTheMapMatchesTheRealToolSurface:
                 continue
             hints = annotations_for(name) or {}
             assert hints.get("readOnlyHint") is not True, f"{name} claims read-only"
+
+
+class TestTheShimFindsTheHandlerOnEitherSDK:
+    """``apply_tool_annotations`` must locate ``tools/list`` on mcp 1.x too.
+
+    mcp 2.x keys ``_request_handlers`` by method string; mcp 1.x, our declared
+    floor, keys it by request type. The shim looked up only the string, so on
+    the floor it found nothing and returned the server untouched -- every tool
+    went out unannotated, and the hints a client uses to decide what to
+    auto-approve were missing precisely where we document them as present.
+
+    These use a stand-in server rather than a real one so both keying schemes
+    are exercised whichever SDK is installed; the weekly floor job is the only
+    place the type-keyed branch is otherwise reachable.
+    """
+
+    @staticmethod
+    def _fake_result():
+        from mcp.types import ListToolsResult, Tool
+
+        return ListToolsResult(
+            tools=[Tool(name="get_capabilities", inputSchema={"type": "object"})]
+        )
+
+    class _Server:
+        def __init__(self, handlers):
+            self._request_handlers = handlers
+
+    async def _annotated_names(self, key, *, envelope=False):
+        from uxarray_mcp.annotations import apply_tool_annotations
+
+        result = self._fake_result()
+        if envelope:
+            # A stand-in for mcp 1.x's ``ServerResult``, which is a RootModel
+            # wrapping the real result. On mcp 2.x ``ServerResult`` is a bare
+            # union and cannot be constructed, so building the shape by hand
+            # keeps this case exercised on whichever SDK is installed.
+            result = SimpleNamespace(root=result)
+
+        async def handler(*_args, **_kwargs):
+            return result
+
+        handlers = {key: handler}
+        apply_tool_annotations(self._Server(handlers))
+        assert handlers[key] is not handler, "the handler was never wrapped"
+        out = await handlers[key]()
+        payload = getattr(out, "root", out)
+        # By alias, because ``readOnlyHint`` is what goes out on the wire;
+        # the Python attribute is snake_case on one SDK and camelCase on the
+        # other, and the client only ever sees the former.
+        return payload.tools[0].annotations.model_dump(by_alias=True, exclude_none=True)
+
+    async def test_a_string_keyed_handler_is_wrapped(self):
+        """mcp 2.x."""
+        assert (await self._annotated_names("tools/list"))["readOnlyHint"] is True
+
+    async def test_a_type_keyed_handler_is_wrapped(self):
+        """mcp 1.x, the declared floor."""
+        from mcp.types import ListToolsRequest
+
+        hints = await self._annotated_names(ListToolsRequest)
+        assert hints["readOnlyHint"] is True
+
+    async def test_a_result_wrapped_in_a_server_envelope_is_annotated(self):
+        """mcp 1.x returns ``ServerResult``, whose ``.root`` holds the tools.
+
+        Without unwrapping it, the shim found the handler, wrapped it, and
+        then iterated an empty ``.tools`` -- so every tool still went out
+        unannotated and the wrapping looked like it had worked.
+        """
+        from mcp.types import ListToolsRequest
+
+        hints = await self._annotated_names(ListToolsRequest, envelope=True)
+        assert hints["readOnlyHint"] is True

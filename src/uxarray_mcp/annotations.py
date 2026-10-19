@@ -156,9 +156,11 @@ def apply_tool_annotations(server: Any) -> Any:
     if not isinstance(handlers, dict):  # pragma: no cover - defensive
         return server
 
-    entry = handlers.get("tools/list")
-    if entry is None:  # pragma: no cover - defensive
+    key = _list_tools_key(handlers)
+    if key is None:  # pragma: no cover - defensive
         return server
+
+    entry = handlers[key]
 
     # mcp 2.x stores a ``HandlerEntry(handler, params_type)`` rather than a
     # bare callable, and the dispatcher reads ``.params_type`` off it before
@@ -178,7 +180,12 @@ def apply_tool_annotations(server: Any) -> Any:
 
     async def on_list_tools(*args: Any, **kwargs: Any) -> Any:
         result = await original(*args, **kwargs)
-        for tool in getattr(result, "tools", []):
+        # mcp 1.x hands back a ``ServerResult`` envelope whose ``.root`` is
+        # the ``ListToolsResult``; mcp 2.x returns the result directly. Only
+        # the latter has ``.tools``, so without this the loop below iterated
+        # nothing on the floor and silently annotated no tool at all.
+        payload = getattr(result, "root", result)
+        for tool in getattr(payload, "tools", []):
             if getattr(tool, "annotations", None) is not None:
                 continue
             hints = annotations_for(tool.name)
@@ -187,9 +194,32 @@ def apply_tool_annotations(server: Any) -> Any:
         return result
 
     if hasattr(entry, "handler"):
-        handlers["tools/list"] = type(entry)(
+        handlers[key] = type(entry)(
             handler=on_list_tools, params_type=entry.params_type
         )
     else:
-        handlers["tools/list"] = on_list_tools
+        handlers[key] = on_list_tools
     return server
+
+
+def _list_tools_key(handlers: dict[Any, Any]) -> Any | None:
+    """Find the ``tools/list`` entry under either SDK's keying scheme.
+
+    mcp 2.x keys ``_request_handlers`` by method string -- ``"tools/list"``.
+    mcp 1.x, which is still our declared floor, keys it by the request *type*,
+    ``mcp.types.ListToolsRequest``. Looking up only the string meant that on
+    the floor this whole shim found nothing, returned the server untouched,
+    and every tool went out with no annotations at all: the hints a client
+    uses to decide what to auto-approve were absent exactly where we promise
+    they are present. The weekly floor job caught it; normal CI resolves to
+    mcp 2.x and never saw it.
+    """
+    if "tools/list" in handlers:
+        return "tools/list"
+
+    try:
+        from mcp.types import ListToolsRequest
+    except ImportError:  # pragma: no cover - MCP SDK is a hard dep of serving
+        return None
+
+    return ListToolsRequest if ListToolsRequest in handlers else None
