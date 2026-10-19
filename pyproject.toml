@@ -71,7 +71,7 @@ dependencies = [
     # before and would have gone missing silently on the next resolve.
     # Installing 2026.9.1 without them fails 95 tests with
     # OptionalDependencyNotFoundError.
-    "uxarray[geo,viz]>=2026.9.1,<2026.10",
+    "uxarray[geo,viz]>=2026.10.0,<2026.11",
 ]
 
 [project.optional-dependencies]
