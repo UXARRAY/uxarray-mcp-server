@@ -27,7 +27,18 @@
 # ---------------------------------------------------------------------------
 # Stage 1 -- builder. Resolves and compiles into a relocatable venv.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS builder
+
+# One declaration for the interpreter, used by both stages and by every
+# `uv sync`. These used to be four separate literals: two `FROM` lines and two
+# `--python 3.12` flags. Dependabot rewrites `FROM` and nothing else, so its
+# 3.14 bump (#175) produced an image whose base had no 3.12 and a sync that
+# demanded one -- `No interpreter found for Python 3.12`. Declared once, that
+# bump cannot half-apply. The `ARG` sits before the first `FROM` so it is
+# visible to both; each stage redeclares it to bring it into its own scope.
+ARG PYTHON_VERSION=3.12
+
+FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
+ARG PYTHON_VERSION
 
 # A C/C++ toolchain is required, not optional: `healpix` (pulled in by uxarray)
 # publishes no wheel for every platform we build on -- notably linux/arm64 --
@@ -65,7 +76,7 @@ COPY src/uxarray_mcp/__init__.py src/uxarray_mcp/__init__.py
 # installed after the source is copied, so source edits invalidate only the
 # final, cheap layer.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --no-install-project --python 3.12
+    uv sync --no-dev --no-install-project --python "${PYTHON_VERSION}"
 
 COPY src/ src/
 
@@ -75,7 +86,7 @@ COPY src/ src/
 # entrypoint dies on `ModuleNotFoundError: No module named 'uxarray_mcp'`.
 # A non-editable install copies the package into site-packages instead.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --no-editable --python 3.12
+    uv sync --no-dev --no-editable --python "${PYTHON_VERSION}"
 
 # Fixtures are generated here, in the stage that already has uxarray, so the
 # runtime stage needs no build tooling. See the script's docstring for why
@@ -114,7 +125,8 @@ RUN set -eux; \
 # ---------------------------------------------------------------------------
 # Stage 2 -- runtime. Carries the venv and the data, none of the build tools.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
+ARG PYTHON_VERSION
 
 LABEL org.opencontainers.image.title="UXarray MCP Server" \
       org.opencontainers.image.description="MCP server for analyzing unstructured climate meshes with UXarray (local-only build)" \
