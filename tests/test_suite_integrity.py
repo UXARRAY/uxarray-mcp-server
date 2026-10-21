@@ -78,3 +78,64 @@ def test_the_suite_cannot_see_a_real_endpoint():
 
     assert config.endpoint_id is None
     assert config.endpoints == {}
+
+
+class TestSetupScriptMatchesCI:
+    """``SETUP.sh`` is the first thing a new contributor runs.
+
+    It drifted: it ran a bare ``uv sync`` and an unfiltered ``pytest``,
+    while the suite had moved to marker-based selection. Following it
+    produced 19 failures that were purely missing optional dependencies --
+    the script's own fault, on a tree where CI was green. These hold it to
+    the same partition CI uses so the same drift is caught here instead of
+    by someone's first afternoon.
+    """
+
+    @staticmethod
+    def _setup_text():
+        from pathlib import Path
+
+        return (Path(__file__).resolve().parent.parent / "SETUP.sh").read_text()
+
+    def test_it_installs_the_hpc_extra(self):
+        """Without it, the hpc-marked tests fail on ModuleNotFoundError.
+
+        They are mocked and need no cluster, so there is no reason for a
+        contributor not to run them.
+        """
+        assert "uv sync --extra hpc --dev" in self._setup_text()
+
+    def test_it_selects_by_marker_and_not_by_filename(self):
+        """``pytest.ini`` says CI selects by marker, never by filename.
+
+        The ``--ignore=tests/test_remote_agent.py`` that used to be here was
+        hiding 16 tests that pass.
+        """
+        # Only the commands, not the comments explaining why `--ignore` is
+        # the wrong tool -- those legitimately mention it by name.
+        commands = [
+            line
+            for line in self._setup_text().splitlines()
+            if "pytest" in line and not line.lstrip().startswith("#")
+        ]
+        assert commands, "SETUP.sh runs no tests at all"
+        for line in commands:
+            assert "--ignore" not in line, (
+                f"select by marker, not by filename: {line.strip()}"
+            )
+        joined = "\n".join(commands)
+        assert '-m "not hpc and not live and not yac"' in joined
+        assert '-m "hpc and not yac"' in joined
+
+    def test_it_does_not_gate_on_the_ambient_interpreter(self):
+        """``.python-version`` pins 3.12 and uv provisions it.
+
+        The old gate ran ``python3 -c 'assert sys.version_info >= (3, 11)'``
+        and exited 1, so a machine whose system python3 was 3.9 could not
+        run the script at all -- while ``uv sync`` on that same machine
+        builds a working 3.12 environment.
+        """
+        text = self._setup_text()
+        assert "Python 3.11 or newer is required" not in text, (
+            "the ambient python3 is not the interpreter the project runs on"
+        )

@@ -61,13 +61,24 @@ def _write_oversized_scrip(path):
     gigabytes: the underlying data is all-zero uint8 with light
     compression, so the file is ~12 MB on disk and writes in a couple of
     seconds.
+
+    The chunking is what keeps that promise. ``chunks=(n_face, n_corner)``
+    is a single chunk of 2000 x 3,500,000 uint8 = 6.5 GiB per array, and
+    ``to_netcdf`` materializes a chunk at a time, so writing the two
+    variables needed ~7.5 GiB resident before the code under test ran at
+    all. That is under GitHub's 16 GiB runners and over a developer
+    laptop, so the fixture -- not the server -- was what failed locally.
+    Chunking along ``grid_corners`` holds each write to ~191 MiB and
+    leaves the test identical: the guard reads ``corner_var.size``, which
+    is the declared shape, and never touches the data.
     """
     import dask.array as da
 
     n_face, n_corner = 2000, 3_500_000
     shape = (n_face, n_corner)
-    lon = da.zeros(shape, chunks=(n_face, n_corner), dtype="u1")
-    lat = da.zeros(shape, chunks=(n_face, n_corner), dtype="u1")
+    chunks = (n_face, 100_000)
+    lon = da.zeros(shape, chunks=chunks, dtype="u1")
+    lat = da.zeros(shape, chunks=chunks, dtype="u1")
     ds = xr.Dataset(
         {
             "grid_corner_lon": (("grid_size", "grid_corners"), lon),
