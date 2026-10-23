@@ -9,6 +9,18 @@ from uxarray_mcp.domain.dims import reduce_to_face
 from uxarray_mcp.domain.profile_coverage import compute_profile_coverage
 from uxarray_mcp.domain.zonal import extract_profile
 
+#: Appended to every "not face-centered" refusal.
+#:
+#: Refusing was right; refusing without a way forward was not. Node-centred
+#: vorticity is ordinary model output, and the standard move is
+#: ``topological_mean("face")`` -- which the server could not run at all
+#: until ``regrid_elements`` existed, so the message had nothing to offer.
+#: Found by replaying the UXARRAY/uxarray-community cyclone notebook, which
+#: does exactly this before computing anything.
+_REGRID_REPAIR = (
+    "Move it onto faces first with regrid_elements(destination='face'), then retry."
+)
+
 _T = TypeVar("_T")
 
 
@@ -217,7 +229,7 @@ def compute_gradient(
     if "n_face" not in var.dims and "nCells" not in var.dims:
         raise ValueError(
             f"Variable '{variable_name}' is not face-centered. "
-            "Gradient requires face-centered data."
+            "Gradient requires face-centered data. " + _REGRID_REPAIR
         )
     var, reduced_dims = reduce_to_face(
         var, time_index=time_index, level_index=level_index
@@ -332,7 +344,7 @@ def compute_curl(
         if "n_face" not in var.dims and "nCells" not in var.dims:
             raise ValueError(
                 f"Variable '{name}' is not face-centered. "
-                "Curl requires face-centered vector components."
+                "Curl requires face-centered vector components. " + _REGRID_REPAIR
             )
     u, u_reduced = reduce_to_face(u, time_index=time_index, level_index=level_index)
     v, v_reduced = reduce_to_face(v, time_index=time_index, level_index=level_index)
@@ -462,7 +474,7 @@ def compute_divergence(
         if "n_face" not in var.dims and "nCells" not in var.dims:
             raise ValueError(
                 f"Variable '{name}' is not face-centered. "
-                "Divergence requires face-centered vector components."
+                "Divergence requires face-centered vector components. " + _REGRID_REPAIR
             )
     u, u_reduced = reduce_to_face(u, time_index=time_index, level_index=level_index)
     v, v_reduced = reduce_to_face(v, time_index=time_index, level_index=level_index)

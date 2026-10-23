@@ -114,6 +114,14 @@ _DEFERRED_TOOLS: dict[str, tuple[str, ...]] = {
         "subset_bbox",
         "subset_polygon",
         "extract_cross_section",
+        # Selection near a point, which the bounding box cannot express:
+        # a radius, or the k closest faces. Both appear in the
+        # uxarray-community notebooks.
+        "subset_advanced",
+        # Moves a field between nodes, edges and faces. Kept with the
+        # shape tools because it changes where values live, not what
+        # they mean.
+        "regrid_elements",
         "remap_variable",
         "regrid_dataset",
         "remap_to_rectilinear",
@@ -795,6 +803,8 @@ _SEARCH_HINTS: dict[str, str] = {
     "compare_fields": "diff two datasets verification",
     "calculate_area": "face cell surface area",
     "subset_bbox": "longitude latitude bounding box region",
+    "subset_advanced": "circle radius nearest neighbor closest faces point",
+    "regrid_elements": "node edge face centered topological mean interpolate",
     "subset_polygon": "polygon region of interest mask",
     "extract_cross_section": "transect slice latitude longitude",
     "remap_variable": "interpolation target grid",

@@ -29,7 +29,11 @@ EXPECTED_CONTROL = 12  # 8 session + 4 hpc
 EXPECTED_CORE_EXTRA = 3  # list_datasets + 2 response-contract tools
 EXPECTED_PROMPTS = 7  # first_look, vorticity_analysis, cyclone_structure,
 # eddy_activity, model_evaluation, climatology_anomaly, hpc_diagnose
-EXPECTED_DEFERRED = 33  # +zonal_anomaly, +remap_to_rectilinear, +check_remote_yac
+EXPECTED_DEFERRED = 35  # +zonal_anomaly, +remap_to_rectilinear, +check_remote_yac,
+# +subset_advanced and +regrid_elements, which close the bounding_circle /
+# nearest_neighbor / topological_mean gaps found by replaying the
+# uxarray-community notebooks. Deferred rather than front-door on purpose:
+# #89 already measures run_analysis as too large to describe itself.
 
 
 @pytest.fixture(autouse=True)
