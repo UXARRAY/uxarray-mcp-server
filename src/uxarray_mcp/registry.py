@@ -673,15 +673,27 @@ def _trim_wire_schema(tool: Any) -> None:
     _type_untyped_unions(params)
 
 
-#: JSON Schema for parameters whose Python annotation toolregistry cannot
-#: express. ``tuple | float | list[Any] | None`` comes out as ``{"default":
-#: null}`` -- no ``type`` at all -- and ``float | list[float] | None`` as
-#: ``{"type": "number"}``, which drops the list. A client reading the first
-#: has nothing to go on and sends the literal text ``"[-60, 60]"``, which
-#: the server's own validator then refuses as neither number nor list. The
-#: parameter was unusable from every MCP client, while direct Python calls
+#: JSON Schema for parameters whose Python annotation toolregistry renders
+#: badly.
+#:
+#: Originally this filled in a union that arrived with no ``type`` at all:
+#: ``tuple | float | list[Any] | None`` came out as ``{"default": null}``,
+#: so a client had nothing to follow and sent the literal text
+#: ``"[-60, 60]"``, which the server's own validator then refused. The
+#: parameter was unusable from every MCP client while direct Python calls
 #: and every test passed. Found on the first remote zonal mean through a
 #: real client.
+#:
+#: toolregistry 0.19 fixed that (Oaklight/ToolRegistry#269) and now emits
+#: ``anyOf``. It is still not what we want to serve: ``tuple`` and ``list``
+#: both render as ``array``, so the union carries the same branch twice,
+#: and the items are untyped -- ``{"type":"array","items":{}}`` beside a
+#: second identical entry. A duplicated branch is noise in a payload we
+#: measure, and untyped items say less than we know.
+#:
+#: So this no longer fills a gap; it replaces a worse rendering with the
+#: canonical one. Kept keyed by parameter name, and still a no-op for
+#: anything not listed.
 _UNTYPED_UNION_SCHEMAS: dict[str, dict[str, Any]] = {
     "lat_spec": {
         "anyOf": [
@@ -693,10 +705,16 @@ _UNTYPED_UNION_SCHEMAS: dict[str, dict[str, Any]] = {
 
 
 def _type_untyped_unions(schema: Any) -> None:
-    """Give a JSON type to union parameters upstream rendered without one.
+    """Serve the canonical schema for a union upstream renders poorly.
 
-    Only fills a property that has neither ``type`` nor ``anyOf``; a future
-    toolregistry that renders the union itself makes this a no-op.
+    Replaces whatever is there, rather than only filling an absence: since
+    toolregistry 0.19 there *is* an ``anyOf``, but it repeats the ``array``
+    branch (``tuple`` and ``list`` both become ``array``) and leaves its
+    items untyped. Deferring to that would serve a duplicated branch and
+    drop the item type we know.
+
+    ``default`` is preserved -- it is upstream's to decide and carries the
+    parameter's optionality.
     """
     if not isinstance(schema, dict):
         return
@@ -707,8 +725,8 @@ def _type_untyped_unions(schema: Any) -> None:
         fix = _UNTYPED_UNION_SCHEMAS.get(name)
         if fix is None or not isinstance(spec, dict):
             continue
-        if "type" in spec or "anyOf" in spec:
-            continue
+        spec.pop("type", None)
+        spec.pop("anyOf", None)
         spec.update(fix)
 
 

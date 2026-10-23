@@ -194,3 +194,54 @@ class TestTheShimFindsTheHandlerOnEitherSDK:
 
         hints = await self._annotated_names(ListToolsRequest, envelope=True)
         assert hints["readOnlyHint"] is True
+
+
+class TestUpstreamInferenceDoesNotOverruleUs:
+    """An inferred hint must not outrank a deliberate one.
+
+    toolregistry-server 0.7.0 began attaching annotations of its own, and
+    marked ``manage_session`` and ``resume_workflow`` ``readOnlyHint=True``.
+    The first resets session state and clears artifacts; the second runs
+    pending workflow steps. A client reading that hint may auto-approve
+    them without asking.
+
+    Two rules follow, and these pin both: where we have rated a tool, our
+    rating is what goes out; where we have not, nothing goes out, because
+    absence is honest and an unchecked inference is not.
+    """
+
+    @staticmethod
+    async def _served():
+        from mcp_harness import connect
+
+        async with connect(profile="deferred-full") as (session, _init):
+            return (await session.list_tools()).tools
+
+    async def test_no_unrated_tool_is_served_an_inferred_annotation(self):
+        from uxarray_mcp.annotations import annotations_for
+
+        surprises = [
+            t.name
+            for t in await self._served()
+            if annotations_for(t.name) is None and t.annotations is not None
+        ]
+        assert not surprises, (
+            "annotations appeared on tools nobody rated, so something "
+            f"upstream guessed: {sorted(surprises)}"
+        )
+
+    async def test_a_state_changing_tool_is_never_served_as_read_only(self):
+        """The specific claim 0.7.0 made, asserted by name.
+
+        These two are the ones it got wrong; naming them means a future
+        release making the same guess fails here rather than in a client.
+        """
+        served = {t.name: t for t in await self._served()}
+        for name in ("manage_session", "resume_workflow"):
+            tool = served.get(name)
+            if tool is None:  # pragma: no cover - profile shape changed
+                continue
+            hints = tool.annotations
+            assert (
+                hints is None or getattr(hints, "read_only_hint", None) is not True
+            ), f"{name} changes state but is advertised read-only"
