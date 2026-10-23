@@ -664,6 +664,23 @@ def get_capabilities(
             "configured_endpoints": config.endpoint_names,
         },
         "uxarray_capabilities": uxarray_capabilities,
+        # What the list above is, and is not. Every string in it is a real
+        # UXarray call valid for this mesh, but the server does not execute
+        # all of them -- `grid.get_ball_tree()` and `var.integrate()` have no
+        # operation behind them and never did. Without saying so, a model
+        # reading this plans a call that does not exist, which is the same
+        # defect as a wrong tool annotation: the server stating something
+        # about itself that is not true. `mcp_server_tools` above is the
+        # executable surface; this one is advice for code the caller writes.
+        "uxarray_capabilities_are_advisory": {
+            "meaning": (
+                "Native UXarray calls valid for this mesh, listed so you can "
+                "write them yourself. Not all are executable through this "
+                "server."
+            ),
+            "executable_surface": "mcp_server_tools",
+            "inventory": "uxarray_mcp.domain.uxarray_surface.SURFACE",
+        },
         "scientific_contracts": {
             "vector_calculus": {
                 "structurally_applicable": len(face_centered_var_names) >= 2,

@@ -68,6 +68,10 @@ from .stateful import (
     resume_workflow,
     run_workflow,
 )
+from .surface_extras import (
+    regrid_elements,
+    subset_advanced,
+)
 from .transfer_tools import (
     transfer_get,
     transfer_ls,
@@ -109,6 +113,8 @@ __all__ = [
     "plot_variable",
     "plot_zonal_mean",
     "subset_bbox",
+    "subset_advanced",
+    "regrid_elements",
     "subset_polygon",
     "extract_cross_section",
     "compare_fields",
