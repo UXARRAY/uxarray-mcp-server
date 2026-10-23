@@ -186,11 +186,25 @@ def apply_tool_annotations(server: Any) -> Any:
         # nothing on the floor and silently annotated no tool at all.
         payload = getattr(result, "root", result)
         for tool in getattr(payload, "tools", []):
-            if getattr(tool, "annotations", None) is not None:
-                continue
             hints = annotations_for(tool.name)
             if hints:
+                # Ours wins. toolregistry-server 0.7.0 began inferring
+                # annotations of its own, and deferring to what was already
+                # there would let an inference overrule a rating we made
+                # deliberately.
                 tool.annotations = ToolAnnotations(**hints)
+            elif getattr(tool, "annotations", None) is not None:
+                # Unclassified here, annotated by upstream. 0.7.0 marks
+                # `manage_session` and `resume_workflow` readOnlyHint=True;
+                # the first can reset state and clear artifacts, the second
+                # runs pending workflow steps. Neither is read-only, and a
+                # client reading that hint may auto-approve them.
+                #
+                # Absence is the honest answer for anything we have not
+                # rated: an inferred hint is a claim nobody checked, and a
+                # wrong safe-to-run claim is the one failure direction that
+                # costs a user something.
+                tool.annotations = None
         return result
 
     if hasattr(entry, "handler"):

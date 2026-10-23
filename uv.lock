@@ -4896,27 +4896,27 @@ wheels = [
 
 [[package]]
 name = "toolregistry"
-version = "0.18.1"
+version = "0.19.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
     { name = "llm-rosetta" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/44/dd/5553167822f3308250b9f2a7827aa22d0c13d66846f74a2ea6691414676f/toolregistry-0.18.1.tar.gz", hash = "sha256:fe639bb043fd94e4d34c02e8cfd06e0751de4bb0a95b0c1307013d625778cf65", size = 359979, upload-time = "2026-09-16T09:09:21.667Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8f/d2/463c77c3ebb7b451c9a176f5b01c38467a2daa265b4c93d97651eca07222/toolregistry-0.19.0.tar.gz", hash = "sha256:d85760a8f1442e60256faa58277d91a0781f72ef45dd4d3fb855c98590aed7f5", size = 462441, upload-time = "2026-10-23T17:57:12.456Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/5f/75370c48e8fe37df1c57f7a99fb46fc1ada2ce568f6beee85d2017a74453/toolregistry-0.18.1-py3-none-any.whl", hash = "sha256:6dc988bb1de14c86a8b782143c195d9c9212cf58143e5e62b9f27427121d21b9", size = 277805, upload-time = "2026-09-16T09:09:20.004Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/98/5f7715d97a27093b07ade93e88de5b942102e4ccdd42afa7fb22f791b3cc/toolregistry-0.19.0-py3-none-any.whl", hash = "sha256:704a717a6ddb8165b1efff2b0fc219a11168fa48d5d372fc854d74a06fe756a0", size = 342713, upload-time = "2026-10-23T17:57:10.909Z" },
 ]
 
 [[package]]
 name = "toolregistry-server"
-version = "0.6.0"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "toolregistry" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7c/9d/12badb761e32e8963240443513fa987ff08711a7cbfa2bbd30f97c803dad/toolregistry_server-0.6.0.tar.gz", hash = "sha256:1c423ed1f2e28785cdd3f2751c0bb4bfbf233c716d25d5012635b50750110841", size = 90593, upload-time = "2026-09-15T08:56:01.028Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4a/90/d4a7a6b70b5ba18c93c09210f77e3e450748697550b9fd1cbff1081fcd52/toolregistry_server-0.7.0.tar.gz", hash = "sha256:ffe5b51dc03cf870455275458c6e659b7328399a5b82c82733199c8277ceee1e", size = 114277, upload-time = "2026-10-23T18:17:21.247Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/10/41192f02c779f5c4eb93058fc1cf7f452609a340ac1712f41fd630a72b3b/toolregistry_server-0.6.0-py3-none-any.whl", hash = "sha256:24a2f1b43d2df250728a13e4df1d97a30ae6568de345cb7cb71472f588792b69", size = 69382, upload-time = "2026-09-15T08:55:59.613Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/29/e52fb61fab654d44a5438ecee48ac279a16afebd5c196cb0af9376cd1ab1/toolregistry_server-0.7.0-py3-none-any.whl", hash = "sha256:3de4fb1ce8700ab40b30b2aa17cf147017c5955cda9e606224dc33bc106cb8b0", size = 81845, upload-time = "2026-10-23T18:17:19.52Z" },
 ]
 
 [package.optional-dependencies]
@@ -5185,9 +5185,9 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0" },
     { name = "sphinx-book-theme", marker = "extra == 'docs'", specifier = ">=1.1.0" },
-    { name = "toolregistry", specifier = ">=0.18.0" },
-    { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.6.0" },
-    { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.6.0" },
+    { name = "toolregistry", specifier = ">=0.19.0" },
+    { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.7.0" },
+    { name = "toolregistry-server", extras = ["openapi"], marker = "extra == 'openapi'", specifier = ">=0.7.0" },
     { name = "uxarray", extras = ["geo", "viz"], specifier = ">=2026.10.0,<2026.11" },
 ]
 provides-extras = ["openapi", "hpc", "transfer", "docs"]

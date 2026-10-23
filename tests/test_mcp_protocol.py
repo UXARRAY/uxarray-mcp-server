@@ -289,10 +289,22 @@ class TestCallingTools:
         assert "not found" in text.lower() or "no such file" in text.lower()
 
     async def test_calling_an_unknown_tool_is_handled(self):
-        async with connect() as (session, _init):
-            result = await session.call_tool("no_such_tool_exists", {})
+        """A name that does not exist is a protocol error, not a result.
 
-        assert wire(result)["isError"] is True
+        toolregistry-server 0.7.0 changed this: it used to come back as a
+        ``CallToolResult`` with ``isError``, and now raises JSON-RPC
+        ``-32602`` (invalid params). The new behaviour is the correct one
+        -- ``isError`` is for a tool that ran and failed, while an unknown
+        name means nothing ran -- so this asserts the new contract rather
+        than pinning the old one.
+        """
+        from mcp.shared.exceptions import MCPError
+
+        async with connect() as (session, _init):
+            with pytest.raises(MCPError) as err:
+                await session.call_tool("no_such_tool_exists", {})
+
+        assert "no_such_tool_exists" in str(err.value)
 
 
 class TestResources:
