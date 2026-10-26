@@ -3302,7 +3302,42 @@ except Exception as exc:
     out["remap_error"] = f"{type(exc).__name__}: {exc}"
     out["remap_traceback"] = traceback.format_exc()
 
+# The conservative remap, which is the only reason YAC is here.
+#
+# Everything above passes with no working YAC weight computation:
+# `nearest_neighbor` runs on uxarray's own engine and never calls into the
+# library, so the probe reported "YAC OK" on a worker where
+# `method="conservative"` killed the Globus worker outright. Importing YAC
+# and computing weights with it are different capabilities, and only the
+# second one is what a caller asking for a conservative remap needs.
+#
+# Kept separate from the block above so a site that has YAC importable but
+# cannot compute weights is reported as exactly that, rather than as a
+# blanket failure. Running inside this subprocess is what makes the check
+# safe at all: a YAC/MPI abort takes down the child and is reported, where
+# the same call in the worker surfaces as an unexplained WorkerLost.
+try:
+    t0 = time.perf_counter()
+    conservative = uxda.remap(
+        destination_grid=dst, method="conservative", backend="yac"
+    )
+    arr = np.asarray(conservative)
+    out["conservative_ok"] = True
+    out["conservative_seconds"] = round(time.perf_counter() - t0, 3)
+    out["conservative_dst_shape"] = list(conservative.shape)
+    out["conservative_finite"] = int(np.isfinite(arr).sum())
+except BaseException as exc:
+    # BaseException, not Exception: a YAC/MPI failure can raise SystemExit
+    # rather than a normal error, and catching only Exception would let the
+    # probe exit 0 through the bottom of this file with no verdict recorded.
+    out["conservative_ok"] = False
+    out["conservative_error"] = f"{type(exc).__name__}: {exc}"[:400]
+    out["conservative_traceback"] = traceback.format_exc()[-1200:]
+
 print(json.dumps(out))
+# `conservative_ok` is deliberately not part of the exit status. The probe's
+# job is to report what works; a site that wants only the non-conservative
+# methods is not broken, and `available` already turns on the YAC import.
 raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
 """
 
