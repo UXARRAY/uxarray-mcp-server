@@ -59,6 +59,29 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   environment.
 
 ### Fixed
+- A YAC-backed remap that loses its worker is told what killed it. The
+  message said memory and advised subsetting; on the UCAR endpoint the
+  cause is MPI, and subsetting cannot fix it. Importing YAC calls
+  `MPI_Init`, which Open MPI serves as a singleton and MPICH aborts, and
+  an abort inside a Globus worker arrives with nothing mentioning MPI.
+  Measured on Casper: the identical conservative remap runs in 0.09s
+  under `check_remote_yac` and kills the worker through `run_analysis` --
+  same node, same YAC, same mesh, the only difference being that the
+  probe runs it in a subprocess. Any other lost worker still gets the
+  memory advice, which is right for it.
+- `check_remote_yac` exercises the conservative path. It only ever ran
+  `nearest_neighbor`, which uses uxarray's own engine and never calls
+  into YAC, so it reported "YAC OK" on a worker where every conservative
+  remap died. `conservative_ok` now separates "YAC is broken" from "YAC
+  cannot run in this process", which is the distinction that picks the
+  repair.
+- `scripts/ucar_endpoint.sh check-mpi` runs the bare and launched imports
+  side by side and names which case the site is in. Chrysalis has had an
+  equivalent since it hit this; UCAR had nothing.
+- The MCP SDK exception is found under either spelling. `McpError` on
+  1.x, `MCPError` on 2.x; importing one name fails on the other SDK, and
+  only the weekly floor job resolves 1.x, so the wrong one went unnoticed
+  until that run went red.
 - Tool annotations reach clients on mcp 1.x, not only 2.x. At the declared
   floor the shim attached nothing, so every tool was served with no hints
   at all -- the `readOnlyHint` a client reads to decide what it may
@@ -95,13 +118,27 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
   `grid_corners` holds each write to ~191 MiB; the full suite now peaks at
   1.36 GiB.
 
+### Documentation
+- `docs/globus-basics.md` says what Globus is before anything asks you to
+  use it. The explanation existed, in the middle of `remote-hpc.md`,
+  under a heading the README routes HPC users straight past -- written
+  down and unreachable, which reads the same as missing. It also names
+  the identity trap that costs the most time: a Globus login is not
+  automatically tied to a cluster account, and signing in with a personal
+  account produces an identity that authenticates fine and sees none of
+  your endpoints, which looks exactly like a dead endpoint.
+- `docs/ucar.md` says endpoints are per-user. A colleague's working
+  Casper endpoint gives you nothing: it runs as their account and reads
+  their files. The conda and YAC paths on that page are per-`$USER` too.
+
 ### Security
-- Clears 49 advisories in the lockfile, all in transitively-resolved
+- Clears 55 advisories in the lockfile, all in transitively-resolved
   packages: 44 against pillow 12.3.0 (5 Critical), PYSEC-2026-4320 against
   certifi 2026.7.22 (9.1 Critical), and four against virtualenv 21.14.7.
   certifi is the trust store behind every outbound HTTPS call this server
   makes -- Globus Compute submission, transfers, remote dataset reads -- so
-  a Critical there is not a transitive detail.
+  a Critical there is not a transitive detail. A further six against
+  filelock 4.1.1 cleared the same way.
 
 ## 2026.9.1 — 2026-09-25
 ### Changed
