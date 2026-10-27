@@ -39,7 +39,6 @@ from .compute_functions import (
 )
 from .config import HPCConfig
 
-
 #: Remap methods that compute their weights inside YAC.
 #:
 #: Kept here rather than imported from ``domain.remap_backend`` because this
