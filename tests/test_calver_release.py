@@ -9,6 +9,7 @@ and the pin that says which upstream months we accept moves with it.
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -251,11 +252,39 @@ class TestTheDailyPollDecidesWhenToRelease:
         recipe.write_text('{% set version = "2026.9.0" %}\n')
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text("# Changelog\n\n## Unreleased\n\n- Something.\n")
+        # Redirected like every other file `main()` rewrites. Without this
+        # the sandbox leaked: `server.json` was added to the release script
+        # after this fixture was written, so running the suite rewrote the
+        # real manifest in the working tree to whatever version the last
+        # test happened to use. Harmless on a normal branch, because the
+        # value it lands on matches what is committed -- but during a
+        # release it silently reverted the version bump, and
+        # `test_server_manifest.py` then failed on a file nobody had
+        # edited.
+        server_json = tmp_path / "server.json"
+        server_json.write_text(
+            json.dumps(
+                {
+                    "name": "io.github.UXARRAY/uxarray-mcp-server",
+                    "version": "2026.9.0",
+                    "packages": [
+                        {
+                            "registryType": "pypi",
+                            "identifier": "uxarray-mcp",
+                            "version": "2026.9.0",
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
 
         monkeypatch.setattr(prepare_release, "PYPROJECT", pyproject)
         monkeypatch.setattr(prepare_release, "INIT", init)
         monkeypatch.setattr(prepare_release, "CONDA_RECIPE", recipe)
         monkeypatch.setattr(prepare_release, "CHANGELOG", changelog)
+        monkeypatch.setattr(prepare_release, "SERVER_JSON", server_json)
         monkeypatch.setattr(prepare_release, "_relock", lambda version: None)
         monkeypatch.setattr(prepare_release, "_latest_tag", lambda: "v2026.9.0")
 
@@ -263,7 +292,12 @@ class TestTheDailyPollDecidesWhenToRelease:
         output.write_text("")
         monkeypatch.setenv("GITHUB_OUTPUT", str(output))
         monkeypatch.setattr(sys, "argv", ["prepare_release.py"])
-        return {"pyproject": pyproject, "changelog": changelog, "output": output}
+        return {
+            "pyproject": pyproject,
+            "changelog": changelog,
+            "output": output,
+            "server_json": server_json,
+        }
 
     def _outputs(self, sandbox) -> dict[str, str]:
         return dict(
@@ -359,3 +393,52 @@ class TestTheRealPyprojectStaysParseable:
 
     def test_the_shipped_floor_is_readable(self):
         assert _parse_version(prepare_release._current_uxarray_floor())
+
+
+class TestTheSandboxCoversEveryFileTheScriptRewrites:
+    """A release-script test must not edit the working tree.
+
+    ``server.json`` was added to ``prepare_release.py`` after the sandbox
+    fixture was written, and the fixture was not extended, so running the
+    suite rewrote the real manifest. On a normal branch that is invisible
+    -- the version it lands on is the one already committed. During a
+    release it is not: the suite reverted the version bump mid-run, and
+    ``test_server_manifest.py`` failed on a file nobody had touched.
+
+    This fails when the next such constant is added, rather than during
+    the next release.
+    """
+
+    #: Module-level paths that ``main()`` writes to. Anything here must be
+    #: redirected by the sandbox fixture above.
+    WRITTEN_PATHS = ("PYPROJECT", "INIT", "CONDA_RECIPE", "CHANGELOG", "SERVER_JSON")
+
+    def test_every_written_path_is_redirected(self, tmp_path, monkeypatch):
+        """Applies the same fixture, then checks nothing was left behind."""
+        cls = TestTheDailyPollDecidesWhenToRelease
+        cls.sandbox.__wrapped__(cls(), tmp_path, monkeypatch)
+        for name in self.WRITTEN_PATHS:
+            value = Path(getattr(prepare_release, name))
+            assert tmp_path in value.parents, (
+                f"prepare_release.{name} still points at {value}, so a test "
+                "that calls main() edits the real file"
+            )
+
+    def test_no_write_target_is_missing_from_the_list(self):
+        """Catches a new ``_write_*`` helper nobody added above."""
+        import inspect
+
+        source = inspect.getsource(prepare_release)
+        declared = {
+            name
+            for name in dir(prepare_release)
+            if name.isupper() and isinstance(getattr(prepare_release, name), Path)
+        }
+        # ROOT is a directory, not a file the script rewrites.
+        declared.discard("ROOT")
+        unlisted = sorted(declared - set(self.WRITTEN_PATHS))
+        for name in unlisted:
+            assert f"{name}.write_text" not in source, (
+                f"prepare_release.{name} is written but not in WRITTEN_PATHS, "
+                "so the sandbox does not redirect it"
+            )

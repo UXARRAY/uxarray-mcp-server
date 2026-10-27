@@ -3,6 +3,11 @@
 Your data is on an HPC machine. You want to ask an AI about it without
 downloading anything. This page gets you there.
 
+> **Never used Globus?** Ten minutes on
+> [globus-basics.md](globus-basics.md) first. It covers the identity, why it
+> has to be your institutional one, and why Compute is not Transfer — the
+> three things that account for most stuck setups.
+
 It is machine-agnostic: the same five commands work for Chrysalis, Casper,
 Perlmutter or a university cluster nobody has written a page about. Site
 pages ([chrysalis](chrysalis.md), [ucar](ucar.md), [improv](improv.md))
@@ -39,15 +44,9 @@ Three things, in three places, each of which can be wrong independently:
 Diagnose in that order. Most "it doesn't work" is the first or the third,
 and the error usually names the second.
 
-### Two things people reasonably expect, which are not true
-
-- **An endpoint is per-user, not per-machine.** It runs *as your HPC
-  account* and can read exactly what you can read. There is no shared
-  "Chrysalis endpoint" unless someone deliberately operates one for a group.
-- **Compute is not Transfer.** Globus Compute runs code; Globus Transfer
-  moves files. Separate services, separate consents. A working endpoint
-  cannot copy a file. You usually do not need Transfer at all — see
-  [data-transfer.md](data-transfer.md).
+Two surprises worth knowing before you start — endpoints are per-user, and
+Compute is not Transfer. Both in
+[globus-basics.md](globus-basics.md#three-surprises).
 
 ---
 

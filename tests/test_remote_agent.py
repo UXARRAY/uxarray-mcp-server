@@ -1,5 +1,6 @@
 """Tests for remote execution via Academy agent and Globus Compute."""
 
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -448,3 +449,150 @@ class TestRemoteTools:
 
         with pytest.raises(ValueError, match="Variable 'salinity' not found"):
             remote_inspect_variable(grid_file, data_file, "salinity")
+
+
+class TestALostWorkerIsDiagnosedByWhatItWasRunning:
+    """``WorkerLost`` has two very different causes, and one message.
+
+    Memory is the usual one, and the standing advice -- check the mesh size,
+    subset first -- is right for it. It is wrong for a YAC-backed remap, and
+    expensively so: subsetting cannot fix an MPI abort, so the caller spends
+    the afternoon measuring a mesh that was never the problem.
+
+    Observed on Casper. ``method="conservative"`` killed the worker, while
+    the identical remap ran in 0.09s under ``check_remote_yac`` -- which
+    executes it in a worker-side *subprocess*. Same node, same YAC, same
+    method: the only difference is whether an ``MPI_Init`` abort can take
+    the worker down with it.
+    """
+
+    WORKER_LOST = (
+        "Task failure due to loss of worker 0 on host crhtc52\n"
+        "***** One common cause of WorkerLost exceptions is Python version "
+        "mismatch *****"
+    )
+
+    @staticmethod
+    def _normalize(**kw):
+        from uxarray_mcp.remote.agent import _normalize_remote_error
+
+        cfg = types.SimpleNamespace(endpoint_id="x", default_endpoint="ucar")
+        return str(
+            _normalize_remote_error(
+                RuntimeError(TestALostWorkerIsDiagnosedByWhatItWasRunning.WORKER_LOST),
+                cfg,
+                **kw,
+            )
+        )
+
+    def test_an_ordinary_lost_worker_still_blames_memory(self):
+        """The common case must not regress into MPI advice."""
+        msg = self._normalize()
+        assert "memory" in msg.lower()
+        assert "MPI" not in msg
+
+    def test_a_yac_remap_is_told_about_mpi_instead(self):
+        msg = self._normalize(yac_backed=True)
+        assert "MPI" in msg
+        assert "check_remote_yac" in msg
+
+    def test_the_mpi_message_does_not_send_anyone_to_subset(self):
+        """Subsetting is the memory remedy and cannot fix an abort."""
+        msg = self._normalize(yac_backed=True)
+        assert "subset" not in msg.lower()
+
+    def test_the_fallback_it_offers_is_qualified(self):
+        """idw/bilinear do run -- but they are not conservative.
+
+        Offering them without saying so trades a loud failure for a quiet
+        wrong answer, which is the trade this server exists to refuse.
+        """
+        msg = self._normalize(yac_backed=True)
+        assert "inverse_distance_weighted" in msg
+        assert "conserve" in msg.lower()
+
+
+class TestTheYacRouteIsRecognisedFromPositionalArguments:
+    """Every call into ``_run_on_hpc`` passes its arguments positionally.
+
+    The first version of this read only ``kwargs`` and so never fired: a
+    real conservative remap on Casper still printed the memory advice. The
+    detection has to look at the positional arguments too.
+    """
+
+    @staticmethod
+    def _looks(*args, **kwargs):
+        from uxarray_mcp.remote.agent import _looks_yac_backed
+
+        return _looks_yac_backed(args, kwargs or None)
+
+    def test_a_positional_method_is_seen(self):
+        assert self._looks("/g.nc", "/d.nc", "rrfac", "conservative")
+
+    def test_a_positional_backend_is_seen(self):
+        assert self._looks("/g.nc", "/d.nc", "rrfac", "yac")
+
+    def test_keywords_still_work(self):
+        assert self._looks(method="conservative")
+        assert self._looks(backend="yac")
+
+    @pytest.mark.parametrize("method", ["nnn", "dnn", "average"])
+    def test_the_other_yac_methods_count(self, method):
+        """All four route through YAC, not just the conservative one."""
+        assert self._looks("/g.nc", method)
+
+    def test_an_ordinary_remap_is_not_flagged(self):
+        assert not self._looks("/g.nc", "/d.nc", "rrfac", "nearest_neighbor")
+        assert not self._looks("/g.nc", "/d.nc", "rrfac", "bilinear")
+
+    def test_a_path_that_merely_contains_the_word_is_not_flagged(self):
+        """`yac` appears in real cluster paths; only a whole argument counts."""
+        assert not self._looks("/glade/u/home/x/uxarray-yac-src/grid.nc")
+
+
+class TestTheDiagnosisSurvivesTheCallPath:
+    """The routing, not just the predicate.
+
+    ``_looks_yac_backed`` can be perfectly correct and still never fire if
+    ``_run_on_hpc`` hands it the wrong thing. That is exactly what happened:
+    the first version passed only ``kwargs``, every caller passes its
+    arguments positionally, and a real conservative remap on Casper still
+    got the memory advice. Testing the predicate alone did not catch it.
+    """
+
+    async def test_a_conservative_remap_through_run_on_hpc_gets_mpi_advice(
+        self, monkeypatch
+    ):
+        from uxarray_mcp.remote import agent as agent_mod
+
+        lost = RuntimeError("Task failure due to loss of worker 0 on host crhtc52")
+
+        class _Future:
+            def result(self, *_a, **_k):
+                raise lost
+
+        class _Executor:
+            def submit(self, *_a, **_k):
+                return _Future()
+
+        cfg = types.SimpleNamespace(
+            endpoint_id="abc", default_endpoint="ucar", timeout_seconds=5
+        )
+        ag = UXarrayComputeAgent.__new__(UXarrayComputeAgent)
+        ag.config = cfg
+        monkeypatch.setattr(
+            agent_mod, "_record_task_handle_when_assigned", lambda *a, **k: None
+        )
+        monkeypatch.setattr(
+            ag, "_get_executor", lambda *a, **k: _Executor(), raising=False
+        )
+
+        with pytest.raises(RuntimeError) as err:
+            # Positional, exactly as every real caller does it.
+            await ag._run_on_hpc(
+                lambda *a: None, "/g.nc", "/d.nc", "rrfac", "conservative"
+            )
+        assert "MPI" in str(err.value), (
+            "a positionally-passed conservative remap lost its diagnosis "
+            "somewhere between _run_on_hpc and the error handler"
+        )

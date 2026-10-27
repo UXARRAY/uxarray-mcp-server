@@ -39,8 +39,37 @@ from .compute_functions import (
 )
 from .config import HPCConfig
 
+#: Remap methods that compute their weights inside YAC.
+#:
+#: Kept here rather than imported from ``domain.remap_backend`` because this
+#: module is on the submit path and the comparison is a membership test, not
+#: a resolution. The names match what a caller passes as ``method``.
+_YAC_BACKED_METHODS = frozenset({"conservative", "nnn", "dnn", "average"})
 
-def _normalize_remote_error(exc: Exception, config: Any) -> Exception:
+
+def _looks_yac_backed(args: Any = (), kwargs: Any = None) -> bool:
+    """Whether the call that just died was asking YAC to compute weights.
+
+    Scans the positional arguments as well as the keywords. Every call into
+    :meth:`_run_on_hpc` passes its arguments positionally, so reading only
+    ``kwargs`` found nothing and the YAC branch below never fired -- the
+    first version of this did exactly that and still printed the memory
+    advice for a conservative remap.
+
+    A plain membership test over the strings is enough and stays correct if
+    an argument is inserted: these method names are specific enough that a
+    path or variable name will not collide with them.
+    """
+    values = [a for a in (args or ()) if isinstance(a, str)]
+    if isinstance(kwargs, dict):
+        values += [v for v in kwargs.values() if isinstance(v, str)]
+    lowered = {v.lower() for v in values}
+    return "yac" in lowered or bool(lowered & _YAC_BACKED_METHODS)
+
+
+def _normalize_remote_error(
+    exc: Exception, config: Any, *, yac_backed: bool = False
+) -> Exception:
     """Collapse a worker traceback into the same concise error a local run raises.
 
     Globus Compute re-raises worker failures with the full remote traceback
@@ -105,6 +134,34 @@ def _normalize_remote_error(exc: Exception, config: Any) -> Exception:
         where = (
             f" (worker {worker.group(1)} on {host.group(1)})" if host and worker else ""
         )
+        if yac_backed:
+            # Memory is the usual cause of a lost worker, but not for this
+            # call. Importing YAC runs ``MPI_Init``; Open MPI initialises
+            # fine as a singleton, MPICH aborts the process instead, and an
+            # abort inside a Globus worker arrives here as WorkerLost with
+            # nothing mentioning MPI. Observed on Casper, where the same
+            # conservative remap that kills the worker completes in 0.09s
+            # under ``check_remote_yac`` -- which runs it in a worker-side
+            # *subprocess*. Same node, same YAC, same method: the difference
+            # is only whether an abort can take the worker with it.
+            #
+            # Sending the caller to look at mesh size here costs them the
+            # afternoon, because subsetting cannot fix it.
+            return RuntimeError(
+                f"The worker on {endpoint} died running a YAC-backed remap"
+                f"{where}. This is usually MPI, not memory: importing YAC "
+                "calls MPI_Init, and on an MPICH site that aborts the "
+                "process rather than initialising as a singleton, which "
+                "arrives here as a lost worker. Confirm with "
+                "`check_remote_yac(endpoint=...)`: if its `conservative_ok` "
+                "is true, YAC itself is fine and the endpoint needs its "
+                "workers launched under an MPI launcher (`mpiexec -n 1` or "
+                "`srun --ntasks 1`) in worker_init. Until then, "
+                "method='inverse_distance_weighted' or 'bilinear' run on "
+                "uxarray's own engine and do not need YAC -- but note that "
+                "neither conserves the field integral, which is the reason "
+                "to ask for conservative in the first place."
+            )
         return RuntimeError(
             f"The worker on {endpoint} died while running this task{where}. "
             "The usual cause is memory: the worker was killed, not the task. "
@@ -796,7 +853,9 @@ class UXarrayComputeAgent(_AcademyAgent):
                     None, future.result, self.config.timeout_seconds
                 )
             except Exception as exc:
-                raise _normalize_remote_error(exc, self.config) from None
+                raise _normalize_remote_error(
+                    exc, self.config, yac_backed=_looks_yac_backed(args, kwargs)
+                ) from None
 
         # Attach provenance with the correct HPC venue — the remote functions
         # are self contained and don't call attach_provenance themselves.

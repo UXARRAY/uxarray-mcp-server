@@ -410,7 +410,29 @@ except Exception as exc:
     out["remap_error"] = f"{type(exc).__name__}: {exc}"
     out["remap_traceback"] = traceback.format_exc()
 
+# The conservative remap, which is the only thing YAC is here for.
+#
+# `remap_ok` above is nearest_neighbor, which runs on uxarray's own engine
+# and never calls into YAC -- so it reports success on a worker where every
+# conservative remap dies. Importing YAC and computing weights with it are
+# different capabilities and only the second one is what a caller asking for
+# a conservative remap needs.
+try:
+    t0 = time.perf_counter()
+    conservative = uxda.remap(destination_grid=dst, method="conservative", backend="yac")
+    out["conservative_ok"] = True
+    out["conservative_seconds"] = round(time.perf_counter() - t0, 3)
+    out["conservative_finite"] = int(np.isfinite(np.asarray(conservative)).sum())
+except BaseException as exc:
+    # BaseException: a YAC/MPI failure can raise SystemExit rather than a
+    # normal error, and catching only Exception would let this exit 0 with
+    # no verdict recorded.
+    out["conservative_ok"] = False
+    out["conservative_error"] = f"{type(exc).__name__}: {exc}"[:400]
+
 print(json.dumps(out, indent=2))
+# `conservative_ok` is deliberately not part of the exit status: a site that
+# only wants the non-YAC methods is not broken. It is reported, not enforced.
 raise SystemExit(
     0
     if out.get("yac_core_ok")

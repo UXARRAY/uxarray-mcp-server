@@ -3,7 +3,7 @@
   "name": "io.github.UXARRAY/uxarray-mcp-server",
   "title": "UXarray MCP",
   "description": "Inspect, subset, remap and plot unstructured climate meshes, locally or on HPC.",
-  "version": "2026.9.1",
+  "version": "2026.10.0",
   "websiteUrl": "https://uxarray-mcp-server.readthedocs.io",
   "repository": {
     "source": "github",
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "uxarray-mcp",
-      "version": "2026.9.1",
+      "version": "2026.10.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

@@ -6,6 +6,140 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
 
+## 2026.10.0 — 2026-10-23
+### Added
+- `subset_advanced` selects faces near a point, by radius
+  (`subset.bounding_circle`) or by neighbour count
+  (`subset.nearest_neighbor`). An empty selection is refused with the mesh
+  extent, the same rule the bounding box already followed; UXarray's own
+  message says the circle was empty without saying where a circle would
+  not be.
+- `regrid_elements` carries a field between nodes, edges and faces through
+  the `topological_*` reductions. This is what makes node-centred output
+  usable: every vector-calculus operation needs face-centred data, and the
+  refusal a caller got had no repair behind it because the server could not
+  run the standard one.
+- `domain/uxarray_surface.py` records which of UXarray this server reaches
+  and which it deliberately does not, one verdict per method with a reason.
+  Tests hold it to the installed library, so a new method upstream fails
+  until someone decides about it and a renamed one fails the day the rename
+  lands rather than the next time a user follows our advice into a method
+  that is gone. Deliberately not a count: "we expose N of M" goes red on
+  every upstream release for reasons nobody can act on.
+
+  All three came from replaying the notebooks in UXARRAY/uxarray-community
+  through the server. They are separate tools rather than new `run_analysis`
+  operations because #89 already measures that front door as too large to
+  describe itself.
+
+### Changed
+- Floors `uxarray[geo,viz]>=2026.10.0`. The previous pin's `<2026.10`
+  ceiling excluded the release outright. The resolve is quiet -- 189
+  packages, uxarray the only one that moves -- and 2026.10.0's `viz` extra
+  caps `cartopy<0.26`, which settles UXARRAY/uxarray#1773 upstream rather
+  than here.
+- Floors `toolregistry>=0.19.0` and `toolregistry-server>=0.7.0`. 0.19
+  carries the heterogeneous-union fix (Oaklight/ToolRegistry#269) this
+  project has been waiting on. What we serve for `lat_spec` is still not
+  upstream's rendering: `tuple` and `list` both become `array`, so the
+  union arrives with the same branch twice and untyped items. The schema
+  helper now replaces that rendering rather than filling an absence, and
+  the core tool specification got smaller as a result -- 36271 to 36143
+  bytes.
+- The container declares its Python version once. It was written in four
+  places, two `FROM` lines and two `--python 3.12` flags, and Dependabot
+  rewrites `FROM` and nothing else -- so its 3.14 bump produced an image
+  whose base had no 3.12 beside a sync that demanded one.
+- `SETUP.sh` reproduces CI. It ran a bare `uv sync` and an unfiltered
+  `pytest`, from before the suite moved to marker selection, so following
+  it produced 19 failures that were all missing optional dependencies. It
+  also gated on the ambient `python3`, which is not the interpreter the
+  project runs on: a machine with 3.9 on `PATH` could not run the script at
+  all while `uv sync` on that same machine builds a working 3.12
+  environment.
+
+### Fixed
+- A YAC-backed remap that loses its worker is told what killed it. The
+  message said memory and advised subsetting; on the UCAR endpoint the
+  cause is MPI, and subsetting cannot fix it. Importing YAC calls
+  `MPI_Init`, which Open MPI serves as a singleton and MPICH aborts, and
+  an abort inside a Globus worker arrives with nothing mentioning MPI.
+  Measured on Casper: the identical conservative remap runs in 0.09s
+  under `check_remote_yac` and kills the worker through `run_analysis` --
+  same node, same YAC, same mesh, the only difference being that the
+  probe runs it in a subprocess. Any other lost worker still gets the
+  memory advice, which is right for it.
+- `check_remote_yac` exercises the conservative path. It only ever ran
+  `nearest_neighbor`, which uses uxarray's own engine and never calls
+  into YAC, so it reported "YAC OK" on a worker where every conservative
+  remap died. `conservative_ok` now separates "YAC is broken" from "YAC
+  cannot run in this process", which is the distinction that picks the
+  repair.
+- `scripts/ucar_endpoint.sh check-mpi` runs the bare and launched imports
+  side by side and names which case the site is in. Chrysalis has had an
+  equivalent since it hit this; UCAR had nothing.
+- The MCP SDK exception is found under either spelling. `McpError` on
+  1.x, `MCPError` on 2.x; importing one name fails on the other SDK, and
+  only the weekly floor job resolves 1.x, so the wrong one went unnoticed
+  until that run went red.
+- Tool annotations reach clients on mcp 1.x, not only 2.x. At the declared
+  floor the shim attached nothing, so every tool was served with no hints
+  at all -- the `readOnlyHint` a client reads to decide what it may
+  auto-approve was absent exactly where it is documented as present. Three
+  SDK differences, each independently sufficient: the handler dict is keyed
+  by method string on 2.x and by request type on 1.x, 1.x returns a
+  `ServerResult` envelope whose `.root` holds the tools, and the attribute
+  itself is public on one and private on the other.
+- Our annotations outrank inferred ones. toolregistry-server 0.7.0 began
+  attaching annotations of its own and marked `manage_session` and
+  `resume_workflow` `readOnlyHint=True`; the first resets session state and
+  clears artifacts, the second runs pending workflow steps. Nine tools left
+  deliberately unrated came back carrying hints. Where this server has
+  rated a tool its rating is what goes out, and where it has not, nothing
+  does -- absence is honest, an unchecked inference is not.
+- `get_capabilities` says which of what it lists is executable. It
+  advertises native UXarray calls, several of which have no operation
+  behind them -- `grid.get_ball_tree()`, `var.integrate()` -- and nothing
+  distinguished them, so a model reading the result would plan a call that
+  does not exist.
+- The "not face-centered" refusals name their repair. They were correct and
+  a dead end: the standard fix is `topological_mean("face")`, which this
+  server could not run. They now point at `regrid_elements`, and a test
+  follows that advice to confirm it works rather than landing on a second
+  error.
+- An unknown tool name is reported as JSON-RPC `-32602` rather than a
+  result carrying `isError`, following toolregistry-server 0.7.0. That is
+  the correct reading: `isError` is for a tool that ran and failed, and an
+  unknown name means nothing ran.
+- The oversized-SCRIP test fixture no longer needs 8 GiB. It built each
+  dask array as a single 6.5 GiB chunk and `to_netcdf` materialized one at
+  a time, so the test peaked at 7.45 GiB before the code under test ran.
+  That fits GitHub's runners and not a laptop. Chunking along
+  `grid_corners` holds each write to ~191 MiB; the full suite now peaks at
+  1.36 GiB.
+
+### Documentation
+- `docs/globus-basics.md` says what Globus is before anything asks you to
+  use it. The explanation existed, in the middle of `remote-hpc.md`,
+  under a heading the README routes HPC users straight past -- written
+  down and unreachable, which reads the same as missing. It also names
+  the identity trap that costs the most time: a Globus login is not
+  automatically tied to a cluster account, and signing in with a personal
+  account produces an identity that authenticates fine and sees none of
+  your endpoints, which looks exactly like a dead endpoint.
+- `docs/ucar.md` says endpoints are per-user. A colleague's working
+  Casper endpoint gives you nothing: it runs as their account and reads
+  their files. The conda and YAC paths on that page are per-`$USER` too.
+
+### Security
+- Clears 55 advisories in the lockfile, all in transitively-resolved
+  packages: 44 against pillow 12.3.0 (5 Critical), PYSEC-2026-4320 against
+  certifi 2026.7.22 (9.1 Critical), and four against virtualenv 21.14.7.
+  certifi is the trust store behind every outbound HTTPS call this server
+  makes -- Globus Compute submission, transfers, remote dataset reads -- so
+  a Critical there is not a transitive detail. A further six against
+  filelock 4.1.1 cleared the same way.
+
 ## 2026.9.1 — 2026-09-25
 ### Changed
 - Floors `uxarray[geo,viz]>=2026.9.1`. Upstream 2026.9.1 moved cartopy,

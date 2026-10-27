@@ -298,10 +298,16 @@ class TestCallingTools:
         name means nothing ran -- so this asserts the new contract rather
         than pinning the old one.
         """
-        from mcp.shared.exceptions import MCPError
+        # `McpError` on mcp 1.x, renamed `MCPError` in 2.x. Importing one
+        # name fails on the other SDK, and the floor job is the only place
+        # that resolves 1.x -- so asking for the wrong one is invisible
+        # until the weekly run goes red, which is how this arrived.
+        import mcp.shared.exceptions as _exc
+
+        mcp_error = getattr(_exc, "MCPError", None) or _exc.McpError
 
         async with connect() as (session, _init):
-            with pytest.raises(MCPError) as err:
+            with pytest.raises(mcp_error) as err:
                 await session.call_tool("no_such_tool_exists", {})
 
         assert "no_such_tool_exists" in str(err.value)

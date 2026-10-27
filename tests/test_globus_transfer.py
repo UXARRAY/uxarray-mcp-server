@@ -69,7 +69,7 @@ def _profile(**overrides) -> GlobusTransferProfile:
     base = {
         "remote_collection_id": "remote-uuid",
         "local_collection_id": "local-uuid",
-        "remote_write_root": "/scratch/rjain",
+        "remote_write_root": "/scratch/demo",
         "remote_read_root": "/lcrc/group/e3sm",
         "collection_roots": (),
     }
@@ -189,7 +189,7 @@ class TestACollectionNamesPathsItsOwnWay:
         # path rewritten under the wrong root names a real file nobody asked
         # about.
         assert (
-            to_collection_path("/home/rjain/out.nc", ("/lcrc",)) == "/home/rjain/out.nc"
+            to_collection_path("/home/demo/out.nc", ("/lcrc",)) == "/home/demo/out.nc"
         )
 
     def test_a_prefix_sibling_does_not_match_a_root(self):
@@ -231,7 +231,7 @@ class TestTheRootsAreEnforcedOnEveryTransfer:
         source.write_text("x")
         service = TransferService(_profile(), FakeTransferClient())
         plan = service.plan_put(source, "runs/mesh.nc")
-        assert plan.destination_path == "/scratch/rjain/runs/mesh.nc"
+        assert plan.destination_path == "/scratch/demo/runs/mesh.nc"
         assert plan.source_path == str(source.resolve())
         assert plan.recursive is False
 
@@ -264,14 +264,14 @@ class TestTheRootsAreEnforcedOnEveryTransfer:
         # Somewhere you may put a file is somewhere you may look at one: a
         # download of what was just uploaded must not fail on the read root.
         service = TransferService(_profile(), FakeTransferClient())
-        plan = service.plan_get("/scratch/rjain/out.nc", tmp_path / "out.nc")
-        assert plan.source_path == "/scratch/rjain/out.nc"
+        plan = service.plan_get("/scratch/demo/out.nc", tmp_path / "out.nc")
+        assert plan.source_path == "/scratch/demo/out.nc"
 
     def test_a_path_under_no_readable_root_names_them_all(self, tmp_path):
         service = TransferService(_profile(), FakeTransferClient())
         with pytest.raises(PathOutsideRoot) as excinfo:
-            service.plan_get("/home/rjain/out.nc", tmp_path / "out.nc")
-        assert "/scratch/rjain" in str(excinfo.value)
+            service.plan_get("/home/demo/out.nc", tmp_path / "out.nc")
+        assert "/scratch/demo" in str(excinfo.value)
         assert "/lcrc/group/e3sm" in str(excinfo.value)
 
     def test_a_read_root_does_not_widen_writes(self, tmp_path):
@@ -284,7 +284,7 @@ class TestTheRootsAreEnforcedOnEveryTransfer:
     def test_without_a_read_root_reads_fall_back_to_the_write_root(self, tmp_path):
         service = TransferService(_profile(remote_read_root=None), FakeTransferClient())
         assert (
-            service.plan_get("out.nc", tmp_path).source_path == "/scratch/rjain/out.nc"
+            service.plan_get("out.nc", tmp_path).source_path == "/scratch/demo/out.nc"
         )
         with pytest.raises(PathOutsideRoot):
             service.plan_get("/lcrc/group/e3sm/out.nc", tmp_path)
@@ -305,7 +305,7 @@ class TestTheRootsAreEnforcedOnEveryTransfer:
             _profile(collection_roots=("/scratch",)), FakeTransferClient()
         )
         plan = service.plan_put(source, "runs/mesh.nc")
-        assert plan.destination_path == "/rjain/runs/mesh.nc"
+        assert plan.destination_path == "/demo/runs/mesh.nc"
 
 
 class TestAnEndpointWithoutTheBlockMovesNoFiles:
@@ -341,7 +341,7 @@ class TestTheSubmittedPayloadSaysWhatItDoes:
         assert payload["submission_id"] == "submission-1"
         assert payload["source_endpoint"] == "local-uuid"
         assert payload["destination_endpoint"] == "remote-uuid"
-        assert payload["DATA"][0]["destination_path"] == "/scratch/rjain/runs/mesh.nc"
+        assert payload["DATA"][0]["destination_path"] == "/scratch/demo/runs/mesh.nc"
         assert result["task_id"] == "task-1"
 
     def test_checksums_are_verified_and_mail_is_not_sent(self, tmp_path):

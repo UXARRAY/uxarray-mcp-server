@@ -23,6 +23,18 @@ WITH_YAC="${WITH_YAC:-0}"
 # HEALPix remap ran. worker_init sources activate-yac.sh from this prefix, so
 # `restart` is what picks the change up.
 YAC_VERSION="${YAC_VERSION:-3.20.2}"
+# Whether this site needs YAC imported under an MPI launcher.
+#
+# `check-mpi` answers that question; acting on the answer is still manual.
+# Open MPI initialises as a singleton and needs nothing. MPICH aborts, and
+# the endpoint then needs its *workers* started inside an MPI context --
+# which means `GlobusMPIEngine`, or a `launcher_prefix` on the engine, not an
+# export in worker_init. Casper was observed failing this way and has not yet
+# been reconfigured, so this is deliberately not automated: a wrong engine
+# block takes the endpoint down for every tool, not just the remap.
+#
+# Tracked rather than guessed at. See the WorkerLost message in
+# remote/agent.py for what a caller is told in the meantime.
 YAC_PREFIX="$HOME/opt/yac-$YAC_VERSION"
 YAC_ACTIVATE="$YAC_PREFIX/activate-yac.sh"
 TMUX_SESSION="uxarray-endpoint"
@@ -39,6 +51,7 @@ Usage (run on a Casper login node):
   ucar_endpoint.sh start        Load env + start endpoint in tmux
   ucar_endpoint.sh restart      Stop running endpoint, then start fresh
   ucar_endpoint.sh status       Show endpoint list
+  ucar_endpoint.sh check-mpi    Does importing YAC need an MPI launcher?
 
 Environment overrides:
   ENDPOINT_NAME   Globus Compute endpoint profile name (default: ucar-uxarray-yac)
@@ -109,6 +122,64 @@ EOF
   echo "  wrote $YAC_ACTIVATE (YAC $YAC_VERSION, python $pyver)"
 }
 
+# Does importing YAC survive outside an MPI launcher?
+#
+# Importing YAC calls MPI_Init. Open MPI initialises as a singleton and is
+# fine; MPICH aborts the process instead. Inside a Globus Compute worker that
+# abort takes the worker down, and the caller sees `WorkerLost` with nothing
+# mentioning MPI -- which reads as an out-of-memory kill and sends people to
+# measure their mesh. Observed on Casper: `method="conservative"` killed the
+# worker while the identical remap finished in 0.09s under
+# `check_remote_yac`, which runs it in a subprocess.
+#
+# This answers the question directly, before anyone submits a remap. If the
+# bare import dies and the launched one lives, the endpoint's worker_init
+# needs a launcher.
+_check_mpi() {
+  _load_modules
+  _activate_env
+  local probe='import yac.core, sys; print("import ok:", sys.executable)'
+
+  echo "==> Bare import (what a Globus worker does today)"
+  if python -c "$probe" 2>&1 | sed 's/^/    /'; then
+    local bare_ok=1
+  else
+    local bare_ok=0
+    echo "    FAILED -- this is what takes the worker down."
+  fi
+
+  echo
+  echo "==> Under a launcher"
+  local launcher=""
+  for cand in "mpiexec -n 1" "srun --ntasks 1"; do
+    if command -v "${cand%% *}" >/dev/null 2>&1; then launcher="$cand"; break; fi
+  done
+  if [[ -z "$launcher" ]]; then
+    echo "    No mpiexec or srun on PATH; cannot compare."
+    return 1
+  fi
+  echo "    using: $launcher"
+  local launched_ok=1
+  $launcher python -c "$probe" 2>&1 | sed 's/^/    /' || launched_ok=0
+
+  echo
+  if [[ "$bare_ok" == "1" ]]; then
+    echo "VERDICT: bare import works. MPI is not what is killing the worker;"
+    echo "  if conservative remaps still fail, look at memory next."
+  elif [[ "$launched_ok" == "1" ]]; then
+    echo "VERDICT: bare import dies, launched import works -- this is the MPI"
+    echo "  singleton problem."
+    echo "  The workers must start inside an MPI context. In the endpoint's"
+    echo "  user_config_template.yaml.j2, either switch the engine to"
+    echo "  GlobusMPIEngine, or give the current engine a launcher prefix so"
+    echo "  each worker runs under: $launcher"
+    echo "  Then: $(basename "$0") restart"
+  else
+    echo "VERDICT: YAC does not import either way. This is not MPI --"
+    echo "  check the build at $YAC_PREFIX."
+  fi
+}
+
 _check_yac() {
   if python -c 'import yac; import yac.core; print("  YAC OK:", yac.core.__file__)' 2>/dev/null; then
     return 0
@@ -134,6 +205,12 @@ _configure() {
   if [[ "$WITH_YAC" == "1" ]]; then
     _ensure_yac_activate
     yac_line=$'\n      source '"$YAC_ACTIVATE"
+    # NOTE: if `check-mpi` says this site needs a launcher, the change goes
+    # in the engine block below rather than here -- worker_init runs *before*
+    # the worker process starts, so exporting something here cannot put that
+    # process inside an MPI context. Left unwired on purpose rather than
+    # shipped as a setting that looks applied and does nothing. See the
+    # YAC_LAUNCHER note at the top of this file.
   elif [[ "$ENDPOINT_NAME" == *yac* ]]; then
     echo "ERROR: '$ENDPOINT_NAME' is named for YAC but WITH_YAC is 0." >&2
     echo "  Rebuild it with YAC:    WITH_YAC=1 $(basename "$0") configure" >&2
@@ -261,5 +338,6 @@ case "${1:-}" in
   _do_start) _do_start ;;  # internal: invoked by tmux
   restart)   _restart ;;
   status)    _status ;;
+  check-mpi) _check_mpi ;;
   *) usage; exit 1 ;;
 esac

@@ -32,6 +32,17 @@ That gives you every tool except conservative remapping. The rest of this page
 describes `scripts/ucar_endpoint.sh`, which is the same thing with NCAR's
 verified module list, an optional YAC build, and a fixed profile name.
 
+## If someone else set this up
+
+Endpoints are per-user. A colleague's working Casper endpoint does not give
+you one — it runs as *their* account and reads *their* files. You need your
+own, and `uxarray-mcp endpoints discover` tells you whether you have it.
+
+Same for the conda env and the YAC build below: they live under a specific
+`$USER`, so paths in this page like `/glade/work/$USER/conda-envs/uxarray_dev`
+are yours, not shared. Set `NCAR_USERNAME` if your NCAR login differs from
+your local `$USER`.
+
 ## Key Points
 
 - **You do need a clone of this repo on Casper**, because the endpoint scripts
@@ -178,3 +189,24 @@ synthesized from the prefix, so there is nothing to edit in the script.
 
 **`doctor` passes but YAC tools fail** — run `yac_smoke_test.py`, which checks
 importability on the compute worker specifically rather than on the login node.
+
+**A conservative remap kills the worker (`WorkerLost`)** — almost certainly
+MPI, not memory, and the two look identical from the outside. Importing YAC
+calls `MPI_Init`: Open MPI starts fine as a singleton, MPICH aborts the
+process, and an abort inside a Globus worker arrives as a lost worker with
+nothing mentioning MPI.
+
+Tell them apart with `check_remote_yac(endpoint=...)`. It runs the same
+conservative remap in a *subprocess*, where an abort is survivable:
+
+- `conservative_ok: true` — YAC is fine. The worker needs to start inside an
+  MPI context (`GlobusMPIEngine`, or a launcher prefix on the engine). An
+  export in `worker_init` cannot do this; that runs before the worker exists.
+- `conservative_ok: false` — the build is the problem, not the launcher.
+
+`./scripts/ucar_endpoint.sh check-mpi` runs the bare and launched imports side
+by side and tells you which case you are in.
+
+Meanwhile `inverse_distance_weighted` and `bilinear` work — they use uxarray's
+own engine. Neither conserves the field integral, which is usually the reason
+conservative was asked for, so this is a stopgap and not a fix.
