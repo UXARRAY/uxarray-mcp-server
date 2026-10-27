@@ -1,111 +1,23 @@
-# Remote HPC Setup — Connecting to an Existing Endpoint
+# Remote HPC — the long form
 
-> **New here? Read [connect-a-cluster.md](connect-a-cluster.md) first.** It
-> covers the same ground in five commands and explains the concepts, for any
-> machine. This page is the long form: every step spelled out, with the
-> reasoning and the failure modes. Come here when the short version is not
-> enough, or when something has gone wrong.
->
-> If your question is *"where do I get a UUID?"*, the answer is
-> `uxarray-mcp endpoints discover`.
+[globus-basics.md](globus-basics.md) explains Globus and the identity.
+[connect-a-cluster.md](connect-a-cluster.md) gets you running in five
+commands. **Come here when one of those did not work**, or when you want
+the reasoning behind a step.
 
-This page is for users who **already have an HPC account** (Argonne, NCAR,
-NERSC, a university cluster, etc.) and want their AI agent to analyze data
-that lives on that machine.
+Assumes you already have: a working local install, an HPC account with
+shell access, data that account can read, and either an endpoint UUID or
+a plan to stand one up ([operating-an-endpoint.md](operating-an-endpoint.md)).
+Also assumes you have read
+[SECURITY.md](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/SECURITY.md)
+— connecting to an endpoint means its operator sees what you submit.
 
-> **Prerequisites — check each one before starting:**
-> 1. uxarray-mcp installed locally and working with your AI client. See the
->    [README](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/README.md#local-install).
-> 2. A user account on the HPC machine, with shell access.
-> 3. The data you want to analyze is readable by your HPC account.
-> 4. Either: someone has given you a **Globus Compute endpoint UUID** for
->    that machine, **or** you plan to stand up your own — in which case
->    stop and read [operating-an-endpoint.md](operating-an-endpoint.md) first,
->    then come back here.
-> 5. You have read [SECURITY.md](https://github.com/UXARRAY/uxarray-mcp-server/blob/main/SECURITY.md). Connecting an endpoint
->    means the operator can see what you submit.
-
-The total setup is **5 steps**, expect **15–30 minutes** the first time.
+Getting a Globus identity and installing the HPC extra are covered in
+those pages. This one picks up from the UUID.
 
 ---
 
-## The three pieces
-
-Before the steps, the mental model. Remote analysis has three things that
-have to all work, in three different places:
-
-```text
-┌────────────────────┐        ┌──────────────────────────┐
-│  YOUR LAPTOP       │        │  HPC MACHINE             │
-│                    │        │                          │
-│  AI client         │        │  Globus Compute endpoint │
-│    │ stdio         │        │    (runs as your HPC     │
-│  uxarray-mcp ──────┼─Globus─┼──▶ user, executes        │
-│    + globus-       │ Compute│    Python sent from      │
-│    compute SDK     │  HTTPS │    your laptop)          │
-│    + your Globus   │        │                          │
-│    identity        │        │  uxarray + xarray in     │
-│                    │        │  the worker environment  │
-└────────────────────┘        └──────────────────────────┘
-```
-
-Most "it doesn't work" failures come from one of these three layers being
-misconfigured. The steps below address each one in order.
-
-An endpoint reporting `registered` only means the lightweight manager process
-is alive and reachable — it does **not** prove the worker environment has
-`uxarray` installed, can reach the scheduler, or can read your file. Validate
-in order: manager reachable → a tiny no-op function runs → the exact file path
-is readable → only then run a real UXarray tool. `validate_hpc_setup` and
-`probe_path_access` exist for exactly this staged check.
-
----
-
-## Step 1 — Get a Globus identity (one-time, 5 min)
-
-If you've ever used Globus File Transfer for HPC, you already have this.
-Skip to Step 2.
-
-If not:
-
-1. Go to <https://app.globus.org>.
-2. Sign in with your **institutional identity** if your lab is listed
-   (Argonne, NCAR/UCAR, LBL/NERSC, Oak Ridge, university SSO, etc.). This
-   ensures your Globus identity is linked to the same account that has HPC
-   access.
-3. If your institution isn't listed, create a free Globus ID.
-4. Verify you can reach <https://app.globus.org/account>. You're done.
-
-> No fee. Globus is free for non-commercial research use.
-
----
-
-## Step 2 — Install the HPC extras locally (1 min)
-
-```bash
-uv tool install --python 3.12 "uxarray-mcp[hpc]"
-# or to upgrade an existing install:
-# uv tool upgrade --python 3.12 --extra hpc uxarray-mcp
-```
-
-The `--python 3.12` flag matters: most HPC endpoints today (chrysalis,
-Casper, Improv) run Python 3.12 conda stacks, and Globus Compute's serializer
-is fragile across Python minor versions. Mismatch raises `WorkerLost` on
-non-trivial payloads. Tracked upstream at
-[globus/globus-compute#2139](https://github.com/globus/globus-compute/issues/2139).
-
-This adds the `globus-compute-sdk` to your local install. Verify:
-
-```bash
-uxarray-mcp doctor
-```
-
-The JSON report should show the Globus Compute SDK as available. (No endpoint
-health checks yet — that's Step 4.)
-
----
-
-## Step 3 — Register the endpoint UUID locally (1 min)
+## 1. Register the endpoint UUID locally
 
 You need a name to refer to the endpoint by, plus the UUID and the
 filesystem prefix where the data lives.
@@ -167,13 +79,13 @@ the repo).
 
 ---
 
-## Step 4 — Authenticate to Globus and probe the endpoint (2 min)
+## 2. Authenticate and probe the endpoint
 
 ```bash
 uxarray-mcp doctor --endpoint NAME --timeout-seconds 180
 ```
 
-Replace `NAME` with what you used in Step 3 (`ucar`, `improv`, etc.).
+Replace `NAME` with the name you registered above (`ucar`, `improv`, etc.).
 
 The first run will open a browser to <https://auth.globus.org> for OAuth
 consent. Approve it. The token is cached at `~/.globus_compute/`.
@@ -196,7 +108,7 @@ Ask the operator. See troubleshooting below.
 
 ---
 
-## Step 5 — Use it from your AI client (2 min)
+## 3. Use it from your AI client
 
 In Claude or your MCP client, prompt:
 
