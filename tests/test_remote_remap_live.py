@@ -9,9 +9,10 @@ Run them explicitly with ``-m live``. Paths are on the cluster, not here --
 these are read by the worker. Verified against Chrysalis on 2026-10-13::
 
     UXMCP_LIVE_ENDPOINT=chrysalis \\
-    UXMCP_LIVE_GRID=/lcrc/group/e3sm/jain/uxarray-yac-src/test/meshfiles/mpas/QU/480/grid.nc \\
-    UXMCP_LIVE_DATA=/lcrc/group/e3sm/jain/uxarray-yac-src/test/meshfiles/mpas/QU/480/data.nc \\
-    UXMCP_LIVE_TARGET_GRID=/lcrc/group/e3sm/jain/uxarray-yac-src/test/meshfiles/mpas/dyamond-30km/gradient_grid_subset.nc \\
+    MESH=/lcrc/group/e3sm/<user>/uxarray-yac-src/test/meshfiles \\
+    UXMCP_LIVE_GRID=$MESH/mpas/QU/480/grid.nc \\
+    UXMCP_LIVE_DATA=$MESH/mpas/QU/480/data.nc \\
+    UXMCP_LIVE_TARGET_GRID=$MESH/mpas/dyamond-30km/gradient_grid_subset.nc \\
     UXMCP_LIVE_VARIABLE=bottomDepth \\
     uv run --no-sync pytest tests/test_remote_remap_live.py -m live -v
 

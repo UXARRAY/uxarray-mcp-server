@@ -23,7 +23,7 @@ def _transfer_profile(**overrides) -> GlobusTransferProfile:
     base = {
         "remote_collection_id": "remote-uuid",
         "local_collection_id": "local-uuid",
-        "remote_write_root": "/scratch/rjain",
+        "remote_write_root": "/scratch/demo",
         "remote_read_root": "/lcrc/group/e3sm",
     }
     base.update(overrides)
@@ -162,12 +162,12 @@ class TestARefusalComesBackAsAResult:
 
     def test_an_endpoint_without_a_block_says_what_to_add(self, monkeypatch):
         monkeypatch.setattr(transfer_tools, "_config", lambda: (_config(None), None))
-        result = transfer_tools.transfer_ls("/scratch/rjain")
+        result = transfer_tools.transfer_ls("/scratch/demo")
         assert result["submitted"] is False
         assert "globus_transfer" in result["message"]
 
     def test_every_result_carries_provenance_and_an_operation_id(self, wired):
-        result = transfer_tools.transfer_ls("/scratch/rjain")
+        result = transfer_tools.transfer_ls("/scratch/demo")
         assert result["_provenance"]["operation_id"]
         assert result["_provenance"]["tool"] == "transfer_ls"
 
@@ -239,7 +239,7 @@ class TestDoctorReportsOnDataMovement:
 
         class Client:
             def operation_ls(self, collection_id, **kwargs):
-                assert kwargs["path"] == "/scratch/rjain"
+                assert kwargs["path"] == "/scratch/demo"
                 return {"DATA": [{"name": "runs", "type": "dir"}]}
 
         monkeypatch.setattr(

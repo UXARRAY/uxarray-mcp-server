@@ -108,10 +108,14 @@ class TestCheckEndpointHealth:
 
     def test_yac_pythonpath_is_expected_runtime_path(self):
         """Endpoint-side YAC source/runtime paths are not a worker leak."""
+        # The last entry is a group checkout, which on a real cluster sits
+        # under someone's username. Written with a placeholder because the
+        # check keys on "yac" appearing in the path, not on whose it is --
+        # a real name here reads like the rule depends on it.
         pythonpath = (
             "/home/testuser/src/yac/build/python:"
             "/home/testuser/local/yac-3.17/lib/python3.12/site-packages:"
-            "/lcrc/group/e3sm/jain/uxarray-yac-src"
+            "/lcrc/group/e3sm/<user>/uxarray-yac-src"
         )
 
         assert health._is_expected_yac_pythonpath(pythonpath) is True
