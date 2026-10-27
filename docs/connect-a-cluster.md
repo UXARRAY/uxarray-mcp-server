@@ -3,6 +3,11 @@
 Your data is on an HPC machine. You want to ask an AI about it without
 downloading anything. This page gets you there.
 
+> **Never used Globus?** Ten minutes on
+> [globus-basics.md](globus-basics.md) first. It covers the identity, why it
+> has to be your institutional one, and why Compute is not Transfer — the
+> three things that account for most stuck setups.
+
 It is machine-agnostic: the same five commands work for Chrysalis, Casper,
 Perlmutter or a university cluster nobody has written a page about. Site
 pages ([chrysalis](chrysalis.md), [ucar](ucar.md), [improv](improv.md))

@@ -36,11 +36,15 @@ You are most likely one of:
 1. **Local user** — laptop only, no HPC. → [Local install](#local-install).
 2. **HPC user, endpoint already exists** — someone at your lab gave you a
    Globus Compute endpoint UUID. → [Local install](#local-install), then
-   [docs/remote-hpc.md](docs/remote-hpc.md).
+   [docs/connect-a-cluster.md](docs/connect-a-cluster.md).
 3. **HPC user, your own personal endpoint** — you have a Globus identity and
    shell access to an HPC machine, and want to stand up an endpoint just for
    yourself. → [Local install](#local-install), then
    [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md#solo-personal-endpoint-quickstart).
+
+> **New to Globus?** Paths 2–4 all assume an identity linked to your HPC
+> account. [docs/globus-basics.md](docs/globus-basics.md) is ten minutes and
+> saves most of the common dead ends.
 4. **Group / shared endpoint operator** — you're standing one up for a team,
    project, or lab. → [Local install](#local-install), then the full
    [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md) including
