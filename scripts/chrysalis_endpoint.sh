@@ -170,6 +170,10 @@ engine:
       export PATH="$YAC_WORKER_PATH"
       export PYTHONPATH="$YAC_PYTHONPATH"
       export LD_LIBRARY_PATH="$YAC_LD_LIBRARY_PATH:\${LD_LIBRARY_PATH:-}"
+      # Stale PMI vars from the batch job make MPI_Init abort when YAC is
+      # imported (the fd PMI_FD names is already closed). The server also
+      # clears these per-remap; doing it here covers older clients too.
+      unset PMI_FD PMI_RANK PMI_SIZE
 
 idle_heartbeats_soft: 10
 idle_heartbeats_hard: 5760
@@ -199,6 +203,10 @@ engine:
       export PATH="$YAC_WORKER_PATH"
       export PYTHONPATH="$YAC_PYTHONPATH"
       export LD_LIBRARY_PATH="$YAC_LD_LIBRARY_PATH:\${LD_LIBRARY_PATH:-}"
+      # Stale PMI vars from the batch job make MPI_Init abort when YAC is
+      # imported (the fd PMI_FD names is already closed). The server also
+      # clears these per-remap; doing it here covers older clients too.
+      unset PMI_FD PMI_RANK PMI_SIZE
 
     launcher:
       type: SrunLauncher

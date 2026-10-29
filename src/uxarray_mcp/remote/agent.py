@@ -136,27 +136,31 @@ def _normalize_remote_error(
         )
         if yac_backed:
             # Memory is the usual cause of a lost worker, but not for this
-            # call. Importing YAC runs ``MPI_Init``; Open MPI initialises
-            # fine as a singleton, MPICH aborts the process instead, and an
-            # abort inside a Globus worker arrives here as WorkerLost with
-            # nothing mentioning MPI. Observed on Casper, where the same
-            # conservative remap that kills the worker completes in 0.09s
-            # under ``check_remote_yac`` -- which runs it in a worker-side
-            # *subprocess*. Same node, same YAC, same method: the difference
-            # is only whether an abort can take the worker with it.
+            # call. Importing YAC runs ``MPI_Init``, which decides whether
+            # this process is one rank of many by reading the environment.
+            # A worker inside a batch allocation inherits ``PMI_FD`` from
+            # the job, pointing at a descriptor that is already closed, so
+            # MPI writes to it, gets EBADF and *aborts* -- which arrives
+            # here as WorkerLost with nothing mentioning MPI.
             #
-            # Sending the caller to look at mesh size here costs them the
-            # afternoon, because subsetting cannot fix it.
+            # The server now unsets PMI_FD/PMI_RANK/PMI_SIZE before every
+            # YAC-backed remap, so reaching this message means something
+            # else: an older server on the worker, or a genuinely broken
+            # YAC build. Sending the caller to look at mesh size would cost
+            # them the afternoon, because subsetting cannot fix either.
             return RuntimeError(
                 f"The worker on {endpoint} died running a YAC-backed remap"
                 f"{where}. This is usually MPI, not memory: importing YAC "
-                "calls MPI_Init, and on an MPICH site that aborts the "
-                "process rather than initialising as a singleton, which "
-                "arrives here as a lost worker. Confirm with "
-                "`check_remote_yac(endpoint=...)`: if its `conservative_ok` "
-                "is true, YAC itself is fine and the endpoint needs its "
-                "workers launched under an MPI launcher (`mpiexec -n 1` or "
-                "`srun --ntasks 1`) in worker_init. Until then, "
+                "calls MPI_Init, and a worker that inherited a stale PMI_FD "
+                "from its batch job aborts instead of initialising as a "
+                "singleton. This server unsets those variables before "
+                "remapping, so the likely cause is an older uxarray-mcp on "
+                "the endpoint -- compare versions with "
+                "`check_remote_yac(endpoint=...)` and redeploy, or unset "
+                "PMI_FD in the endpoint's worker_init. Do not reach for an "
+                "MPI launcher: at more than one rank each rank remaps only "
+                "its own partition and returns it as the whole field, with "
+                "no error and no NaNs. Meanwhile "
                 "method='inverse_distance_weighted' or 'bilinear' run on "
                 "uxarray's own engine and do not need YAC -- but note that "
                 "neither conserves the field integral, which is the reason "
