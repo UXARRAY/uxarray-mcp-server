@@ -3342,6 +3342,10 @@ raise SystemExit(0 if out.get("yac_helper_ok") and out.get("remap_ok") else 1)
 """
 
     env = os.environ.copy()
+    # The probe must match the real in-process path; otherwise it can report
+    # conservative_ok while the worker itself still aborts in MPI_Init.
+    for _pmi_var in ("PMI_FD", "PMI_RANK", "PMI_SIZE"):
+        env.pop(_pmi_var, None)
     prefix_applied = None
     if yac_prefix:
         prefix = os.path.abspath(os.path.expanduser(yac_prefix))
@@ -4619,6 +4623,14 @@ def remote_remap_variable(
     """
     import os
 
+    # Clear stale batch-job PMI metadata before YAC calls MPI_Init. The
+    # worker may inherit PMI_FD/PMI_RANK/PMI_SIZE even though PMI_FD is a
+    # closed descriptor; MPICH then aborts instead of choosing singleton mode.
+    # A launcher is not a safe substitute: multiple ranks need explicit
+    # gather logic, which these worker functions do not have.
+    for _pmi_var in ("PMI_FD", "PMI_RANK", "PMI_SIZE"):
+        os.environ.pop(_pmi_var, None)
+
     import numpy as np
     import uxarray as ux
 
@@ -4885,6 +4897,14 @@ def remote_regrid_dataset(
     """
     import os
 
+    # Clear stale batch-job PMI metadata before YAC calls MPI_Init. The
+    # worker may inherit PMI_FD/PMI_RANK/PMI_SIZE even though PMI_FD is a
+    # closed descriptor; MPICH then aborts instead of choosing singleton mode.
+    # A launcher is not a safe substitute: multiple ranks need explicit
+    # gather logic, which these worker functions do not have.
+    for _pmi_var in ("PMI_FD", "PMI_RANK", "PMI_SIZE"):
+        os.environ.pop(_pmi_var, None)
+
     import numpy as np
     import uxarray as ux
 
@@ -5148,6 +5168,14 @@ def remote_remap_to_rectilinear(
     is returned (as nested lists) to allow local persistence.
     """
     import os
+
+    # Clear stale batch-job PMI metadata before YAC calls MPI_Init. The
+    # worker may inherit PMI_FD/PMI_RANK/PMI_SIZE even though PMI_FD is a
+    # closed descriptor; MPICH then aborts instead of choosing singleton mode.
+    # A launcher is not a safe substitute: multiple ranks need explicit
+    # gather logic, which these worker functions do not have.
+    for _pmi_var in ("PMI_FD", "PMI_RANK", "PMI_SIZE"):
+        os.environ.pop(_pmi_var, None)
 
     import numpy as np
     import uxarray as ux

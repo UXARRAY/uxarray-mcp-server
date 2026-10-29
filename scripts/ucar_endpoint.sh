@@ -23,18 +23,17 @@ WITH_YAC="${WITH_YAC:-0}"
 # HEALPix remap ran. worker_init sources activate-yac.sh from this prefix, so
 # `restart` is what picks the change up.
 YAC_VERSION="${YAC_VERSION:-3.20.2}"
-# Whether this site needs YAC imported under an MPI launcher.
+# Importing YAC calls MPI_Init, which reads the environment to decide whether
+# it is one rank of many. A worker inside a batch allocation inherits PMI_FD
+# from the job; the descriptor it names is already closed, so MPI writes to
+# it, gets EBADF and aborts the worker. `check-mpi` detects this; worker_init
+# below unsets the variables so it cannot happen.
 #
-# `check-mpi` answers that question; acting on the answer is still manual.
-# Open MPI initialises as a singleton and needs nothing. MPICH aborts, and
-# the endpoint then needs its *workers* started inside an MPI context --
-# which means `GlobusMPIEngine`, or a `launcher_prefix` on the engine, not an
-# export in worker_init. Casper was observed failing this way and has not yet
-# been reconfigured, so this is deliberately not automated: a wrong engine
-# block takes the endpoint down for every tool, not just the remap.
-#
-# Tracked rather than guessed at. See the WorkerLost message in
-# remote/agent.py for what a caller is told in the meantime.
+# Not fixed with GlobusMPIEngine or a launcher prefix, which earlier versions
+# of this script recommended. `mpiexec -n 1` works, but at more than one rank
+# YAC splits the work and nothing gathers it back, so each rank returns its
+# own partition as the whole field -- silently, with no NaNs. Unsetting one
+# variable has no such failure mode.
 YAC_PREFIX="$HOME/opt/yac-$YAC_VERSION"
 YAC_ACTIVATE="$YAC_PREFIX/activate-yac.sh"
 TMUX_SESSION="uxarray-endpoint"
@@ -51,7 +50,7 @@ Usage (run on a Casper login node):
   ucar_endpoint.sh start        Load env + start endpoint in tmux
   ucar_endpoint.sh restart      Stop running endpoint, then start fresh
   ucar_endpoint.sh status       Show endpoint list
-  ucar_endpoint.sh check-mpi    Does importing YAC need an MPI launcher?
+  ucar_endpoint.sh check-mpi    Can YAC import without a stale PMI_FD?
 
 Environment overrides:
   ENDPOINT_NAME   Globus Compute endpoint profile name (default: ucar-uxarray-yac)
@@ -122,60 +121,58 @@ EOF
   echo "  wrote $YAC_ACTIVATE (YAC $YAC_VERSION, python $pyver)"
 }
 
-# Does importing YAC survive outside an MPI launcher?
+# Can YAC import here, and is a stale PMI_FD the reason it cannot?
 #
-# Importing YAC calls MPI_Init. Open MPI initialises as a singleton and is
-# fine; MPICH aborts the process instead. Inside a Globus Compute worker that
-# abort takes the worker down, and the caller sees `WorkerLost` with nothing
-# mentioning MPI -- which reads as an out-of-memory kill and sends people to
-# measure their mesh. Observed on Casper: `method="conservative"` killed the
-# worker while the identical remap finished in 0.09s under
-# `check_remote_yac`, which runs it in a subprocess.
+# Importing YAC calls MPI_Init, which reads the environment to decide whether
+# it is one rank of many. A worker inside a batch allocation inherits PMI_FD
+# from the job, but that descriptor's owner has exited, so MPI writes to a
+# closed fd, gets EBADF and aborts. Inside a Globus worker the abort takes
+# the worker down and the caller sees `WorkerLost` with nothing mentioning
+# MPI -- which reads as an out-of-memory kill and sends people to measure
+# their mesh.
 #
-# This answers the question directly, before anyone submits a remap. If the
-# bare import dies and the launched one lives, the endpoint's worker_init
-# needs a launcher.
+# Confirmed on Chrysalis by dropping one variable at a time: PMI_FD alone is
+# the trigger. PMI_RANK, PMI_SIZE, PMI_JOBID, SLURM_* and HYDRA_* are all
+# harmless on their own.
 _check_mpi() {
   _load_modules
   _activate_env
   local probe='import yac.core, sys; print("import ok:", sys.executable)'
 
-  echo "==> Bare import (what a Globus worker does today)"
-  if python -c "$probe" 2>&1 | sed 's/^/    /'; then
-    local bare_ok=1
-  else
-    local bare_ok=0
-    echo "    FAILED -- this is what takes the worker down."
-  fi
+  echo "==> Inherited PMI variables in this shell"
+  local pmi_seen
+  pmi_seen="$(env | grep -E '^PMI' | cut -d= -f1 | tr '\n' ' ')"
+  echo "    ${pmi_seen:-(none)}"
 
   echo
-  echo "==> Under a launcher"
-  local launcher=""
-  for cand in "mpiexec -n 1" "srun --ntasks 1"; do
-    if command -v "${cand%% *}" >/dev/null 2>&1; then launcher="$cand"; break; fi
-  done
-  if [[ -z "$launcher" ]]; then
-    echo "    No mpiexec or srun on PATH; cannot compare."
-    return 1
-  fi
-  echo "    using: $launcher"
-  local launched_ok=1
-  $launcher python -c "$probe" 2>&1 | sed 's/^/    /' || launched_ok=0
+  echo "==> Bare import (what a worker does without the fix)"
+  local bare_ok=1
+  python -c "$probe" 2>&1 | sed 's/^/    /' || bare_ok=0
+  [[ "$bare_ok" == "0" ]] && echo "    FAILED -- this is what takes the worker down."
+
+  echo
+  echo "==> With PMI_FD/PMI_RANK/PMI_SIZE unset (what the server now does)"
+  local unset_ok=1
+  env -u PMI_FD -u PMI_RANK -u PMI_SIZE python -c "$probe" 2>&1 \
+    | sed 's/^/    /' || unset_ok=0
 
   echo
   if [[ "$bare_ok" == "1" ]]; then
     echo "VERDICT: bare import works. MPI is not what is killing the worker;"
     echo "  if conservative remaps still fail, look at memory next."
-  elif [[ "$launched_ok" == "1" ]]; then
-    echo "VERDICT: bare import dies, launched import works -- this is the MPI"
-    echo "  singleton problem."
-    echo "  The workers must start inside an MPI context. In the endpoint's"
-    echo "  user_config_template.yaml.j2, either switch the engine to"
-    echo "  GlobusMPIEngine, or give the current engine a launcher prefix so"
-    echo "  each worker runs under: $launcher"
+  elif [[ "$unset_ok" == "1" ]]; then
+    echo "VERDICT: a stale PMI_FD is the problem, and unsetting it fixes it."
+    echo "  uxarray-mcp >= 2026.10.1 does this itself before every YAC remap,"
+    echo "  so first check the endpoint is not running an older server."
+    echo "  To fix it at the endpoint, add to worker_init:"
+    echo "      unset PMI_FD PMI_RANK PMI_SIZE"
     echo "  Then: $(basename "$0") restart"
+    echo
+    echo "  Do NOT switch the engine to GlobusMPIEngine or add a launcher"
+    echo "  prefix. That also makes the import work, but above one rank each"
+    echo "  rank returns only its own partition of the field, with no error."
   else
-    echo "VERDICT: YAC does not import either way. This is not MPI --"
+    echo "VERDICT: YAC does not import either way. This is not PMI --"
     echo "  check the build at $YAC_PREFIX."
   fi
 }
@@ -205,12 +202,6 @@ _configure() {
   if [[ "$WITH_YAC" == "1" ]]; then
     _ensure_yac_activate
     yac_line=$'\n      source '"$YAC_ACTIVATE"
-    # NOTE: if `check-mpi` says this site needs a launcher, the change goes
-    # in the engine block below rather than here -- worker_init runs *before*
-    # the worker process starts, so exporting something here cannot put that
-    # process inside an MPI context. Left unwired on purpose rather than
-    # shipped as a setting that looks applied and does nothing. See the
-    # YAC_LAUNCHER note at the top of this file.
   elif [[ "$ENDPOINT_NAME" == *yac* ]]; then
     echo "ERROR: '$ENDPOINT_NAME' is named for YAC but WITH_YAC is 0." >&2
     echo "  Rebuild it with YAC:    WITH_YAC=1 $(basename "$0") configure" >&2
@@ -236,6 +227,10 @@ engine:
     init_blocks: 1
     worker_init: |
       unset PYTHONPATH
+      # Stale PMI vars from the batch job make MPI_Init abort when YAC is
+      # imported (the fd PMI_FD names is already closed). The server also
+      # clears these per-remap; doing it here covers older clients too.
+      unset PMI_FD PMI_RANK PMI_SIZE
       source "\$(conda info --base)/etc/profile.d/conda.sh"
       conda activate $CONDA_ENV$yac_line
 

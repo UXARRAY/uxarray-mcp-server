@@ -190,22 +190,34 @@ synthesized from the prefix, so there is nothing to edit in the script.
 **`doctor` passes but YAC tools fail** — run `yac_smoke_test.py`, which checks
 importability on the compute worker specifically rather than on the login node.
 
-**A conservative remap kills the worker (`WorkerLost`)** — almost certainly
-MPI, not memory, and the two look identical from the outside. Importing YAC
-calls `MPI_Init`: Open MPI starts fine as a singleton, MPICH aborts the
-process, and an abort inside a Globus worker arrives as a lost worker with
-nothing mentioning MPI.
+**A conservative remap kills the worker (`WorkerLost`)** — MPI, not memory,
+and the two look identical from the outside. Importing YAC calls `MPI_Init`,
+which works out whether this process is one rank of many by reading the
+environment. A worker started inside a batch job inherits `PMI_FD` from that
+job, pointing at a descriptor whose owner has already exited. MPI writes to
+it, gets `Bad file descriptor`, and aborts — which reaches you as a lost
+worker with nothing mentioning MPI.
 
-Tell them apart with `check_remote_yac(endpoint=...)`. It runs the same
-conservative remap in a *subprocess*, where an abort is survivable:
+The server unsets `PMI_FD`, `PMI_RANK` and `PMI_SIZE` before every YAC-backed
+remap, so a current endpoint should not hit this. If you still see it, the
+endpoint is probably running an older `uxarray-mcp`; check the version in
+`check_remote_yac(endpoint=...)` and redeploy. To fix it at the endpoint
+instead, add to `worker_init`:
 
-- `conservative_ok: true` — YAC is fine. The worker needs to start inside an
-  MPI context (`GlobusMPIEngine`, or a launcher prefix on the engine). An
-  export in `worker_init` cannot do this; that runs before the worker exists.
-- `conservative_ok: false` — the build is the problem, not the launcher.
+```bash
+unset PMI_FD PMI_RANK PMI_SIZE
+```
 
-`./scripts/ucar_endpoint.sh check-mpi` runs the bare and launched imports side
-by side and tells you which case you are in.
+`conservative_ok: false` from `check_remote_yac` means something else — the
+YAC build itself. `./scripts/ucar_endpoint.sh check-mpi` distinguishes the two.
+
+**Do not fix this with an MPI launcher.** `mpiexec -n 1` also makes the import
+work, and earlier versions of this page recommended it. At more than one rank
+it silently corrupts results: YAC splits the work across ranks, nothing here
+gathers it back, and each rank returns its own partition as if it were the
+whole field. Measured against a known-correct serial answer of 73344.0, four
+ranks gave 56635, 58331, 53862 and 60373 on four consecutive runs — full-length
+arrays, no NaNs, no error.
 
 Meanwhile `inverse_distance_weighted` and `bilinear` work — they use uxarray's
 own engine. Neither conserves the field integral, which is usually the reason
