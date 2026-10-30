@@ -1,6 +1,6 @@
 [project]
 name = "uxarray-mcp"
-version = "2026.10.0"
+version = "2026.10.1"
 description = "MCP server for analyzing unstructured meshes with UXarray"
 readme = "README.md"
 keywords = ["uxarray", "mcp", "unstructured grids", "scientific computing", "globus compute"]
@@ -37,7 +37,7 @@ license = { file = "LICENSE" }
 #
 # All runtime dependencies (uxarray, mcp, toolregistry-server, holoviews)
 # declare >=3.10, so 3.11 is a conservative floor.
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     # 0.7.0 is the floor: it pairs with toolregistry 0.19 below, whose
     # schema change alters what every served tool advertises.
@@ -76,7 +76,7 @@ dependencies = [
     # before and would have gone missing silently on the next resolve.
     # Installing 2026.9.1 without them fails 95 tests with
     # OptionalDependencyNotFoundError.
-    "uxarray[geo,viz]>=2026.10.0,<2026.11",
+    "uxarray[geo,viz]>=2026.10.1,<2026.11",
 ]
 
 [project.optional-dependencies]

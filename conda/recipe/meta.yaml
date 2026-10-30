@@ -1,5 +1,5 @@
 {% set name = "uxarray-mcp" %}
-{% set version = "2026.10.0" %}
+{% set version = "2026.10.1" %}
 {% set python_min = "3.12" %}
 
 package:

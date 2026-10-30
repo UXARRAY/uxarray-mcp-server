@@ -195,9 +195,13 @@ class TestComputeDivergence:
 
 
 class TestMultiDimSelection:
-    def test_curl_without_selection_raises(self, healpix_multidim_wind_dataset):
-        with pytest.raises(Exception):
-            healpix_multidim_wind_dataset["u"].curl(healpix_multidim_wind_dataset["v"])
+    def test_curl_without_selection_uses_default_slice(
+        self, healpix_multidim_wind_dataset
+    ):
+        result = compute_curl(healpix_multidim_wind_dataset, "u", "v")
+        assert result["n_face"] == healpix_multidim_wind_dataset.uxgrid.n_face
+        assert result["reduced_dims"]["time"]["index"] == 0
+        assert result["reduced_dims"]["lev"]["index"] == 0
 
     def test_curl_selects_time_and_level(self, healpix_multidim_wind_dataset):
         result = compute_curl(
