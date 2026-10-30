@@ -6,6 +6,7 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
 
+## 2026.10.1 — 2026-10-30
 ## 2026.10.0 — 2026-10-23
 ### Added
 - `subset_advanced` selects faces near a point, by radius
