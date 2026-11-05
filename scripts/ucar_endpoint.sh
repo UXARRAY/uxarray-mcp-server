@@ -42,6 +42,18 @@ TMUX_SESSION="uxarray-endpoint"
 # serialised via AllCodeStrategies and run with only uxarray + numpy +
 # matplotlib installed in the conda env. Never add uxarray_mcp to PYTHONPATH on
 # the worker — it causes pydantic version conflicts.
+#
+# One exception, and it is metadata only. The `uxarray-mcp` *distribution* must
+# stay installed in the conda env, because every remote_* function reports
+# provenance through an inlined importlib.metadata.version("uxarray-mcp") that
+# has no fallback — remove it and every tool call raises PackageNotFoundError
+# after doing all its work. Install it --no-deps so the metadata exists without
+# the toolregistry/pydantic tree. scripts/ucar_update.sh does this correctly;
+# do not hand-roll the pip line.
+#
+# NOTE: this script changes no versions. `restart` only replaces the worker
+# processes so they re-import what is already on disk. To move a version, use
+# scripts/ucar_update.sh.
 
 usage() {
   cat <<'EOF'
@@ -51,6 +63,10 @@ Usage (run on a Casper login node):
   ucar_endpoint.sh restart      Stop running endpoint, then start fresh
   ucar_endpoint.sh status       Show endpoint list
   ucar_endpoint.sh check-mpi    Can YAC import without a stale PMI_FD?
+
+This script never changes a version -- `restart` just replaces the worker
+processes. To update uxarray or uxarray-mcp on the worker, use
+  ucar_update.sh --restart
 
 Environment overrides:
   ENDPOINT_NAME   Globus Compute endpoint profile name (default: ucar-uxarray-yac)

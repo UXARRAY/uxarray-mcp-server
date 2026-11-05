@@ -114,6 +114,56 @@ The first start opens an OAuth flow. Over ssh, paste the printed URL into a
 browser on your laptop and paste the code back. It then prints the endpoint
 UUID.
 
+## Updating the Worker
+
+`restart` changes no versions. It stops the endpoint, removes the pid file and
+starts it again — there is no `pip`, no `conda` and no `git` anywhere in
+`ucar_endpoint.sh`. What it buys you is that worker processes are *replaced*,
+so they re-import whatever is on disk at that moment. Running workers hold the
+old modules in memory, which makes a restart necessary after an update and
+never sufficient on its own.
+
+```bash
+# On a Casper login node, from a plain shell
+./scripts/ucar_update.sh --dry-run   # report what would change
+./scripts/ucar_update.sh --restart   # update, then bounce the endpoint
+```
+
+The script asks the worker's own interpreter where `uxarray` and `uxarray_mcp`
+resolve, then pulls the git checkout or upgrades from PyPI accordingly — the
+same "do not guess this" approach as `chrysalis_update.sh`, which exists
+because updating the clone the worker *wasn't* importing looked like success
+and moved nothing.
+
+`uxarray-mcp` is always installed with `--no-deps`, and the reason is worth
+knowing before someone "fixes" it. The worker never runs the MCP server:
+remote functions are serialised by value and execute against uxarray, numpy
+and matplotlib alone, and `worker_init` unsets `PYTHONPATH` to keep the server
+off the import path. A full install pulls `toolregistry` and
+`toolregistry-server[mcp]`, whose pydantic pins conflict with the endpoint's.
+But the distribution cannot be removed either: every `remote_*` function
+reports provenance through an inlined `importlib.metadata.version("uxarray-mcp")`
+with no fallback, so an absent distribution raises `PackageNotFoundError` and
+every tool call fails *after* doing all its work. `--no-deps` is what satisfies
+both — the metadata exists, nothing else comes with it.
+
+That stale metadata is also what produces this, if you pip-install by hand
+into an env whose `uxarray-mcp` is older than the `uxarray` you are
+installing:
+
+```
+uxarray-mcp 2026.9.0 requires uxarray<2026.10,>=2026.9.0,
+but you have uxarray 2026.10.0 which is incompatible
+```
+
+The script avoids it by updating `uxarray-mcp` first, so the pin is current
+before `uxarray` moves. `pip check` will always report the two `toolregistry`
+packages as missing here; that is the design, not a fault.
+
+Changes to `CONDA_ENV`, `WITH_YAC`, `YAC_VERSION` or `worker_init` are a
+different matter — those are baked into `user_config_template.yaml.j2` at
+`configure` time, so they need `configure` **then** `restart`.
+
 ## Registering It
 
 Add the UUID to your private local config on your laptop, never to the
