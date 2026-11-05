@@ -243,7 +243,12 @@ _upgrade_venv() {
 
   echo "==> Installing globus-compute-endpoint"
   pip install --upgrade pip
-  pip install "globus-compute-endpoint>=4.9.0" uxarray xarray netCDF4 h5netcdf numpy
+  # "uxarray[geo,viz]", not a bare uxarray, and quoted because the extras
+  # brackets are shell globs. Upstream 2026.9.1 moved cartopy, healpix,
+  # hvplot and geopandas into extras; without them the worker imports
+  # uxarray happily and then fails mid-render on the first coastline or
+  # HEALPix grid. pyproject.toml floors the same spec.
+  pip install "globus-compute-endpoint>=4.9.0" "uxarray[geo,viz]" xarray netCDF4 h5netcdf numpy matplotlib
 
   echo "==> Verifying"
   python --version
