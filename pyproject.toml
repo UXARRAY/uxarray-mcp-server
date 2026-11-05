@@ -20,7 +20,7 @@ authors = [
     { name = "Dayan Abdulla", email = "dayanabdulla000@gmail.com" },
 ]
 license = { file = "LICENSE" }
-# The floor is 3.11; there is deliberately no upper bound.
+# The floor is 3.12; there is deliberately no upper bound.
 #
 # This used to read ">=3.12,<3.13" because of globus/globus-compute#2139: a
 # 3.13 submitter against a 3.12 worker raises WorkerLost on non-trivial
@@ -32,11 +32,12 @@ license = { file = "LICENSE" }
 # The constraint is now enforced where it actually applies: `uxarray_mcp.remote`
 # checks the submitter's Python at import time and refuses to configure an
 # endpoint from an unsupported interpreter, and `remote.health` already warns on
-# submitter/worker minor-version skew at probe time. A local install on 3.11 or
+# submitter/worker minor-version skew at probe time. A local install on 3.12 or
 # 3.13 works and never touches that code.
 #
-# All runtime dependencies (uxarray, mcp, toolregistry-server, holoviews)
-# declare >=3.10, so 3.11 is a conservative floor.
+# The 3.12 floor is also imposed by uxarray[geo,viz]>=2026.10.1, which itself
+# requires Python >=3.12. All other runtime dependencies (mcp,
+# toolregistry-server, holoviews) declare >=3.10.
 requires-python = ">=3.12"
 dependencies = [
     # 0.7.0 is the floor: it pairs with toolregistry 0.19 below, whose
