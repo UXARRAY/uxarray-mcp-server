@@ -177,7 +177,12 @@ _install() {
   _activate_env
   echo "==> Installing worker packages"
   python -m pip install --upgrade pip
-  python -m pip install globus-compute-endpoint uxarray xarray netCDF4 h5netcdf matplotlib
+  # "uxarray[geo,viz]", not a bare uxarray, and quoted because the extras
+  # brackets are shell globs. Upstream 2026.9.1 moved cartopy, healpix,
+  # hvplot and geopandas into extras; without them the worker imports
+  # uxarray happily and then fails mid-render on the first coastline or
+  # HEALPix grid. pyproject.toml floors the same spec.
+  python -m pip install globus-compute-endpoint "uxarray[geo,viz]" xarray netCDF4 h5netcdf matplotlib
   echo
   echo "Installed into: $(python -c 'import sys; print(sys.prefix)')"
   python -c 'import sys; print("python", ".".join(map(str, sys.version_info[:3])))'

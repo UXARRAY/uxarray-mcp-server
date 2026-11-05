@@ -30,8 +30,15 @@ CONDA_ENV="${CONDA_ENV:-/glade/work/$USERNAME/conda-envs/uxarray_dev}"
 PY="$CONDA_ENV/bin/python"
 
 # Pin either package by exporting a full pip requirement specifier, e.g.
-#   UXARRAY_SPEC='uxarray==2026.10.1' ./scripts/ucar_update.sh
-UXARRAY_SPEC="${UXARRAY_SPEC:-uxarray}"
+#   UXARRAY_SPEC='uxarray[geo,viz]==2026.10.1' ./scripts/ucar_update.sh
+#
+# The [geo,viz] extras are not optional for this server. Upstream 2026.9.1
+# (UXARRAY/uxarray#1548) moved cartopy, healpix, hvplot and geopandas out of
+# uxarray's required set and into extras, and pyproject.toml accordingly
+# floors `uxarray[geo,viz]`. A bare `uxarray` installs and imports fine, then
+# fails only when a tool reaches for coastlines or a HEALPix grid -- on the
+# worker, mid-render, as a missing-module traceback.
+UXARRAY_SPEC="${UXARRAY_SPEC:-uxarray[geo,viz]}"
 UXARRAY_MCP_SPEC="${UXARRAY_MCP_SPEC:-uxarray-mcp}"
 
 RESTART=0
@@ -134,7 +141,9 @@ _pip_upgrade() {
   local spec="$1" name="$2"; shift 2
   echo "==> $name: site-packages install, upgrading from PyPI"
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "    [dry-run] would: $PY -m pip install --upgrade $* $spec"
+    # Quoted in the echo too: the extras brackets are shell glob characters,
+    # so an unquoted copy-paste of this line can silently install nothing.
+    echo "    [dry-run] would: $PY -m pip install --upgrade $* '$spec'"
     return
   fi
   "$PY" -m pip install --upgrade "$@" "$spec"

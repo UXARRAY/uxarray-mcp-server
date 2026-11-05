@@ -79,7 +79,11 @@ first.
 module load conda
 conda create -p /glade/work/$USER/conda-envs/uxarray_dev python=3.12 -c conda-forge -y
 conda activate /glade/work/$USER/conda-envs/uxarray_dev
-pip install globus-compute-endpoint uxarray xarray netCDF4 h5netcdf matplotlib
+pip install globus-compute-endpoint "uxarray[geo,viz]" xarray netCDF4 h5netcdf matplotlib
+
+# The distribution metadata the worker's provenance reads. --no-deps keeps
+# the toolregistry/pydantic tree out -- see "Updating the Worker" below.
+pip install --no-deps uxarray-mcp
 
 # 2. Write the endpoint config
 ENDPOINT_NAME=ucar-uxarray ./scripts/ucar_endpoint.sh configure
@@ -113,6 +117,69 @@ the script refuses and tells you to detach.
 The first start opens an OAuth flow. Over ssh, paste the printed URL into a
 browser on your laptop and paste the code back. It then prints the endpoint
 UUID.
+
+## Rebuilding the Worker Env
+
+`pyproject.toml` sets `requires-python = ">=3.12"`, so an env on an older
+interpreter is unsupported regardless of whether anything has visibly broken
+yet. Observed 2026-11-05 on Casper: the env was on **3.11**, and was stuck at
+`uxarray` 2026.10.0 — below this server's own `uxarray[geo,viz]>=2026.10.1`
+floor — because 3.11 cannot install 2026.10.1. Nothing errored; pip just
+installed the newest release the interpreter qualified for and reported
+success.
+
+Check the interpreter, and separately check what pip can actually see:
+
+```bash
+/glade/work/$USER/conda-envs/uxarray_dev/bin/python -V
+/glade/work/$USER/conda-envs/uxarray_dev/bin/python -m pip index versions uxarray
+/glade/work/$USER/conda-envs/uxarray_dev/bin/python -m pip index versions uxarray \
+    --ignore-requires-python | head -3
+```
+
+The two `index versions` calls are the diagnostic pair, and running only the
+first will mislead you. `pip index versions` **hides releases your
+interpreter cannot install**, so a floor you cannot reach and a release that
+does not exist look identical — both just show an older `LATEST`. Compare
+the two outputs: a version that appears only under
+`--ignore-requires-python` is being filtered by your Python, while one that
+appears under neither is not on PyPI at all and no rebuild will conjure it.
+On Casper 2026-11-05, 2026.10.1 appeared only under the second — the
+filtered case.
+
+If the interpreter is not 3.12, rebuild. Stop the endpoint first — removing an env out
+from under a running worker gets you `WorkerLost` on the next task rather
+than a clear error.
+
+```bash
+./scripts/ucar_endpoint.sh status          # note whether it is running
+globus-compute-endpoint stop ucar-uxarray-yac
+
+module load conda
+conda env remove -p /glade/work/$USER/conda-envs/uxarray_dev -y
+conda create  -p /glade/work/$USER/conda-envs/uxarray_dev python=3.12 -c conda-forge -y
+conda activate /glade/work/$USER/conda-envs/uxarray_dev
+
+pip install globus-compute-endpoint "uxarray[geo,viz]" xarray netCDF4 h5netcdf matplotlib
+pip install --no-deps uxarray-mcp
+
+./scripts/ucar_update.sh --dry-run         # confirm versions and layout
+./scripts/ucar_endpoint.sh start
+```
+
+`configure` is not needed if you rebuilt at the same path — `worker_init`
+names the directory, not the interpreter, so `start` is enough. It *is*
+needed if you changed `CONDA_ENV`.
+
+Prefer the plain `--no-deps uxarray-mcp` above to an editable install of a
+git checkout. An editable install does not refresh its recorded version on
+`git pull`, so the distribution metadata drifts from the module: observed on
+Casper as `uxarray_mcp 2026.10.1` importing from
+`~/uxarray-mcp-server/src/` while the metadata still read `2026.9.0`. Runtime
+survives this — the provenance lambda parses `__version__` out of the file
+and only falls back to `importlib.metadata` — but the stale `Requires-Dist`
+in that metadata is what generates pip resolver conflicts on every later
+install.
 
 ## Updating the Worker
 

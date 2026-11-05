@@ -477,11 +477,14 @@ ssh <username>@casper.ucar.edu
 module load conda
 conda create -p /glade/work/$USER/conda-envs/uxarray_dev python=3.12 -c conda-forge -y
 conda activate /glade/work/$USER/conda-envs/uxarray_dev
-pip install globus-compute-endpoint uxarray xarray netCDF4 h5netcdf matplotlib cartopy
+pip install globus-compute-endpoint "uxarray[geo,viz]" xarray netCDF4 h5netcdf matplotlib
 ```
 
-Worker Python **must** be 3.12. Include `cartopy` if you want coastlines drawn
-on your maps, as in the figure above.
+Worker Python **must** be 3.12. Quote the extras — the brackets are shell
+globs. `[geo,viz]` is what brings in cartopy, which draws the coastlines in
+the figure above, along with healpix and geopandas; upstream 2026.9.1 moved
+all three out of uxarray's required set into extras, so a bare `uxarray`
+gets you a worker that imports fine and fails mid-render.
 
 **Step 2. Configure and start the endpoint.**
 

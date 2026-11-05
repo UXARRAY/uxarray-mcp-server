@@ -95,7 +95,7 @@ The same thing without the script:
 module load conda                       # or whatever your site provides
 conda create -n gce python=3.12 -c conda-forge -y
 conda activate gce
-pip install globus-compute-endpoint uxarray xarray netCDF4 h5netcdf
+pip install globus-compute-endpoint "uxarray[geo,viz]" xarray netCDF4 h5netcdf
 
 # 2. Configure the endpoint
 globus-compute-endpoint configure uxarray
@@ -358,10 +358,23 @@ The endpoint manager and the worker can use different environments. The
 
 ```bash
 conda activate gce
-pip install uxarray xarray netCDF4 h5netcdf
-# Plus anything else you want the agent to have access to:
-pip install matplotlib cartopy
+pip install "uxarray[geo,viz]" xarray netCDF4 h5netcdf matplotlib
+
+# Distribution metadata the worker's provenance reads. --no-deps keeps the
+# toolregistry/pydantic tree off the worker, where it conflicts.
+pip install --no-deps uxarray-mcp
 ```
+
+Quote the extras: the brackets are shell glob characters, and an unquoted
+`uxarray[geo,viz]` can silently expand to nothing.
+
+The `[geo,viz]` extras are not optional. Upstream 2026.9.1
+([UXARRAY/uxarray#1548](https://github.com/UXARRAY/uxarray/pull/1548)) moved
+cartopy, healpix, hvplot and geopandas out of uxarray's required set, and
+this server imports cartopy directly for coastlines. A bare `uxarray`
+installs and imports cleanly, then fails on the worker mid-render the first
+time a tool draws a coastline or opens a HEALPix grid — `pyproject.toml`
+floors `uxarray[geo,viz]` for exactly this reason.
 
 > If the worker env is different from the manager env, set
 > `worker_init` (Step 3) to activate the worker env.
