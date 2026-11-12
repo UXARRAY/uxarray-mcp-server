@@ -303,7 +303,9 @@ def probe(endpoint: str | None = None, timeout_seconds: int = 60) -> dict[str, A
     name = resolved.endpoint_name or resolved.endpoint_id
     started = time.monotonic()
     try:
-        future = _executor_for(resolved).submit(shim.probe)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=_ENV_DIFF_WARNING)
+            future = _executor_for(resolved).submit(shim.probe)
         info = future.result(timeout=timeout_seconds)
     except TimeoutError:
         raise RemoteError(
