@@ -111,6 +111,12 @@ def test_timeout_returns_redeemable_handle(stub, config):
             executor.WORKER_MISSING_PACKAGE,
         ),
         ("ComputeAPIError ENDPOINT_NOT_ONLINE", executor.NO_WORKER),
+        (
+            "('POST', '.../submit', 'Bearer', 422, 'SEMANTICALLY_INVALID', "
+            "'Request payload failed validation: Failed to start or unexpected error:\\n"
+            "  (OSError) [Errno 9] Bad file descriptor')",
+            executor.ENDPOINT_OFFLINE,
+        ),
         ("Task failure due to loss of worker 3 on host n2", executor.WORKER_LOST),
         ("x" * 700 + "\nValueError: bad", executor.REMOTE_FAILED),
     ],

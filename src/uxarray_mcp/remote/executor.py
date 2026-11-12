@@ -115,6 +115,13 @@ def _classify(exc: BaseException, endpoint: str) -> RemoteError:
             "Install on the worker env: pip install uxarray[geo,viz] && "
             "pip install --no-deps uxarray-mcp, then restart the endpoint.",
         )
+    if "Failed to start" in text or "SEMANTICALLY_INVALID" in text:
+        return RemoteError(
+            ENDPOINT_OFFLINE,
+            f"{endpoint}'s manager could not start a worker process (Globus "
+            f"returned: {final[-160:]}). On the login node run the site script's "
+            "`status`, read ~/.globus_compute/<name>/endpoint.log, then `restart`.",
+        )
     if "ENDPOINT_NOT_ONLINE" in text or "did not signal readiness" in text:
         return RemoteError(
             NO_WORKER,
