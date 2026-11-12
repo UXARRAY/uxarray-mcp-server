@@ -25,6 +25,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "session",
     "endpoint",
     "get_operation",
+    "guide",
 )
 
 #: Tools that change something on disk or in session state.

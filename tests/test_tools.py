@@ -387,3 +387,50 @@ def test_plot_temporal_mean_over_files(structured_mesh_files, state_dir, tmp_pat
     assert meta["n_time_steps"] == 6 and meta["n_files"] == 2 and meta["units"] == "K2"
     assert meta["value_stats"]["mean"] == pytest.approx(561.0)  # (280+281)/2 * 2
     assert 0 < meta["n_faces_in_region"] < meta["n_faces_total"]
+
+
+def test_plot_field_honours_a_crop(structured_mesh_files, state_dir):
+    grid, data = structured_mesh_files
+    blocks = t.plot(
+        kind="field",
+        grid_path=grid,
+        data_path=data,
+        variable_name="temperature",
+        lon_bounds=[-60, 60],
+        lat_bounds=[-30, 30],
+    )
+    meta = json.loads(blocks[1]["text"])
+    assert 0 < meta["n_faces_in_region"] < meta["n_faces_total"]
+
+
+def test_first_look_runs_area_zonal_and_plots(structured_mesh_files, state_dir):
+    grid, data = structured_mesh_files
+    out = t.inspect_dataset(grid_path=grid, data_path=data, first_look=True)
+    _envelope(out)
+    assert out["area"]["total_area"] > 0 and out["selected_variable"] == "temperature"
+    assert len(out["zonal_mean"]["latitudes"]) > 3
+    assert (
+        set(out["plots"]) == {"mesh", "field"} and out["plots"]["field"]["image_path"]
+    )
+
+
+def test_remap_destination_reports_uxarray_limit(structured_mesh_files, state_dir):
+    # UXarray can carry node data to faces but not yet faces to nodes; the
+    # limitation must surface as its own message, not a generic failure.
+    grid, data = structured_mesh_files
+    with pytest.raises(NotImplementedError, match="face-centered"):
+        t.remap(
+            grid_path=grid,
+            data_path=data,
+            variable_name="temperature",
+            destination="node",
+        )
+
+
+def test_guide_names_tool_calls_and_missing_args(state_dir):
+    out = t.guide(topic="first_look", grid_path="g.nc")
+    assert "inspect_dataset(" in out["plan"] and out["status"] == "complete"
+    with pytest.raises(ValueError, match="u_variable"):
+        t.guide(topic="vorticity", grid_path="g.nc", data_path="d.nc")
+    with pytest.raises(ValueError, match="hpc_diagnose"):
+        t.guide(topic="nonsense")

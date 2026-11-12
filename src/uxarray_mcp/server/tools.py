@@ -1,4 +1,4 @@
-"""The twelve MCP tools.
+"""The thirteen MCP tools.
 
 Each tool resolves its inputs (dataset handles -> paths), decides where to
 run (locally, or on the Globus Compute endpoint that owns the path), calls
@@ -210,12 +210,17 @@ def inspect_dataset(
     data_path: str | None = None,
     variable_name: str | None = None,
     validate: bool = True,
+    first_look: bool = False,
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
     dataset_handle: str | None = None,
 ) -> dict[str, Any]:
     """Describe a mesh and, when data_path is given, its variables and validity.
+
+    first_look=True additionally computes face areas (Earth radius), the
+    zonal mean of the first face-centered variable, and renders mesh and
+    field plots (paths in `plots`), so one call gives a complete first pass.
 
     Returns topology (n_face/n_node/n_edge, format), mesh_coverage
     (sphere_fraction, closed, euler_characteristic), header facts
@@ -282,6 +287,55 @@ def inspect_dataset(
                 result.setdefault("warning_codes", []).append(
                     "DATASET_VALIDATION_FAILED"
                 )
+    if first_look:
+        result["area"] = _strip(
+            compute(
+                statistic="area",
+                grid_path=grid_path_r,
+                sphere_radius=6371000.0,
+                use_remote=use_remote,
+                endpoint=endpoint,
+            )
+        )
+        chosen = variable_name
+        if chosen is None and data_path_r:
+            for var in result.get("variables") or []:
+                if isinstance(var, dict) and var.get("name"):
+                    if var.get("location") in (None, "faces", "face"):
+                        chosen = var["name"]
+                        break
+        result["selected_variable"] = chosen
+        valid = (result.get("validation") or {}).get("passed", True)
+        if data_path_r and chosen and valid:
+            result["zonal_mean"] = _strip(
+                compute(
+                    statistic="zonal_mean",
+                    grid_path=grid_path_r,
+                    data_path=data_path_r,
+                    variable_name=chosen,
+                    lat_step=10.0,
+                    use_remote=use_remote,
+                    endpoint=endpoint,
+                )
+            )
+        plots: dict[str, Any] = {}
+        kinds: list[tuple[str, dict[str, Any]]] = [("mesh", {})]
+        if data_path_r and chosen:
+            kinds.append(("field", {"data_path": data_path_r, "variable_name": chosen}))
+        for kind, extra in kinds:
+            blocks = plot(
+                kind=kind,
+                grid_path=grid_path_r,
+                use_remote=use_remote,
+                endpoint=endpoint,
+                **extra,
+            )
+            meta = json.loads(blocks[-1]["text"])
+            plots[kind] = {
+                k: meta.get(k)
+                for k in ("image_path", "render_mode", "status", "message")
+            }
+        result["plots"] = plots
     if remote:
         result["_remote"] = remote
     if warnings:
@@ -290,9 +344,21 @@ def inspect_dataset(
         result,
         tool="inspect_dataset",
         inputs=_inputs(
-            grid_path=grid_path, data_path=data_path, variable_name=variable_name
+            grid_path=grid_path,
+            data_path=data_path,
+            variable_name=variable_name,
+            first_look=first_look or None,
         ),
     )
+
+
+def _strip(result: dict[str, Any]) -> dict[str, Any]:
+    """A nested tool result without its own envelope."""
+    return {
+        k: v
+        for k, v in result.items()
+        if k not in ("_provenance", "preconditions", "outcome")
+    }
 
 
 @guard
@@ -625,6 +691,8 @@ def remap(
     backend: str = "uxarray",
     yac_method: str | None = None,
     whole_dataset: bool = False,
+    destination: str | None = None,
+    statistic: str = "mean",
     use_remote: bool = False,
     endpoint: str | None = None,
     session_id: str | None = None,
@@ -632,6 +700,10 @@ def remap(
     acknowledge: str | None = None,
 ) -> dict[str, Any]:
     """Remap a variable (or whole dataset) onto another mesh or a lon/lat grid.
+
+    destination="face"|"node"|"edge" instead moves a field between
+    elements of the same mesh (node-centred output to face centres for the
+    vector operations) with `statistic` mean|max|min|sum.
 
     Give target_grid_path for mesh-to-mesh, or target_lon + target_lat (1-D
     lists) for a rectilinear target. method: nearest_neighbor,
@@ -649,7 +721,15 @@ def remap(
         "grid_path": _need(grid_path, "grid_path"),
         "data_path": _need(data_path, "data_path"),
     }
-    if target_lon is not None or target_lat is not None:
+    if destination is not None:
+        op = "regrid_elements"
+        args = {
+            **base,
+            "destination": destination,
+            "variable_name": variable_name,
+            "statistic": statistic,
+        }
+    elif target_lon is not None or target_lat is not None:
         op = "remap_to_rectilinear"
         args = {
             **base,
@@ -975,6 +1055,8 @@ def _plot(
                 "time_index": time_index,
                 "level_index": level_index,
                 "force_raster": force_raster,
+                "lon_bounds": lon_bounds,
+                "lat_bounds": lat_bounds,
             },
         )
     elif k == "temporal_mean":
@@ -1254,6 +1336,53 @@ def endpoint(
         )
     return _emit(
         out, tool="endpoint", inputs=_inputs(action=act, endpoint=endpoint, path=path)
+    )
+
+
+@guard
+def guide(
+    topic: str,
+    grid_path: str | None = None,
+    data_path: str | None = None,
+    variable_name: str | None = None,
+    u_variable: str | None = None,
+    v_variable: str | None = None,
+    data_path_a: str | None = None,
+    data_path_b: str | None = None,
+    center_lon: float | None = None,
+    center_lat: float | None = None,
+    outer_radius: float = 10.0,
+    endpoint: str | None = None,
+) -> dict[str, Any]:
+    """A step-by-step plan (text) for a common analysis, naming the exact tool calls.
+
+    topic: first_look | vorticity | cyclone_structure | eddy_activity |
+    model_evaluation | climatology_anomaly | hpc_diagnose. Returns
+    instructions to follow, not results.
+    """
+    from uxarray_mcp.server.guides import GUIDES
+
+    fn = GUIDES.get(topic.strip().lower())
+    if fn is None:
+        raise ValueError(f"Unknown topic {topic!r}. One of: {', '.join(GUIDES)}.")
+    kwargs = {
+        k: v
+        for k, v in locals().items()
+        if k not in ("topic", "fn", "GUIDES") and v is not None
+    }
+    import inspect as _inspect
+
+    missing = [
+        p.name
+        for p in _inspect.signature(fn).parameters.values()
+        if p.default is p.empty and p.kind is not p.VAR_KEYWORD and p.name not in kwargs
+    ]
+    if missing:
+        raise ValueError(f"guide({topic!r}) needs: {', '.join(missing)}.")
+    return _emit(
+        {"topic": topic, "plan": fn(**kwargs)},
+        tool="guide",
+        inputs=_inputs(topic=topic),
     )
 
 

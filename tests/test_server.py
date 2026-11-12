@@ -31,7 +31,7 @@ def _spec(route) -> dict:
 
 def test_exactly_the_documented_tools(routes):
     assert [r.tool_name for r in routes] == list(TOOL_NAMES)
-    assert len(routes) == 12
+    assert len(routes) == 13
 
 
 def test_spec_stays_within_budget(routes):
@@ -126,7 +126,13 @@ def test_cli_parser_has_only_the_kept_commands():
 
     parser = build_parser()
     sub = next(a for a in parser._actions if a.dest == "command")
-    assert set(sub.choices) == {"serve", "endpoints", "doctor", "install-claude"}
+    assert set(sub.choices) == {
+        "serve",
+        "openapi",
+        "endpoints",
+        "doctor",
+        "install-claude",
+    }
     assert parser.parse_args(["serve"]).transport == "stdio"
 
 

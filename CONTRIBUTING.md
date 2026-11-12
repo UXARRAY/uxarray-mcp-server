@@ -19,7 +19,7 @@ states the three rules below in context.
   breaks every HPC endpoint.
 - **New capability = new operation, not new tool.** Add the function to the
   right `core/` module, register it in `core/ops.py`, expose it as a new
-  `statistic=` / `shape=` / `kind=` value in `server/tools.py`. Twelve tools
+  `statistic=` / `shape=` / `kind=` value in `server/tools.py`. Thirteen tools
   is the surface; `tests/test_server.py` pins the list and the schema byte
   budget (~13 kB). If a change needs more bytes, say why in the test.
 - **Refuse, don't warn, when the number would be wrong.** Use

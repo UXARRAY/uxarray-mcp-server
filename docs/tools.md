@@ -1,6 +1,6 @@
 # Tools
 
-Twelve tools. Everything runs on your machine unless a path belongs to a
+Thirteen tools. Everything runs on your machine unless a path belongs to a
 configured HPC endpoint or you pass `use_remote=True` (see [hpc.md](hpc.md)).
 Required parameters are marked `*`.
 
@@ -55,9 +55,12 @@ Topology (`n_face`, `n_node`, `n_edge`, `format`), `mesh_coverage`
 `plot_hint` saying whether a plot will be drawn polygon by polygon or
 rasterized, and — with `data_path` — the variables (dims, units, stats) and
 a NaN/Inf/fill `validation` block. This is the one call to make first.
+`first_look=True` also computes face areas (Earth radius), the zonal mean of
+the first face-centered variable (10° bands) and writes mesh and field plots
+(`plots.<kind>.image_path`) — a complete first pass in one call.
 
-`grid_path`*, `data_path`, `variable_name`, `validate` (true), `use_remote`,
-`endpoint`, `session_id`, `dataset_handle`
+`grid_path`*, `data_path`, `variable_name`, `validate` (true), `first_look`
+(false), `use_remote`, `endpoint`, `session_id`, `dataset_handle`
 
 ### `compute`
 
@@ -107,6 +110,10 @@ remap runs; only `conservative` preserves the integral and every other
 method carries `REMAP_METHOD_NOT_CONSERVATIVE`). `whole_dataset=True`
 regrids every variable. `source_coverage` reports how much of the target the
 source reaches; zero is refused. Returns `result_handle`.
+`destination="face"|"node"|"edge"` with `statistic` (mean|max|min|sum)
+instead carries a field between elements of the same mesh — the way to make
+node-centred output usable by `vector_calc` (UXarray does not yet support
+face→node).
 
 ### `subset`
 
@@ -121,12 +128,15 @@ with the mesh's extent so the −180/0..360 mix-up is visible. Returns
 ### `plot`
 
 `kind`: `mesh` (wireframe) | `field` (`variable_name` choropleth) |
-`profile` (zonal-mean line). Returns an image block (inline under 256 kB,
+`profile` (zonal-mean line) | `temporal_mean` (mean of `variable_name` over
+every time step in `data_paths`, many files; `scale_factor`, `units_label`;
+reports `time_min`/`time_max`, `value_stats`, `temporal_coverage`). Returns an image block (inline under 256 kB,
 otherwise a `resource_link` to the stored PNG) and a JSON text block with
 `render_mode`, `n_faces_total`, `n_faces_rendered`, `image_path` and the
 usual envelope. Meshes above 200 000 faces are rasterized to the requested
 `width`×`height` instead of drawn polygon by polygon; `force_raster=True`
-forces it. `lon_bounds`/`lat_bounds` crop; `coastlines=True` draws Natural
+forces it. `lon_bounds`/`lat_bounds` crop mesh, field and temporal_mean plots
+(`n_faces_in_region` says what survived); `coastlines=True` draws Natural
 Earth features behind a mesh (local only); `result_handle` plots a stored
 subset. `title`, `cmap`, `vmin`, `vmax`, `time_index`, `level_index`,
 `lat_spec`, `conservative` as expected.
@@ -156,3 +166,10 @@ can take a minute to answer cold; `probe_timeout_seconds` (90) bounds it.
 
 `operation_id`*, `wait_seconds` (0). Collects a remote result whose call
 returned `status: "running"`, or reads the stored operation record.
+
+### `guide`
+
+`topic`*: `first_look` | `vorticity` | `cyclone_structure` | `eddy_activity`
+| `model_evaluation` | `climatology_anomaly` | `hpc_diagnose`, plus the
+paths/variables that topic needs. Returns a numbered plan naming the exact
+tool calls to make and how to read their results — instructions, not data.

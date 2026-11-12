@@ -3,6 +3,7 @@
 Subcommands
 -----------
 - ``serve`` — run the MCP server (stdio by default)
+- ``openapi`` — run the same tools as a REST/OpenAPI server
 - ``endpoints`` — discover, list, add, remove Globus Compute endpoints
 - ``doctor`` — validate the install and, when configured, an endpoint
 - ``install-claude`` — print or write the Claude Desktop ``mcpServers`` block
@@ -72,6 +73,14 @@ def cmd_serve(args: argparse.Namespace) -> int:
         host=args.host,
         port=args.port,
     )
+    return 0
+
+
+def cmd_openapi(args: argparse.Namespace) -> int:
+    """Run the OpenAPI/REST server (same tools, HTTP instead of MCP)."""
+    from uxarray_mcp.server.app import UXarrayApp
+
+    UXarrayApp().serve_openapi(host=args.host, port=args.port)
     return 0
 
 
@@ -349,6 +358,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1", help="Bind host for SSE/HTTP.")
     serve.add_argument("--port", type=int, default=8001, help="Port for SSE/HTTP.")
     serve.set_defaults(func=cmd_serve)
+
+    openapi = sub.add_parser("openapi", help="Run the OpenAPI/REST server.")
+    openapi.add_argument("--host", default="127.0.0.1")
+    openapi.add_argument("--port", type=int, default=8000)
+    openapi.set_defaults(func=cmd_openapi)
 
     endpoints = sub.add_parser("endpoints", help="Manage Globus Compute endpoints.")
     ep_sub = endpoints.add_subparsers(dest="endpoints_command", required=True)

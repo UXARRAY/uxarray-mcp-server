@@ -4,7 +4,7 @@
 MCP client (Claude, Cline, …)
         │  tools/list · tools/call
         ▼
-server/   registry.py  – twelve tools, flat, tagged, schema trimmed
+server/   registry.py  – thirteen tools, flat, tagged, schema trimmed
           tools.py     – resolve handles → route local/remote → core.ops → contract
           contract.py  – refusals, warning codes, provenance, JSON safety
           state.py     – sessions, dataset handles, results, operations (JSON files)

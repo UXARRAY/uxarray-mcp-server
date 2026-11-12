@@ -5,7 +5,7 @@ inspect, compute on, subset, remap and plot unstructured climate-model meshes
 with [UXarray](https://uxarray.readthedocs.io) — on your laptop, or on an HPC
 system through Globus Compute when the data lives there.
 
-Twelve tools. Every result carries its provenance and says what it did
+Thirteen tools. Every result carries its provenance and says what it did
 **not** verify; a computation whose preconditions fail (an area with no
 sphere radius, a vorticity without velocity units, a subset that selects
 nothing) is refused with a repair instead of returned as a number.
@@ -39,17 +39,18 @@ square metres, and plot the mesh over the North Atlantic."*
 | Tool | Does |
 |---|---|
 | `list_datasets` | Files in a directory with format, role, `n_face`, size class — read from headers, no mesh opened |
-| `inspect_dataset` | Topology, sphere coverage, variables, validation, plot cost hint. Start here. |
+| `inspect_dataset` | Topology, sphere coverage, variables, validation, plot cost hint. Start here; `first_look=True` adds areas, a zonal mean and two plots. |
 | `compute` | `area`, `zonal_mean`, `zonal_anomaly`, `azimuthal_mean`, `temporal_mean`, `anomaly`, `ensemble_mean`, `ensemble_spread` |
 | `vector_calc` | `gradient`, `curl`, `divergence` with physical-units guard |
 | `compare` | Area-weighted bias / rmse / pattern correlation between two files |
-| `remap` | Mesh-to-mesh or to lon/lat; UXarray or YAC (conservative) backends |
+| `remap` | Mesh-to-mesh, to lon/lat, or node↔face↔edge; UXarray or YAC (conservative) backends |
 | `subset` | `bbox`, `polygon`, `cross_section`, `circle`, `nearest` → result handle |
 | `plot` | `mesh`, `field`, `profile` PNGs; meshes above 200k faces are rasterized |
 | `export` | Result or variable to NetCDF / CSV, with a fidelity report |
 | `session` | Register a dataset once, reuse a handle |
 | `endpoint` | Status, worker probe and validation of Globus Compute endpoints |
 | `get_operation` | Collect a remote result that outlived its call |
+| `guide` | Step-by-step plans: first_look, vorticity, cyclone_structure, eddy_activity, model_evaluation, climatology_anomaly, hpc_diagnose |
 
 Parameters, refusal rules and result shapes: [docs/tools.md](docs/tools.md).
 
@@ -73,7 +74,7 @@ user.
 
 ```
 src/uxarray_mcp/core/     science (uxarray, numpy, matplotlib); what a worker imports
-src/uxarray_mcp/server/   the twelve tools, result contract, state, MCP app
+src/uxarray_mcp/server/   the thirteen tools, result contract, state, MCP app
 src/uxarray_mcp/remote/   Globus Compute executor, the one shipped function, health
 ```
 

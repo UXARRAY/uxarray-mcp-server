@@ -69,9 +69,17 @@ def _plot_field(
     title: str | None = None,
     time_index: int = 0,
     level_index: int = 0,
+    lon_bounds: list[float] | None = None,
+    lat_bounds: list[float] | None = None,
     force_raster: bool = False,
 ) -> dict[str, Any]:
     _, uxda, name = load_face_variable(grid_path, data_path, variable_name)
+    n_total = int(uxda.uxgrid.n_face)
+    if lon_bounds is not None and lat_bounds is not None:
+        uxda = uxda.subset.bounding_box(
+            (float(lon_bounds[0]), float(lon_bounds[1])),
+            (float(lat_bounds[0]), float(lat_bounds[1])),
+        )
     png, info = render_variable(
         uxda,
         width=width,
@@ -84,7 +92,13 @@ def _plot_field(
         level_index=level_index,
         force_raster=force_raster,
     )
-    return {"png": png, "variable_name": name, **info}
+    return {
+        "png": png,
+        "variable_name": name,
+        **info,
+        "n_faces_in_region": int(uxda.uxgrid.n_face),
+        "n_faces_total": n_total,
+    }
 
 
 def _plot_profile(
