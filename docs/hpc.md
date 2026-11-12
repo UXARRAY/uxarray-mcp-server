@@ -19,6 +19,28 @@ a file at `/glade/...`, it hands Globus a small function plus the path; the
 endpoint runs it inside a job on your allocation and returns a few kilobytes
 of JSON (or a PNG). The data never moves; only the question and the answer do.
 
+```
+ YOUR LAPTOP                         GLOBUS (cloud)              THE CLUSTER (as you)
+ ┌──────────────┐  tool call   ┌──────────────┐           ┌─────────────────────────────────┐
+ │ AI client    │─────────────▶│ uxarray-mcp  │           │ login node                      │
+ │ (Claude, …)  │◀─────────────│ server       │           │  ┌───────────────────────────┐  │
+ └──────────────┘  JSON / PNG  │  core/ local │           │  │ globus-compute-endpoint   │  │
+                               │  or remote ──┼──▶ Globus ┼─▶│ (one process you started) │  │
+                               └──────────────┘   Compute  │  └─────────────┬─────────────┘  │
+                                 run_op(name,     relays   │                │ Slurm / PBS job │
+                                 kwargs) + path   function │  ┌─────────────▼─────────────┐  │
+                                                           │  │ worker: python 3.12 env   │  │
+                                                           │  │  from uxarray_mcp.core    │  │
+                                                           │  │  import ops; ops.call(..) │  │
+                                                           │  └─────────────┬─────────────┘  │
+                                                           │       reads    │  (never copied)│
+                                                           │  /glade/… /lcrc/… data files    │
+                                                           └─────────────────────────────────┘
+```
+
+The arrow back carries a few kilobytes of JSON (or one PNG), never the data.
+Your laptop never ssh-es in; Globus relays the function and the result.
+
 **What this looks like day to day.** You call the same thirteen tools. A path
 under a registered prefix (`/glade/`, `/lcrc/`) is routed to that endpoint
 automatically; results say `venue: hpc:<name>`. The first call after an idle
