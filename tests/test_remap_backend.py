@@ -14,7 +14,7 @@ import textwrap
 
 import pytest
 
-from uxarray_mcp.domain.remap_backend import (
+from uxarray_mcp.core.remap_backend import (
     UXARRAY_METHODS,
     YAC_METHODS,
     RemapPlan,
@@ -84,7 +84,7 @@ class TestResolveRemapPlan:
             resolve_remap_plan(backend="yac", yac_method="bilinear")
 
     def test_only_conservative_is_conservative(self):
-        from uxarray_mcp.domain.remap_coverage import method_is_conservative
+        from uxarray_mcp.core.remap_coverage import method_is_conservative
 
         for method in YAC_METHODS + UXARRAY_METHODS:
             plan = resolve_remap_plan(method=method)

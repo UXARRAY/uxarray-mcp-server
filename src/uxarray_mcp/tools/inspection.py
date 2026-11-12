@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 
-from uxarray_mcp.domain import (
+from uxarray_mcp.core import (
     compute_area_stats,
     compute_mesh_coverage,
     compute_variable_info,

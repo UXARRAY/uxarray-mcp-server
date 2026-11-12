@@ -5,20 +5,20 @@ from pathlib import Path
 from typing import Any, Optional
 
 from uxarray_mcp.content_blocks import image_block, resource_link_block, text_block
-from uxarray_mcp.domain.mesh import (
+from uxarray_mcp.core.mesh import (
     is_healpix_spec,
     is_remote_uri,
     load_dataset,
     load_grid,
 )
-from uxarray_mcp.domain.plotting import (
+from uxarray_mcp.core.plotting import (
     describe_reduction,
     render_mesh,
     render_mesh_geo,
     render_variable,
     render_zonal_mean,
 )
-from uxarray_mcp.domain.zonal import compute_zonal_mean_stats
+from uxarray_mcp.core.zonal import compute_zonal_mean_stats
 from uxarray_mcp.json_safe import json_text
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.typed_results import should_link_rather_than_inline, store_png

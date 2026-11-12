@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 import pytest
 
-from uxarray_mcp.domain.remap_coverage import (
+from uxarray_mcp.core.remap_coverage import (
     compute_scattered_coverage,
     compute_target_coverage,
     method_is_conservative,

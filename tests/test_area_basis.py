@@ -20,7 +20,7 @@ import warnings
 
 import pytest
 
-from uxarray_mcp.domain.area import (
+from uxarray_mcp.core.area import (
     UNIT_SPHERE_RADIUS,
     apply_sphere_radius,
     resolve_sphere_radius,

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from uxarray_mcp.domain.anomaly_coverage import compute_anomaly_coverage
-from uxarray_mcp.domain.dims import face_slice_selection
-from uxarray_mcp.domain.profile_coverage import compute_profile_coverage
+from uxarray_mcp.core.anomaly_coverage import compute_anomaly_coverage
+from uxarray_mcp.core.dims import face_slice_selection
+from uxarray_mcp.core.profile_coverage import compute_profile_coverage
 
 
 def compute_zonal_mean_stats(
@@ -206,7 +206,7 @@ def extract_profile(
     ``level_index``, anything else (an ensemble member) uses 0, because
     neither selector says anything about it.  The classification is shared
     with the plotting and vector-calculus paths via
-    :func:`uxarray_mcp.domain.dims.face_slice_selection`, so the three cannot
+    :func:`uxarray_mcp.core.dims.face_slice_selection`, so the three cannot
     drift on what counts as a time axis.  Every collapse is reported in
     ``reduced_dims`` -- returning a profile that is one slice of a
     multi-level field without saying so is how a caller ends up believing a

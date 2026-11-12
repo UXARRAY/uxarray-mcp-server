@@ -1,6 +1,6 @@
 """Guard the ``domain/`` boundary.
 
-Pure computation in ``uxarray_mcp.domain`` must stay importable without any
+Pure computation in ``uxarray_mcp.core`` must stay importable without any
 server dependency installed. Two things depend on that property:
 
 * Remote execution — ``AllCodeStrategies`` ships these functions to a Globus
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-import uxarray_mcp.domain as domain_pkg
+import uxarray_mcp.core as domain_pkg
 
 FORBIDDEN_ROOTS = {"toolregistry", "toolregistry_server", "mcp", "fastapi"}
 

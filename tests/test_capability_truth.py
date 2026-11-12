@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from uxarray_mcp.domain.remap_backend import UXARRAY_METHODS, YAC_METHODS
+from uxarray_mcp.core.remap_backend import UXARRAY_METHODS, YAC_METHODS
 from uxarray_mcp.tools.capabilities import get_capabilities
 
 

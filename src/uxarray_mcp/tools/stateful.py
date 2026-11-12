@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from uxarray_mcp.domain.mesh import is_healpix_spec, is_remote_uri
+from uxarray_mcp.core.mesh import is_healpix_spec, is_remote_uri
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.state import (
     OperationTracker,

@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from uxarray_mcp.domain.mesh import load_grid
-from uxarray_mcp.domain.subset_coverage import compute_subset_coverage, mesh_extent
+from uxarray_mcp.core.mesh import load_grid
+from uxarray_mcp.core.subset_coverage import compute_subset_coverage, mesh_extent
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.state import (
     OperationTracker,

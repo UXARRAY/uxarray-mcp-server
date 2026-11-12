@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from uxarray_mcp.domain.mesh_coverage import (
+from uxarray_mcp.core.mesh_coverage import (
     compute_mesh_coverage,
     mesh_coverage_warning_codes,
 )
@@ -190,7 +190,7 @@ class TestTheWorkerCopyIsSelfContained:
     def test_the_size_guard_is_the_same_number_in_all_three_copies(self):
         import inspect
 
-        from uxarray_mcp.domain import mesh_coverage as local
+        from uxarray_mcp.core import mesh_coverage as local
 
         limit = str(local.TOPOLOGY_MAX_FACES)
         for function in (remote_inspect_mesh, remote_calculate_area):

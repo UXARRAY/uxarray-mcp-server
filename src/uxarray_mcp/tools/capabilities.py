@@ -5,14 +5,14 @@ from typing import Any, Dict, List, Optional
 
 import uxarray as ux
 
-from uxarray_mcp.domain import (
+from uxarray_mcp.core import (
     is_healpix_spec,
     is_remote_uri,
     load_dataset,
     load_grid,
     parse_healpix_zoom,
 )
-from uxarray_mcp.domain.remap_backend import UXARRAY_METHODS, YAC_METHODS
+from uxarray_mcp.core.remap_backend import UXARRAY_METHODS, YAC_METHODS
 from uxarray_mcp.provenance import attach_provenance
 from uxarray_mcp.remote.config import load_config
 
@@ -679,7 +679,7 @@ def get_capabilities(
                 "server."
             ),
             "executable_surface": "mcp_server_tools",
-            "inventory": "uxarray_mcp.domain.uxarray_surface.SURFACE",
+            "inventory": "uxarray_mcp.core.uxarray_surface.SURFACE",
         },
         "scientific_contracts": {
             "vector_calculus": {

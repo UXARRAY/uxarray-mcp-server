@@ -31,7 +31,7 @@ from typing import Any
 
 import matplotlib
 
-from uxarray_mcp.domain.dims import face_slice_selection, reduce_to_face
+from uxarray_mcp.core.dims import face_slice_selection, reduce_to_face
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt

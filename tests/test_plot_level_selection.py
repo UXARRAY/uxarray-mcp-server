@@ -141,6 +141,6 @@ class TestVerticalDimensionSpellings:
         ],
     )
     def test_spelling_is_classified_as_level(self, name):
-        from uxarray_mcp.domain.dims import classify_dim
+        from uxarray_mcp.core.dims import classify_dim
 
         assert classify_dim(name) == "level"

@@ -24,8 +24,8 @@ import numpy as np
 import pytest
 import uxarray as ux
 
-from uxarray_mcp.domain import mesh_coverage as coverage_module
-from uxarray_mcp.domain.mesh_coverage import (
+from uxarray_mcp.core import mesh_coverage as coverage_module
+from uxarray_mcp.core.mesh_coverage import (
     compute_mesh_coverage,
     mesh_coverage_warning_codes,
 )

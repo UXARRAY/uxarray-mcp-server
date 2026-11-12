@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from uxarray_mcp.content_blocks import block_text
-from uxarray_mcp.domain.zonal import compute_zonal_anomaly_stats
+from uxarray_mcp.core.zonal import compute_zonal_anomaly_stats
 from uxarray_mcp.tools import calculate_zonal_mean
 from uxarray_mcp.tools.frontdoor import run_analysis
 

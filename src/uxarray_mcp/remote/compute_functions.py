@@ -1766,7 +1766,7 @@ def remote_temporal_mean_map(
             # SCRIP prefixes the plain names with src_, ESMF uses an _a suffix
             # (xc/yc centers, xv/yv corners, dims n_a/nv_a).
             #
-            # Inlined rather than imported from uxarray_mcp.domain.mesh because
+            # Inlined rather than imported from uxarray_mcp.core.mesh because
             # this function is shipped to a worker that has no uxarray_mcp.
             # Keep the two copies in step.
             import xarray as xr

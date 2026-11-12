@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from uxarray_mcp.domain.mesh import (
+from uxarray_mcp.core.mesh import (
     MAX_HEALPIX_ZOOM,
     is_healpix_spec,
     parse_healpix_zoom,

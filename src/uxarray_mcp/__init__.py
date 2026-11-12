@@ -1,6 +1,8 @@
-"""UXarray MCP Server - AI tools for unstructured mesh analysis."""
+"""UXarray MCP server.
 
-from uxarray_mcp.tools import inspect_mesh
+This module imports nothing. ``uxarray_mcp.core`` must be importable on a
+Globus Compute worker that has only uxarray installed, so the package root
+cannot pull in the server stack.
+"""
 
-__all__ = ["inspect_mesh"]
 __version__ = "2026.10.1"

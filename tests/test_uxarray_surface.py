@@ -20,7 +20,7 @@ from __future__ import annotations
 import uxarray as ux
 import xarray as xr
 
-from uxarray_mcp.domain.uxarray_surface import REACHABLE, SURFACE, gaps
+from uxarray_mcp.core.uxarray_surface import REACHABLE, SURFACE, gaps
 
 
 def _uxarray_only(cls, base) -> set[str]:

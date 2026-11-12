@@ -42,7 +42,7 @@ import math
 import os
 from typing import Any, Callable, Literal
 
-from uxarray_mcp.domain.mesh_coverage import mesh_is_closed
+from uxarray_mcp.core.mesh_coverage import mesh_is_closed
 
 #: Verdict policies, in order of decreasing generosity to the caller.
 VerdictPolicy = Literal["full", "reference_only", "off"]

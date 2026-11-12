@@ -25,7 +25,7 @@ import xarray as xr
 
 ux = pytest.importorskip("uxarray")
 
-from uxarray_mcp.domain.mesh import (  # noqa: E402
+from uxarray_mcp.core.mesh import (  # noqa: E402
     WEIGHTS_DIM_RENAME,
     WEIGHTS_REQUIRED,
     WEIGHTS_VAR_RENAME,

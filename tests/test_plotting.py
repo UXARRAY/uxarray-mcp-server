@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from uxarray_mcp.content_blocks import block_image_data, block_text
-from uxarray_mcp.domain.plotting import render_zonal_mean
+from uxarray_mcp.core.plotting import render_zonal_mean
 from uxarray_mcp.tools import plot_mesh, plot_variable, plot_zonal_mean
 
 # -----------------------------------------------------------------------------
@@ -52,7 +52,7 @@ class TestRenderZonalMean:
         """render_zonal_mean should raise if savefig produces empty output."""
         lats = [-90.0, 0.0, 90.0]
         vals = [270.0, 300.0, 270.0]
-        with patch("uxarray_mcp.domain.plotting.plt") as mock_plt:
+        with patch("uxarray_mcp.core.plotting.plt") as mock_plt:
             mock_fig = MagicMock()
             mock_ax = MagicMock()
             mock_plt.subplots.return_value = (mock_fig, mock_ax)
@@ -68,7 +68,7 @@ class TestRenderEmptyBytesGuard:
         """render_zonal_mean raises ValueError when savefig produces no bytes."""
         lats = [-90.0, 0.0, 90.0]
         vals = [270.0, 300.0, 270.0]
-        with patch("uxarray_mcp.domain.plotting.plt") as mock_plt:
+        with patch("uxarray_mcp.core.plotting.plt") as mock_plt:
             mock_fig = MagicMock()
             mock_ax = MagicMock()
             mock_plt.subplots.return_value = (mock_fig, mock_ax)

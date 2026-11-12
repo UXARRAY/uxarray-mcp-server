@@ -19,7 +19,7 @@ import uxarray as ux
 import xarray as xr
 
 from uxarray_mcp.content_blocks import image_block
-from uxarray_mcp.domain.vector_calc import (
+from uxarray_mcp.core.vector_calc import (
     compute_azimuthal_mean,
     compute_curl,
     compute_divergence,

@@ -13,29 +13,29 @@ import uxarray as ux
 import xarray as xr
 from matplotlib.path import Path as MplPath
 
-from uxarray_mcp.domain.dims import FACE_DIMS
-from uxarray_mcp.domain.export_fidelity import (
+from uxarray_mcp.core.dims import FACE_DIMS
+from uxarray_mcp.core.export_fidelity import (
     count_dropped_attributes,
     dangling_grid_mappings,
     export_fidelity,
     measure_written_csv,
 )
-from uxarray_mcp.domain.mesh import (
+from uxarray_mcp.core.mesh import (
     is_remote_uri,
     load_dataset,
     load_grid,
     open_remote_store,
 )
-from uxarray_mcp.domain.remap_coverage import (
+from uxarray_mcp.core.remap_coverage import (
     compute_scattered_coverage,
     compute_target_coverage,
 )
-from uxarray_mcp.domain.subset_coverage import (
+from uxarray_mcp.core.subset_coverage import (
     compute_subset_coverage,
     count_face_centers_in_bounds,
     mesh_extent,
 )
-from uxarray_mcp.domain.temporal_coverage import compute_temporal_coverage
+from uxarray_mcp.core.temporal_coverage import compute_temporal_coverage
 from uxarray_mcp.next_steps import call, needed
 from uxarray_mcp.preconditions import normalize_units
 from uxarray_mcp.provenance import attach_provenance
@@ -124,7 +124,7 @@ def _run_remap(uxda: Any, target_grid: Any, plan: Any, remap_to: str) -> Any:
     ``yac_method``. A missing YAC install surfaces as an ImportError-like
     failure from inside UXarray; it is re-raised with the repair spelled out.
     """
-    from uxarray_mcp.domain.remap_backend import yac_unavailable_message
+    from uxarray_mcp.core.remap_backend import yac_unavailable_message
 
     if plan.backend == "yac":
         try:
@@ -981,7 +981,7 @@ def remap_variable(
     back to local execution when the endpoint is unavailable and the paths are
     locally reachable.
     """
-    from uxarray_mcp.domain.remap_backend import resolve_remap_plan
+    from uxarray_mcp.core.remap_backend import resolve_remap_plan
 
     plan = resolve_remap_plan(method=method, backend=backend, yac_method=yac_method)
     tracker = OperationTracker("remap_variable", session_id=session_id)
@@ -1126,7 +1126,7 @@ def regrid_dataset(
     on the worker and per-variable summary statistics are returned. Falls back
     to local execution when the endpoint is unavailable and paths are local.
     """
-    from uxarray_mcp.domain.remap_backend import resolve_remap_plan
+    from uxarray_mcp.core.remap_backend import resolve_remap_plan
 
     plan = resolve_remap_plan(method=method, backend=backend, yac_method=yac_method)
     tracker = OperationTracker("regrid_dataset", session_id=session_id)
@@ -1305,7 +1305,7 @@ def remap_to_rectilinear(
     NotImplementedError
         If the installed UXarray lacks ``remap.to_rectilinear``.
     """
-    from uxarray_mcp.domain.remap_backend import (
+    from uxarray_mcp.core.remap_backend import (
         resolve_remap_plan,
         yac_unavailable_message,
     )

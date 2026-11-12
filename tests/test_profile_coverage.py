@@ -15,7 +15,7 @@ import pytest
 import uxarray as ux
 import xarray as xr
 
-from uxarray_mcp.domain.profile_coverage import (
+from uxarray_mcp.core.profile_coverage import (
     compute_profile_coverage,
     profile_coverage_warning_codes,
 )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from uxarray_mcp.domain.mesh import load_dataset
+from uxarray_mcp.core.mesh import load_dataset
 from uxarray_mcp.state import OperationTracker
 
 from .remote_tools import (
@@ -150,7 +150,7 @@ def calculate_gradient(
     {"components": [...], ...}
     """
 
-    from uxarray_mcp.domain.vector_calc import compute_gradient
+    from uxarray_mcp.core.vector_calc import compute_gradient
     from uxarray_mcp.provenance import attach_provenance
 
     inputs = {
@@ -277,7 +277,7 @@ def calculate_curl(
     {"stats": {...}, ...}
     """
 
-    from uxarray_mcp.domain.vector_calc import compute_curl
+    from uxarray_mcp.core.vector_calc import compute_curl
     from uxarray_mcp.provenance import attach_provenance
 
     inputs = {
@@ -401,7 +401,7 @@ def calculate_divergence(
     {"interpretation": "horizontal divergence du/dx + dv/dy", ...}
     """
 
-    from uxarray_mcp.domain.vector_calc import compute_divergence
+    from uxarray_mcp.core.vector_calc import compute_divergence
     from uxarray_mcp.provenance import attach_provenance
 
     inputs = {
@@ -529,7 +529,7 @@ def calculate_azimuthal_mean(
     {"radii_deg": [0.0, 0.5, 1.0, ...], "azimuthal_mean_values": [...], ...}
     """
 
-    from uxarray_mcp.domain.vector_calc import compute_azimuthal_mean
+    from uxarray_mcp.core.vector_calc import compute_azimuthal_mean
     from uxarray_mcp.provenance import attach_provenance
 
     inputs = {

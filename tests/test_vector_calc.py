@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 import uxarray as ux
 
-from uxarray_mcp.domain.vector_calc import (
+from uxarray_mcp.core.vector_calc import (
     compute_azimuthal_mean,
     compute_curl,
     compute_divergence,

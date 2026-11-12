@@ -1,4 +1,4 @@
-"""Real (non-mocked) end-to-end tests for uxarray_mcp.domain.mesh.load_dataset.
+"""Real (non-mocked) end-to-end tests for uxarray_mcp.core.mesh.load_dataset.
 
 Regression coverage for a bug where HEALPix and GIS (shapefile/GeoJSON)
 grids combined with a *separate* data file crashed with
@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from uxarray_mcp.domain.mesh import load_dataset
+from uxarray_mcp.core.mesh import load_dataset
 from uxarray_mcp.preconditions import OVERRIDE_TOKEN
 
 

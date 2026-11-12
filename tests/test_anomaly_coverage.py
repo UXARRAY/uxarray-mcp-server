@@ -23,7 +23,7 @@ import pytest
 import uxarray as ux
 import xarray as xr
 
-from uxarray_mcp.domain.anomaly_coverage import (
+from uxarray_mcp.core.anomaly_coverage import (
     anomaly_coverage_warning_codes,
     compute_anomaly_coverage,
 )

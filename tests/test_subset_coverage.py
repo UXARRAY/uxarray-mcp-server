@@ -23,7 +23,7 @@ import pytest
 import uxarray as ux
 import xarray as xr
 
-from uxarray_mcp.domain.subset_coverage import (
+from uxarray_mcp.core.subset_coverage import (
     compute_subset_coverage,
     count_face_centers_in_bounds,
     mesh_extent,

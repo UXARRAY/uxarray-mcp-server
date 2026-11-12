@@ -381,7 +381,7 @@ class TestInlinedHelpersMatchTheirDomainTwin:
         ],
     )
     def test_the_worker_constant_matches_the_domain_constant(self, constant, twin):
-        from uxarray_mcp.domain import dims
+        from uxarray_mcp.core import dims
 
         worker_values = [
             (name, value)
@@ -399,7 +399,7 @@ class TestInlinedHelpersMatchTheirDomainTwin:
 
     def test_a_level_dimension_is_reduced_the_same_way_by_both_venues(self):
         """The behavioural half: the constants agreeing is not the outcome."""
-        from uxarray_mcp.domain.dims import classify_dim
+        from uxarray_mcp.core.dims import classify_dim
 
         for dim in ("n_level", "nlev", "num_levels", "nVertLevels", "plev"):
             assert classify_dim(dim) == "level", dim

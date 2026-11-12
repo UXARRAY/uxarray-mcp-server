@@ -25,7 +25,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from uxarray_mcp.domain.export_fidelity import export_fidelity_warning_codes
+from uxarray_mcp.core.export_fidelity import export_fidelity_warning_codes
 from uxarray_mcp.state import create_session, register_dataset
 from uxarray_mcp.tools.frontdoor import run_analysis
 

@@ -282,7 +282,7 @@ class TestRemoteUrisPassTheToolGuardsIntact:
 
     @pytest.fixture
     def real_grid(self, structured_mesh_files):
-        from uxarray_mcp.domain.mesh import load_grid
+        from uxarray_mcp.core.mesh import load_grid
 
         grid_file, _ = structured_mesh_files
         return load_grid(grid_file)

@@ -10,12 +10,12 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any
 
-from uxarray_mcp.domain.anomaly_coverage import anomaly_coverage_warning_codes
-from uxarray_mcp.domain.export_fidelity import export_fidelity_warning_codes
-from uxarray_mcp.domain.mesh_coverage import mesh_coverage_warning_codes
-from uxarray_mcp.domain.profile_coverage import profile_coverage_warning_codes
-from uxarray_mcp.domain.subset_coverage import subset_coverage_warning_codes
-from uxarray_mcp.domain.temporal_coverage import temporal_coverage_warning_codes
+from uxarray_mcp.core.anomaly_coverage import anomaly_coverage_warning_codes
+from uxarray_mcp.core.export_fidelity import export_fidelity_warning_codes
+from uxarray_mcp.core.mesh_coverage import mesh_coverage_warning_codes
+from uxarray_mcp.core.profile_coverage import profile_coverage_warning_codes
+from uxarray_mcp.core.subset_coverage import subset_coverage_warning_codes
+from uxarray_mcp.core.temporal_coverage import temporal_coverage_warning_codes
 from uxarray_mcp.postconditions import (
     area_identity_abstention,
     evaluate_area_postconditions,
@@ -947,7 +947,7 @@ def run_analysis(
             endpoint=endpoint,
         )
     if op == "remap_to_rectilinear":
-        from uxarray_mcp.domain.remap_backend import YAC_METHODS
+        from uxarray_mcp.core.remap_backend import YAC_METHODS
 
         # method="conservative" means the same here as for the mesh remaps.
         if yac_method is None and method and method.strip().lower() in YAC_METHODS:

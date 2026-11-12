@@ -244,7 +244,7 @@ class TestTheRepairIsReachable:
         global_grid_file, _ = global_mesh
         import uxarray as ux
 
-        from uxarray_mcp.domain.vector_calc import compute_gradient
+        from uxarray_mcp.core.vector_calc import compute_gradient
 
         uxds = ux.open_dataset(global_grid_file, node_data_file)
         with pytest.raises(ValueError) as err:

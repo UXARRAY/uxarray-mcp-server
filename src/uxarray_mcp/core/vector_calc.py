@@ -5,9 +5,9 @@ from __future__ import annotations
 import warnings as _warnings_module
 from typing import Any, Callable, TypeVar
 
-from uxarray_mcp.domain.dims import reduce_to_face
-from uxarray_mcp.domain.profile_coverage import compute_profile_coverage
-from uxarray_mcp.domain.zonal import extract_profile
+from uxarray_mcp.core.dims import reduce_to_face
+from uxarray_mcp.core.profile_coverage import compute_profile_coverage
+from uxarray_mcp.core.zonal import extract_profile
 
 #: Appended to every "not face-centered" refusal.
 #:

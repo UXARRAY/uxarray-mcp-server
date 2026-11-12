@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from uxarray_mcp.domain.variable import compute_variable_info
+from uxarray_mcp.core.variable import compute_variable_info
 
 ux = pytest.importorskip("uxarray")
 

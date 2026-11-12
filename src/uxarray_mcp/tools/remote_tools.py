@@ -17,7 +17,7 @@ from uxarray_mcp.content_blocks import (
     resource_link_block,
     text_block,
 )
-from uxarray_mcp.domain.mesh import (
+from uxarray_mcp.core.mesh import (
     is_healpix_spec,
     is_remote_uri,
     parse_healpix_zoom,
@@ -466,7 +466,7 @@ def calculate_area(
         # argument. Areas scale as R**2, so the correction is exact without
         # the grid, and doing it here keeps the two paths reporting the same
         # quantity. A worker that did apply a radius already sent the basis.
-        from uxarray_mcp.domain.area import apply_sphere_radius
+        from uxarray_mcp.core.area import apply_sphere_radius
 
         result = apply_sphere_radius(result, float(sphere_radius), "argument")
     return result

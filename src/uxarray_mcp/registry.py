@@ -15,7 +15,7 @@ Two profiles are supported:
 Policy tags (``ToolTag`` + custom strings) are attached from day one
 so downstream policy code has concrete metadata to key off.
 
-Nothing in ``uxarray_mcp.tools``, ``uxarray_mcp.domain``, or
+Nothing in ``uxarray_mcp.tools``, ``uxarray_mcp.core``, or
 ``uxarray_mcp.remote`` is modified.
 """
 

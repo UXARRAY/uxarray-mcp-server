@@ -2,7 +2,7 @@
 
 ``zonal_anomaly`` subtracts, from each face, the zonal mean of the latitude
 band that face falls in.  That makes it a per-face field rather than a binned
-profile, so :mod:`~uxarray_mcp.domain.profile_coverage` does not apply: there
+profile, so :mod:`~uxarray_mcp.core.profile_coverage` does not apply: there
 are no bins in the answer to count.  The loss happens one level down, and it is
 invisible in the result's shape.
 

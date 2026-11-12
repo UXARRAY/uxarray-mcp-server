@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from uxarray_mcp.domain.temporal_coverage import (
+from uxarray_mcp.core.temporal_coverage import (
     compute_temporal_coverage,
     temporal_coverage_warning_codes,
 )

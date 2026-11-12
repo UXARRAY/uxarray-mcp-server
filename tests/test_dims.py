@@ -5,7 +5,7 @@ dimension, so a caller asking for time step 3 of a multi-level field silently
 gets level 3 as well, with nothing in the output saying so.
 """
 
-from uxarray_mcp.domain.dims import classify_dim, face_slice_selection
+from uxarray_mcp.core.dims import classify_dim, face_slice_selection
 
 
 class TestClassifyDim:

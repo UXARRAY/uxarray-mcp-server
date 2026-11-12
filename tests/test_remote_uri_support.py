@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from uxarray_mcp.domain.mesh import (
+from uxarray_mcp.core.mesh import (
     attach_grid,
     is_kerchunk_reference,
     is_opendap_uri,
