@@ -1,627 +1,158 @@
-# Tools Reference
-
-Everything on this page runs **locally on your machine by default** — no HPC
-account, Globus identity, or endpoint needed. `use_remote` and `endpoint`
-parameters exist on most tools, but you only need them once you've configured
-an HPC endpoint (see [Remote Execution](#remote-execution) at the bottom of
-this page, or skip straight to [remote-hpc.md](remote-hpc.md)). Ignore them
-until then.
-
-The MCP server exposes a small set of front-door tools. Low-level UXarray
-operations still exist as Python functions in `uxarray_mcp.tools`, but MCP
-clients should use the intent-shaped tools below.
-
-Most tools return structured dictionaries with a `_provenance` block. Plotting
-returns MCP content blocks: an inline PNG plus JSON metadata.
-
-The visible tool set depends on the profile (`core` by default, or
-`deferred-full`), and the server can expose these tools over MCP stdio/SSE/HTTP
-or OpenAPI/REST. See {doc}`serving` for profiles, transports, and tool
-discovery.
-
-## Front-Door Tools
-
-### `get_capabilities`
-
-Discover mesh topology, variables, applicable `run_analysis` operations, native
-UXarray methods, and recommended next steps.
-
-Parameters:
-
-| Name | Type | Description |
-|------|------|-------------|
-| `grid_path` | `str` | Path to grid/mesh file, or `healpix:<zoom>` |
-| `data_path` | `str` optional | Path to a data file |
-
-### `analyze_dataset`
-
-Run the deterministic first-look pipeline in one call: inspect mesh, validate
-data when provided, inspect variables, calculate face areas, calculate a zonal
-mean when possible, and produce mesh/variable plots when requested.
-
-Parameters include `grid_path`, `data_path`, `variable_name`, `session_id`,
-`dataset_handle`, and `include_plots`.
-
-### `run_analysis`
-
-Run one named operation without exposing dozens of separate MCP tools.
-
-Supported operations:
-
-| Operation | Purpose |
-|---|---|
-| `inspect_mesh` | Mesh topology and format |
-| `inspect_variable` | Variable metadata and statistics |
-| `validate_dataset` | NaN/Inf/fill-value checks |
-| `calculate_area` | Face area statistics |
-| `calculate_zonal_mean` | Latitude-band mean for a face-centered variable |
-| `zonal_anomaly` | Per-face deviation from its latitude-band zonal mean |
-| `gradient`, `curl`, `divergence`, `azimuthal_mean` | Vector/radial diagnostics |
-| `subset_bbox`, `subset_polygon`, `cross_section` | Spatial selections |
-| `compare_fields`, `bias`, `rmse`, `pattern_correlation` | Same-grid comparisons |
-| `remap_variable`, `regrid_dataset` | Remap onto another unstructured grid (UXarray or YAC engine) |
-| `remap_to_rectilinear` | Remap a variable onto a regular lon/lat grid |
-| `temporal_mean`, `anomaly` | Time-dimension summaries |
-| `ensemble_mean`, `ensemble_spread` | Multi-file ensemble summaries |
-| `export` | Write a persisted result or dataset to NetCDF/CSV |
-
-Common parameters include `grid_path`, `data_path`, `variable_name`,
-`target_grid_path`, `data_path_a`, `data_path_b`, `data_paths`, `lon_bounds`,
-`lat_bounds`, `method`, `backend`, `yac_method`, `remap_to`, `target_lon`,
-`target_lat`, `sphere_radius`, `lat_spec`, `lat_step`, `time_index`,
-`time_min`, `time_max`, `level_index`, `session_id`, and `dataset_handle`. Each
-operation validates the parameters it requires and returns a clear error if one
-is missing.
-
-**Remap methods and backends.** The three remap operations take `method`.
-`nearest_neighbor`, `inverse_distance_weighted` and `bilinear` run on
-UXarray's own engine. `conservative`, `nnn`, `dnn` and `average` run on
-[YAC](https://dkrz-sw.gitlab-pages.dkrz.de/yac/) through UXarray's
-`backend="yac"`; naming one of them as `method` selects YAC on its own, and
-`backend="yac"` with `yac_method` is the explicit spelling. Results report
-`method` as `yac:conservative` and so on, plus `backend` and `yac_method`.
-YAC must be importable where the remap executes: locally (build with
-`scripts/build_yac_local.sh`, then put its `site-packages` on `PYTHONPATH`)
-or on the worker (`scripts/hpc_build_yac.py`; `diagnose_endpoint(action=
-"check_yac")` confirms it). A missing install fails with a message naming
-both repairs rather than a bare `ModuleNotFoundError`. Only `conservative`
-preserves the field integral; every other method carries
-`REMAP_METHOD_NOT_CONSERVATIVE`, worded with the method actually used. One
-known UXarray limitation: `remap_to_rectilinear` with the YAC backend fails
-when `target_lon` spans the full 360°; use a regional target or
-`backend="uxarray"` for a global one.
-
-**Latitude bands.** `lat_spec` follows UXarray: a number is one latitude, a
-list is explicit latitudes (band edges when `conservative=True`). JSON has no
-tuple, so to ask for a regular range pass `lat_step` together with
-`lat_spec=[start, stop]`, or `lat_step` alone for -90..90.
-
-`gradient`, `curl`, and `divergence` echo `scale_by_radius` and a
-`radius_basis` block (`sphere_radius` and `radius_source`: `grid`, `argument`
-or `none`) in their result. When `scale_by_radius` is `True` (the default,
-matching UXarray) results are divided by `uxgrid.sphere_radius` for physical
-units. Most grid files declare no radius; pass `sphere_radius=6371000`
-(metres) to attach Earth's for the call. Without one, or with
-`scale_by_radius=False`, the `radius_scaling` precondition fails and the call
-is refused until `acknowledge` is passed -- the unit-sphere number is never
-returned as if it were physical.
-
-`gradient`, `curl` and `divergence` declare **refusable preconditions** (#86)
-rather than warning and computing anyway. Each operation states, as data, what
-must hold for its answer to be physical. For the two-component operators the
-components must be distinct fields, both must carry velocity-like `units`, and
-their direction identity must be resolvable from `standard_name` or
-`long_name`. All three additionally require radius scaling, without which the
-answer is a per-radian quantity rather than a vorticity in s^-1 or a gradient
-per metre. Every result carries a `preconditions` block with `status`
-(`satisfied`, `overridden`, `failed`, or `not_evaluated`), the individual
-`checks`, and `failed_checks`.
-
-The radius-scaling check reads whether scaling was **applied**, not whether it
-was requested. UXarray honours `scale_by_radius=True` as far as it can on a
-grid that declares no `sphere_radius`: it warns that the result is left on the
-unit sphere and returns it. Asking only about the request therefore let the
-gate pass on any such grid, so the repair names the missing attribute rather
-than telling a caller to set a flag they already set.
-
-When a check fails, the call **does not run** and no number is returned.
-The result instead carries `outcome: "input_required"`, shaped after the
-MCP `2026-07-28` multi-round-trip request (MRTR) flow: a `refusal` block with
-the failed checks and the specific repair for each, an `input_requests` entry
-holding an `elicitation/create` form, and an opaque `request_state` derived
-from the operation and the failed check ids. `outcome` is the server's own
-field and is deliberately not called `result_type`: the SDK stamps a
-protocol-level `resultType` on every result object, always `"complete"`
-because the call did return, so a refusal would otherwise carry two
-same-named fields with contradicting values. A caller who wants the number
-anyway passes `acknowledge` with the token named in the refusal; the result
-then comes back with `preconditions.status: "overridden"`,
-`scientific_status.status: "unverified"`, `physically_interpretable: false`,
-and a `PRECONDITION_FAILED_<ID>` code per failed check. A wrong or guessed
-token is a failed override, not a silent pass.
-
-`compare_fields`, `bias`, `rmse` and `pattern_correlation` declare
-`units_comparable` on the same machinery. All four are built from `a - b`,
-which measures something only when both fields are on the same scale, so a
-declared disagreement (K against degC) refuses rather than reporting the
-273.15 offset as model error. Unit strings are folded through a fixed synonym
-table — `K`/`kelvin`, `m/s`/`m s-1`, `degC`/`degrees_Celsius` — and nothing
-more: the server does not parse unit algebra, so `mm day-1` against
-`kg m-2 s-1` refuses even though the two are convertible. The repair says so.
-A field that declares no `units` at all is a gap in the metadata rather than a
-contradiction, so it warns with `UNITS_UNDECLARED` and the call proceeds.
-
-Those four operations also report an `area_weighting` block. Their metrics are
-weighted by `face_areas`, because a plain mean over faces answers "the average
-over cells" and not "the average over the sphere" — on a variable-resolution
-mesh the two differ in magnitude and can differ in sign. The block names the
-face dimension and the max/min area ratio, so a caller can see whether
-weighting mattered; HEALPix is equal-area and reports a ratio of 1.0. When
-weighting is impossible — no `grid_path`, a field that is not face-centered,
-or `face_areas` unavailable — the result says so with
-`AREA_WEIGHTING_UNAVAILABLE` instead of presenting a cell-count mean as a
-spatial one.
-
-`validate_dataset` is deliberately exempt from refusal: reporting that a
-dataset is invalid *is* its answer, so refusing to report it would be
-circular. It reports `scientific_status.status: "invalid"` instead.
-
-`get_capabilities` distinguishes **structural applicability** from **semantic
-suitability** for vector operations. Two face-centered arrays make curl and
-divergence computable, but physical interpretation remains `unverified` unless
-metadata supplies vector-like units or standard names.
-
-`zonal_anomaly` and `remap_to_rectilinear` are backed by
-`UxDataArray.zonal_anomaly` and `UxDataArray.remap.to_rectilinear`, available in
-the pinned UXarray (`>=2026.6.0`).
-
-All three remap operations — `remap_to_rectilinear`, `remap_variable`, and
-`regrid_dataset` — return a **`source_coverage`** block reporting
-`points_in_source` out of `n_target_points`, the resulting
-`coverage_fraction`, the source mesh bounding box, whether the test was
-`point_in_cell` or a `bounding_box` screen, and whether the remap method
-conserves the field integral. Target points outside the source mesh still
-receive extrapolated values, so zero or partial coverage raises the stable
-codes `REMAP_COVERAGE_ZERO` or `REMAP_COVERAGE_PARTIAL`, and a
-non-conservative method raises `REMAP_METHOD_NOT_CONSERVATIVE`; all three
-appear in `scientific_status.warning_codes` and `_provenance.warnings`.
-
-For `remap_variable` and `regrid_dataset` the target points are the target
-mesh's own coordinates — face centres or nodes, whichever `remap_to` writes
-to — and they are paired rather than multiplied out, since an unstructured
-mesh supplies one longitude and one latitude per point. A target grid that
-does not expose those coordinates leaves coverage unknown, in which case
-`source_coverage` is absent rather than reported as full.
-
-Zero coverage is the one coverage case that **refuses** rather than warns.
-When no target point falls inside the source mesh, every returned value is an
-extrapolation, so the operation returns the same
-`outcome: "input_required"` payload described above with the source bounding
-box in the detail text. The repair names the argument that caller controls:
-`target_lon`/`target_lat` for `remap_to_rectilinear`, and `target_grid_path`
-for the two grid-to-grid operations. Partial coverage and a non-conservative
-method stay warnings, because a partially covered result still contains real
-values.
-
-`calculate_zonal_mean` and `azimuthal_mean` reduce a field onto bins the caller
-chooses — latitude bands, or rings of great-circle distance from a centre — and
-nothing forces those bins to intersect the mesh. Both return a
-**`profile_coverage`** block giving `n_bins`, `n_bins_filled`,
-`source_has_missing` and `cause`. A profile with no filled bin at all
-**refuses**: every entry is NaN, so nothing in the returned array was measured,
-which is the same state `remap_coverage_nonzero` refuses over. The repair names
-the argument that caller controls — `lat_spec` for the zonal mean,
-`center_lon`/`center_lat` and `outer_radius` for the radial one. A partly
-filled profile warns with `PROFILE_COVERAGE_PARTIAL` and completes, because a
-regional mesh averaged over global bands legitimately fills only the bands it
-spans.
-
-The count comes from the returned profile, not from re-deriving which face
-lands in which bin: that would duplicate UXarray's own binning and could
-disagree with it. An empty bin is NaN, but so is a bin whose faces all held
-missing data, so the source field is checked as well. `cause` is
-`bins_miss_mesh` only when the field is known to be complete, and `ambiguous`
-when it carries missing values or was not available to check — in which case
-the repair says so rather than asserting one explanation.
-
-`zonal_anomaly` subtracts a band mean from every face, so its answer is a
-per-face field rather than a profile and there are no bins in it to count.
-The loss happens one level down and is invisible in the result's shape: a band
-mean is undefined as soon as one face in the band is missing, and every face in
-that band then comes back NaN, *including faces that carried a value*. The
-result therefore reports an **`anomaly_coverage`** block giving `n_face`,
-`n_face_with_data`, `n_face_with_anomaly`, `n_face_data_lost` and `cause`.
-
-The two kinds of empty face are counted separately on purpose. A face that
-never had data has no anomaly for an ordinary reason — a land-masked field
-would otherwise warn on every call — so `ANOMALY_COVERAGE_PARTIAL` fires on
-`n_face_data_lost`, not on the plain count of NaN. That a face lost its anomaly
-is a deduction rather than a guess: the anomaly is `value - band_mean`, so a
-finite value with a non-finite anomaly means the band mean was non-finite.
-`cause` is `band_mean_undefined` in that case, `missing_input` when every
-absent anomaly is explained by absent data, and `ambiguous` when the source
-field was unavailable or does not line up with the result.
-
-An anomaly field with no anomaly in it **refuses**, for the same reason a
-wholly empty profile does. The repair depends on which way it emptied: when
-nothing was measurable to begin with it names the variable and the time/level
-slice, and when faces did carry data it names the missing values rather than
-`lat_spec`, because no choice of bands can avoid a gap that is in every band.
-Measured on a 90-face regional mesh, one missing value per latitude band was
-enough to empty all 90 faces while 85 of them carried data.
-
-`subset_bbox`, `subset_polygon` and `cross_section` narrow a mesh to the part
-the caller named, and all three report a **`subset_coverage`** block giving
-`n_face_source`, `n_face_retained` and the source mesh's `source_extent`.
-Keeping fewer faces is the point of the operation, so there is no partial
-warning — it would fire on every successful call. Keeping none **refuses**: an
-empty box returns a `subset_grid` of `n_face: 0`, a `variable_summary` of
-`shape: [0]`, a persisted handle and a next-steps list suggesting the caller
-plot it, which is the full shape of an answer describing nothing.
-
-The three do not select the same way, so the block also reports which rule ran.
-`subset_polygon` keeps a face when its centre is inside the polygon
-(`selection_rule: face_center_inside`). `cross_section` keeps a face the line
-crosses (`face_intersects_line`). `subset_bbox` keeps a face only when the
-face's whole spherical footprint fits inside the box
-(`face_bounds_within`), which is stricter than the name suggests: on a mesh of
-5-degree cells centred on multiples of 5, a box of lon 5–15 / lat 5–15 holds
-six face centres and returns one face. The block reports
-`n_face_centers_in_bounds` next to `n_face_retained` so that gap is visible.
-The footprint is spherical rather than the rectangle through the nodes — the
-surviving face above spans latitude 7.5000–12.5115, the extra 0.0115 being the
-great-circle edge bulging poleward of the nodes it joins. On a mesh whose nodes
-sit exactly on the requested bound, that bulge alone drops the face. Use
-`subset_polygon` with a rectangle when centre-based selection is what you want.
-
-The repair names the argument the caller controls — `lon_bounds`/`lat_bounds`,
-`polygon_lon_lat`, or `latitude`/`longitude` — and quotes the longitude and
-latitude the mesh actually spans, since "nothing selected" does not say where
-to put the box and the `-180..180` against `0..360` mix-up is the most likely
-way to arrive here. A box that lands on the mesh and still keeps nothing gets a
-different repair: a box narrower than one face selects nothing while sitting on
-top of the mesh, so it is told to widen, not to move. `cross_section` is the one
-case UXarray already caught: it raises rather than returning empty, and that
-error is turned into the same refusal so the extent reaches the caller. Any
-other error still propagates.
-
-`temporal_mean` takes **`time_min`/`time_max`**, a closed ISO-8601 label range
-(`"1980-01"`, `"1989-12"`) applied before the reduction. Without them the mean
-covers every step present, which is silently wrong whenever the input spans
-more than the period asked for — most sharply for an ARCO (kerchunk/zarr)
-reference, which aggregates a whole output stream, so a request for one decade
-quietly averages several. A range that selects nothing **refuses**, and the
-error names the coverage the file actually has, since "no data" alone leaves
-the caller unable to tell whether the range or the file is wrong. Both bounds
-land in `_provenance.inputs`, so the period behind a number survives into a
-methods section. Note that models often timestamp an averaging interval at its
-**end** (CAM writes monthly means that way), so a decade of monthly output can
-carry a step labelled the following January — check the file's own bounds
-before assuming `time_max="1989-12"` keeps December 1989.
-
-`temporal_mean` and `anomaly` both reduce along `time`, and both return a
-full-length array whatever went in. Both report a **`temporal_coverage`** block
-giving `n_time`, the `samples_min`/`samples_max` range of usable steps per
-element, `n_elements_with_value`, `n_series_with_data`, and — when `groupby` is
-set — `n_bins` with `bin_occupancy_min`/`bin_occupancy_max`.
-
-A mean over a variable that is missing at every step **refuses**: it returns a
-field of NaN shaped exactly like a climatology. A mean over a single step
-**warns** with `TEMPORAL_SINGLE_SAMPLE` rather than refusing, because the value
-it returns is real — only the name "mean" is wrong. `TEMPORAL_SAMPLES_RAGGED`
-says elements averaged different numbers of steps, since `mean(dim="time")`
-skips missing values and a face with one usable step comes back looking like a
-face with twelve. Elements that never held data are excluded from that range,
-so an ordinary land-masked field does not warn. `TEMPORAL_BINS_SINGLE_SAMPLE`
-says at least one group holds one time step: `groupby="month"` over three
-months is a monthly climatology in name and three single observations in fact.
-
-`anomaly` additionally **refuses** when the baseline covers one time step. Its
-baseline is the mean over time of the same variable, so with one step the
-baseline equals the value and every anomaly is exactly zero — the same array
-for any data whatsoever, which is the condition this server refuses over rather
-than returning the number.
-
-`ensemble_mean` and `ensemble_spread` combine several files cell-by-cell, and
-nothing in the shapes says the files measure the same thing on the same mesh.
-Both report a **`member_evidence`** block naming the per-member `units`, the
-verdicts `units_consistent` and `grids_consistent`, and whether the mesh was
-compared on coordinates or on dimensions alone. Averaging a member in K with
-one in degC is the same arithmetic as differencing two fields on different
-scales, so a declared disagreement fails `ensemble_units_consistent` and
-refuses; undeclared units warn with `ENSEMBLE_UNITS_UNDECLARED` for the same
-reason `UNITS_UNDECLARED` warns above.
-
-The mesh check is weaker on purpose. Members are opened as plain datasets — the
-operation is handed no `grid_path` — so identity rests on whatever coordinates
-the member files carry, hashed together with the dimensions. When they carry
-none there is nothing left to compare beyond dimension lengths, which two
-unrelated meshes with the same face count would satisfy, so the result warns
-`ENSEMBLE_GRID_UNVERIFIED` rather than reporting the meshes as agreeing.
-Coordinates that are present and disagree fail `ensemble_grids_consistent` and
-refuse, because combining values cell-by-cell across different meshes averages
-unrelated locations.
-
-## Postconditions and `verdict_policy`
-
-Analysis results carry a **`postconditions`** block alongside
-`preconditions`. The two are deliberately distinct: a failed precondition
-means "we checked and it fails", while `not_evaluated` means "we did not
-check". Reporting no verification at all was previously indistinguishable
-from reporting a passed one, which let a caller imply more confidence than
-the computation supported.
-
-Today `calculate_area` is the operation with a closed-form reference: the
-face areas of a closed mesh must sum to `4*pi*R^2`, or `4*pi` on a unit
-sphere. The check abstains — status `not_evaluated` — whenever it cannot be
-trusted: an open or regional mesh, a missing total, or an unreadable grid.
-When the server can name the reason, the block carries it as
-**`not_evaluated_because`**; a bare `not_evaluated` was indistinguishable
-from a deployment running `verdict_policy: off`.
-
-## Mesh coverage
-
-`calculate_area` and `inspect_mesh` both report a **`mesh_coverage`** block:
-`sphere_fraction`, `closed`, `euler_characteristic`, `lon_extent` and
-`lat_extent`. A 5-degree mesh spanning 0-40E/0-40N returns `total_area:
-22936016715559.137 m^2`, which is 4.4967% of `4*pi*R^2`; the same call on a
-global mesh returns 1.0000 of the sphere, and before this block nothing in
-either payload said which was which. A patch is warned about
-(`MESH_NOT_GLOBAL`) rather than refused: its total is a real physical
-quantity, and only the missing disclosure was wrong.
-
-The geometric and topological halves answer different questions and can
-honestly disagree. A 1-degree structured global grid reads `sphere_fraction:
-0.999963` with `closed: false` and `euler_characteristic: 0` — it stops half
-a cell short of each pole, so it covers essentially the whole sphere and is
-genuinely open. It is not warned about, because 3.7e-5 of the sphere is not
-a regional patch, but the area identity still abstains and says why.
-
-Counting edge incidences is a Python loop over every face — 1.43 s on a
-196,608-face HEALPix mesh, 5.99 s at the next zoom level — so above 250,000
-faces the topological half does not run. `closed` and
-`euler_characteristic` come back `null` with `topology_skipped` giving the
-reason, rather than a verdict nobody computed. `sphere_fraction` is
-vectorized and is always reported.
-
-`calculate_area` also declares which sphere it measured on. UXarray computes
-face areas on the unit sphere and never applies `sphere_radius`, so a global
-mesh sums to `12.566371` — `4*pi` steradians — even when its file declares
-`sphere_radius: 6371000.0`. The server now scales by `R^2` and reports an
-**`area_basis`** block giving `sphere_radius`, `radius_source` and `scaled`.
-The radius comes from the `sphere_radius` argument, or from the grid when it
-declares one; with neither, the call **refuses** rather than returning a
-steradian labelled as an area, the same way the differential operators
-already refuse when radius scaling was not applied. Passing
-`sphere_radius=6371000.0` to a 648-face global mesh returns
-`510064487992182.1` against a `4*pi*R^2` reference of `510064471909788.25`.
-
-A caller-supplied radius is documented as metres, so the result declares
-`area_units: "m^2"`. A grid-declared radius is not: a file saying
-`sphere_radius: 6371000.0` never said what that number is measured in, so the
-result keeps `area_units: null`, warns `AREA_UNITS_UNDECLARED`, and is not
-marked physically interpretable. Pass the radius explicitly to settle it.
-
-`run_analysis` accepts `verdict_policy` to control how much of the check
-comes back:
-
-| Value | Behavior |
-|---|---|
-| `full` (default) | reference, tolerance, residual, and a `passed` verdict |
-| `reference_only` | reference and tolerance only; `caller_must_supply` lists `residual` and `passed` |
-| `off` | nothing is evaluated |
-
-The default also reads from the `UXARRAY_MCP_VERDICT_POLICY` environment
-variable, and an unrecognized value is rejected before the computation runs
-rather than after it has already cost something.
-
-## Export fidelity
-
-`export` used to be the one operation that reported `status: "complete"`
-with nothing behind it — no `stat`, no read-back, no comparison against the
-source. It now returns an **`export_fidelity`** block measured on the file
-that was written: `bytes_written`, `rows_written` and `rows_expected`,
-`n_variables_written`, `variables_dropped`, `attributes_dropped`,
-`missing_values` with `missing_written_as`, and `dangling_grid_mapping`.
-`summary.rows_written` is counted out of the file too; it used to be
-`len(frame)`, the number of rows the writer intended.
-
-Measured on a 9-face dataset carrying `sst` (units K, a long_name, a CF
-`grid_mapping: crs`), `salinity` (units psu), a scalar `crs` container and
-global `title`/`Conventions`:
-
-| Export | Before | Now |
-|---|---|---|
-| CSV, whole dataset | 129 bytes, `complete`, no codes | `attributes_dropped: 8`, `missing_values: 1` written as an empty field, `warning` |
-| NetCDF, `sst` only | 8264 bytes, `complete`, no codes | `variables_dropped: ["crs", "salinity"]`, `dangling_grid_mapping: ["crs"]`, `warning` |
-
-The NetCDF case is the one worth reading twice: `sst` keeps its
-`grid_mapping: "crs"` attribute into a file that no longer contains `crs`,
-so a CF reader is told where to find the coordinate reference system and
-finds nothing.
-
-A lossy export is still written and still returns its path — the caller
-asked for CSV and CSV is what a CSV can hold. What changed is that
-`physically_interpretable` goes `false` when a unit or a CRS did not
-survive: numbers in a file that no longer says what they measure are not
-interpretable, and the export is the last point at which anyone can see it.
-The codes are `EXPORT_EMPTY_FILE`, `EXPORT_ROW_COUNT_MISMATCH`,
-`EXPORT_VARIABLES_DROPPED`, `EXPORT_ATTRIBUTES_DROPPED`,
-`EXPORT_MISSING_VALUES_UNMARKED` and `EXPORT_DANGLING_GRID_MAPPING`. A
-whole-dataset NetCDF copy raises none of them.
-
-## Response contracts (`contract/`)
-
-Two tools under the `contract/` namespace let a caller ask what shape a
-result is expected to take, instead of inferring it from an example:
-
-- `describe_response_contract(name)` returns the required fields, their
-  types, and any format constraint for a named contract
-  (`calculate_area`, `inspect_mesh`, `calculate_zonal_mean`,
-  `validate_dataset`, `verification`).
-- `validate_response(name, response)` checks a candidate payload against
-  that contract and returns the specific violations.
-
-The contract is deliberately **not** attached to every tool result. Repeating
-a schema on every response is how payload budgets get spent on text no caller
-reads.
-
-Examples:
-
-```python
-run_analysis(operation="inspect_mesh", grid_path="healpix:4")
-run_analysis(operation="calculate_area", grid_path="/path/grid.nc")
-run_analysis(
-    operation="zonal_anomaly",
-    grid_path="/path/grid.nc",
-    data_path="/path/data.nc",
-    variable_name="temperature",
-)
-run_analysis(
-    operation="remap_to_rectilinear",
-    grid_path="/path/grid.nc",
-    data_path="/path/data.nc",
-    variable_name="temperature",
-    target_lon=[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330],
-    target_lat=[-60, -30, 0, 30, 60],
-)
-run_analysis(
-    operation="calculate_zonal_mean",
-    grid_path="/path/grid.nc",
-    data_path="/path/data.nc",
-    variable_name="temperature",
-)
+# Tools
+
+Twelve tools. Everything runs on your machine unless a path belongs to a
+configured HPC endpoint or you pass `use_remote=True` (see [hpc.md](hpc.md)).
+Required parameters are marked `*`.
+
+## What every result carries
+
+```json
+{
+  "status": "complete | warning | unverified",
+  "physically_interpretable": true,
+  "warning_codes": ["MESH_NOT_GLOBAL"],
+  "warnings": [],
+  "preconditions": {"status": "satisfied", "checks": [...], "failed_checks": []},
+  "_provenance": {"tool": "compute", "inputs": {...}, "venue": "local | hpc:<name>",
+                  "timestamp_utc": "...", "uxarray_version": "...", "server_version": "..."}
+}
 ```
 
-### `plot_dataset`
+**Refusals.** When a declared precondition fails — an area with no sphere
+radius, a vorticity without velocity units, a subset that selects nothing, a
+remap whose target lies outside the source — the tool does not return a
+number. It returns `outcome: "input_required"` with `refusal.failed_checks`
+and a `repairs` list naming the argument to change. To run anyway pass
+`acknowledge="i-understand-this-result-may-not-be-physical"`; the result then
+comes back `status: "unverified"`, `physically_interpretable: false`.
 
-Render plots through one plotting front door.
+**Remote calls that outlive the timeout** return
+`{"status": "running", "operation_id": "op_…"}`. Collect with
+[`get_operation`](#get_operation). Remote failures return `status: "error"`
+with an `error_code` (`ENDPOINT_OFFLINE`, `NO_WORKER`, `WORKER_LOST`,
+`FILE_NOT_FOUND_ON_WORKER`, `WORKER_MISSING_PACKAGE`, `REMOTE_FAILED`).
 
-Supported `plot_type` values:
+Paths may be local files, `healpix:<zoom>` (virtual HEALPix mesh, zoom ≤ 13),
+or remote URIs (`s3://`, `gs://`, `https://`, kerchunk references).
+Longitudes are −180..180.
 
-- `mesh`
-- `mesh_geo`
-- `variable`
-- `zonal_mean`
-- `temporal_mean` (alias `mean_map`)
-- `subset_bbox`
+---
 
-Common parameters include `grid_path`, `data_path`, `variable_name`, `width`,
-`height`, `cmap`, `vmin`, `vmax`, `title`, `time_index`, `level_index`,
-`lat_spec`, `lat_step`, `conservative`, `session_id`, and `dataset_handle`.
-`mesh_geo` additionally takes `lon_bounds`, `lat_bounds`, `show_mesh_boundary`,
-`coastlines`, `borders`, `rivers`, `lakes`, `cities` and `basemap` (`basemap`
-fetches tiles over the network). The `plot_note` in a `mesh_geo` result names
-these parameters when it suggests what to change next.
+### `list_datasets`
 
-### `run_workflow` and `resume_workflow`
+List mesh and data files in a directory with header-only facts. Each file
+reports `format` (ugrid, mpas, scrip, exodus, esmf, icon), `role` (grid, data,
+grid+data), `n_face`, `n_time`, `size_class` and face-centered variable
+names, read from the header without opening the mesh (3 ms on a 25 GB SCRIP
+file).
 
-Run or resume the canonical persisted workflow: endpoint/path checks, mesh
-inspection, variable inspection, validation, area, and zonal mean when valid.
+`directory`*, `recursive` (false), `max_files` (200), `use_remote`, `endpoint`
 
-### `manage_session`
+### `inspect_dataset`
 
-Create sessions, register datasets, inspect session state, reset state, and
-list operations through one session front door.
+Topology (`n_face`, `n_node`, `n_edge`, `format`), `mesh_coverage`
+(`sphere_fraction`, `closed`, `euler_characteristic`), `size_class`, a
+`plot_hint` saying whether a plot will be drawn polygon by polygon or
+rasterized, and — with `data_path` — the variables (dims, units, stats) and
+a NaN/Inf/fill `validation` block. This is the one call to make first.
 
-Actions: `create`, `register_dataset`, `get`, `reset`, `list_operations`,
-`dataset`.
+`grid_path`*, `data_path`, `variable_name`, `validate` (true), `use_remote`,
+`endpoint`, `session_id`, `dataset_handle`
 
-### `get_status`
+### `compute`
 
-Read workflow or operation status.
+One statistic on a mesh or face-centered variable.
 
-### `get_result`
+| `statistic` | needs | notes |
+|---|---|---|
+| `area` | `grid_path`, `sphere_radius` unless the grid declares one | 6371000 m for Earth; steradians are refused |
+| `zonal_mean` | `grid_path`, `data_path`, `variable_name` | `lat_spec` one latitude or list; `lat_step` with `[start, stop]` for a regular range; `conservative` for band means |
+| `zonal_anomaly` | same | per-face deviation from its band mean |
+| `azimuthal_mean` | same + `center_lon`, `center_lat`, `outer_radius`, `radius_step` (degrees) | radial profile about a point |
+| `temporal_mean` | `data_path`, `variable_name` | `time_min`/`time_max` ISO labels, `groupby`; reports `temporal_coverage` |
+| `anomaly` | `data_path`, `variable_name` | `baseline` (`temporal_mean`) |
+| `ensemble_mean`, `ensemble_spread` | `variable_name`, `data_paths` | member units/grid consistency reported |
 
-Inspect a persisted result handle and artifact metadata.
+Bins that miss the mesh are refused (`*_COVERAGE_ZERO`); partially filled
+bins warn (`PROFILE_COVERAGE_PARTIAL`). Results that produce a field persist
+it and return `result_handle`.
 
-## Remote Execution
+### `vector_calc`
 
-Everything below only matters once you've configured an HPC endpoint (see
-[remote-hpc.md](remote-hpc.md)). Skip this section entirely for local-only use.
+`operation`: `gradient` (`variable_name`) | `curl` | `divergence`
+(`u_variable`, `v_variable`). Physical units need a sphere radius (grid
+attribute or `sphere_radius=6371000`); otherwise refused. Curl and
+divergence also require velocity-like units and identifiable components.
 
-`analyze_dataset`, `run_analysis`, `plot_dataset`, and `probe_path_access`
-accept `use_remote=True` and `endpoint="name"` where remote execution applies.
-Remote calls submit self-contained functions to a configured Globus Compute
-endpoint and preserve provenance. If an endpoint is missing or unhealthy, the
-dispatcher either falls back locally or reports a structured readiness error.
+`operation`*, `grid_path`*, `data_path`*, `scale_by_radius` (true),
+`time_index`, `level_index`, `use_remote`, `endpoint`, `acknowledge`
 
-**Not every `run_analysis` operation supports `use_remote` yet.** Passing
-`use_remote=True` for one of the operations below raises `ValueError`
-immediately rather than silently running locally — this is deliberate: a
-facility-only path (one that doesn't exist on your machine) combined with a
-silent local fallback would otherwise produce a confusing local
-`FileNotFoundError` with no indication that `use_remote` was ever honored.
+### `compare`
 
-| Supports `use_remote` | Does not (yet) |
-|---|---|
-| `inspect_mesh`, `inspect_variable`, `validate_dataset`, `calculate_area`, `calculate_zonal_mean`, `zonal_anomaly`, `gradient`, `curl`, `divergence`, `azimuthal_mean`, `remap_variable`, `regrid_dataset`, `remap_to_rectilinear` | `subset_bbox`, `subset_polygon`, `cross_section`, `compare_fields`, `bias`, `rmse`, `pattern_correlation`, `temporal_mean`, `anomaly`, `ensemble_mean`, `ensemble_spread`, `export` |
+Area-weighted `bias`, `rmse`, `pattern_correlation` and difference
+statistics for one variable across two files on the same mesh (`metric=`
+narrows). Declared unit disagreement (K vs degC) is refused; undeclared
+units warn with `UNITS_UNDECLARED`. Local only.
 
-For an operation in the right-hand column, stage the file locally first (or
-run it on a machine that can already read the facility path directly).
-`plot_dataset(plot_type=...)` has the same split: `mesh`, `variable`,
-`zonal_mean`, `temporal_mean`, and `subset_bbox` support `use_remote`;
-`mesh_geo` does not yet. Note the asymmetry: `run_analysis(operation=
-"subset_bbox")` and `"temporal_mean"` are local-only, while the
-`plot_dataset` kinds of the same name crop and render on the worker.
+`variable_name`*, `data_path_a`*, `data_path_b`*, `grid_path`, `metric`,
+`acknowledge`
 
-### `diagnose_endpoint`
+### `remap`
 
-Run endpoint diagnostics with concrete failure guidance.
+Mesh-to-mesh (`target_grid_path`) or to a lon/lat grid (`target_lon`,
+`target_lat` as 1-D lists). `method`: `nearest_neighbor`,
+`inverse_distance_weighted`, `bilinear` on UXarray's engine;
+`conservative`, `nnn`, `dnn`, `average` on YAC (must be installed where the
+remap runs; only `conservative` preserves the integral and every other
+method carries `REMAP_METHOD_NOT_CONSERVATIVE`). `whole_dataset=True`
+regrids every variable. `source_coverage` reports how much of the target the
+source reaches; zero is refused. Returns `result_handle`.
 
-Actions:
+### `subset`
 
-| Action | Purpose |
-|---|---|
-| `status` | Endpoint manager plus optional worker probe |
-| `validate` | SDK auth, endpoint reachability, worker probe, optional sample path |
-| `probe_path` | Check whether one exact path is readable locally or remotely |
-| `check_yac` | Confirm native YAC imports and completes a real remap on the worker |
+`shape`: `bbox` (`lon_bounds`, `lat_bounds`; keeps faces whose whole
+footprint fits — stricter than centre-in-box) | `polygon`
+(`polygon_lon_lat`; centres inside) | `cross_section` (`latitude` or
+`longitude`) | `circle` (`center_lon`, `center_lat`, `radius` degrees) |
+`nearest` (`center_lon`, `center_lat`, `k`). An empty selection is refused
+with the mesh's extent so the −180/0..360 mix-up is visible. Returns
+`result_handle`; plot or export it.
 
-`check_yac` matters on a freshly built endpoint: YAC is compiled separately
-from the Python environment, so it can be missing or mislinked on a worker that
-is otherwise healthy. The check runs inside a worker-side subprocess, because a
-bad YAC/MPI link can abort the importing process outright — that would
-otherwise surface as an opaque `WorkerLost` rather than a diagnosable result.
+### `plot`
 
-### `probe_path_access`
+`kind`: `mesh` (wireframe) | `field` (`variable_name` choropleth) |
+`profile` (zonal-mean line). Returns an image block (inline under 256 kB,
+otherwise a `resource_link` to the stored PNG) and a JSON text block with
+`render_mode`, `n_faces_total`, `n_faces_rendered`, `image_path` and the
+usual envelope. Meshes above 200 000 faces are rasterized to the requested
+`width`×`height` instead of drawn polygon by polygon; `force_raster=True`
+forces it. `lon_bounds`/`lat_bounds` crop; `coastlines=True` draws Natural
+Earth features behind a mesh (local only); `result_handle` plots a stored
+subset. `title`, `cmap`, `vmin`, `vmax`, `time_index`, `level_index`,
+`lat_spec`, `conservative` as expected.
 
-Direct convenience path probe for cluster bring-up. This remains separately
-registered because it is the safest first command when a new filesystem path is
-suspect.
+### `export`
 
-`remap_variable`, `regrid_dataset`, and `remap_to_rectilinear` (all
-`run_analysis` operations) accept `use_remote=True` and `endpoint="name"` too.
-When run remotely the remap executes on the HPC worker and compact summary
-statistics are returned (for `remap_to_rectilinear`, the small rectilinear
-array is returned and persisted locally); large source meshes never cross the
-network.
+Write a stored result (`result_handle`) or a file's variable to
+`format` `netcdf` or `csv` at `output_path`. `export_fidelity` names
+attributes, fill values or coordinates the format could not carry.
 
-## MCP Prompts
+### `session`
 
-Prompts are user-invokable slash commands that return a guided, multi-step
-analysis plan (instruction text, not results) — the assistant then runs the
-chained operations and interprets them. In Claude Code or Claude Desktop they
-appear as `/first_look`, `/vorticity_analysis`, etc.
+`action`: `create` → `session_id` | `register` (`grid_path`, optional
+`data_path`) → `dataset_handle` | `get` | `result` (`result_handle`) |
+`reset`. Register once, then pass `session_id` + `dataset_handle` to other
+tools instead of repeating paths.
 
-General:
+### `endpoint`
 
-- `/first_look path` calls `get_capabilities` and `analyze_dataset`.
-- `/hpc_diagnose [endpoint]` calls `diagnose_endpoint(action="status")` and
-  `diagnose_endpoint(action="validate")`.
+`action`: `status` (manager state of every configured endpoint plus a
+worker probe of the named/default one: node, Python and uxarray versions,
+round-trip seconds) | `validate` (adds a header read of `path` on the
+worker; `passed`) | `probe_path` | `check_yac`. A scheduler-backed endpoint
+can take a minute to answer cold; `probe_timeout_seconds` (90) bounds it.
 
-Science workflows (each composes existing `run_analysis` operations around a
-scientific question):
+### `get_operation`
 
-- `/vorticity_analysis grid_path data_path u_var v_var` — rotation and
-  divergence of a wind field (`curl` + `divergence`).
-- `/cyclone_structure grid_path data_path variable_name center_lon center_lat [u_var v_var outer_radius]`
-  — radial structure of a storm/vortex (`azimuthal_mean` + `subset_bbox`,
-  optionally `curl`).
-- `/eddy_activity grid_path data_path variable_name` — departures from the
-  latitudinal background state (`calculate_zonal_mean` + `zonal_anomaly` +
-  `gradient`).
-- `/model_evaluation grid_path data_path_a data_path_b variable_name` — verify a
-  field against a reference (`bias` + `rmse` + `pattern_correlation`).
-- `/climatology_anomaly data_path variable_name [grid_path]` — time-mean state
-  and departures (`temporal_mean` + `anomaly`, optionally `calculate_zonal_mean`).
+`operation_id`*, `wait_seconds` (0). Collects a remote result whose call
+returned `status: "running"`, or reads the stored operation record.

@@ -822,12 +822,15 @@ def plot(
     grid_path: str | None = None,
     data_path: str | None = None,
     variable_name: str | None = None,
+    data_paths: list[str] | None = None,
     result_handle: str | None = None,
     lon_bounds: list[float] | None = None,
     lat_bounds: list[float] | None = None,
     width: int = 800,
     height: int = 400,
     title: str | None = None,
+    scale_factor: float = 1.0,
+    units_label: str | None = None,
     cmap: str = "viridis",
     vmin: float | None = None,
     vmax: float | None = None,
@@ -842,11 +845,13 @@ def plot(
     session_id: str | None = None,
     dataset_handle: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Render a PNG: kind = mesh (wireframe) | field (variable) | profile (zonal mean).
+    """Render a PNG: kind = mesh | field (variable) | profile (zonal mean) | temporal_mean.
 
-    Meshes above 200k faces are rasterized to the requested pixel size
-    instead of drawn polygon by polygon; the reply says which
-    (render_mode). lon_bounds/lat_bounds crop mesh and field plots;
+    temporal_mean averages variable_name over every time step in data_paths
+    (many files), optionally cropped and scaled (scale_factor, units_label),
+    and reports time_min/time_max and value_stats. Meshes above 200k faces
+    are rasterized to the requested pixel size instead of drawn polygon by
+    polygon; the reply says which (render_mode). lon_bounds/lat_bounds crop;
     coastlines=True draws Natural Earth features behind a mesh (local
     only). result_handle plots a stored subset instead of a file. Returns an
     image (inline when small, otherwise a resource link to the stored PNG)
@@ -854,29 +859,32 @@ def plot(
     """
     try:
         return _plot(
-            kind,
-            grid_path,
-            data_path,
-            variable_name,
-            result_handle,
-            lon_bounds,
-            lat_bounds,
-            width,
-            height,
-            title,
-            cmap,
-            vmin,
-            vmax,
-            time_index,
-            level_index,
-            lat_spec,
-            conservative,
-            coastlines,
-            force_raster,
-            use_remote,
-            endpoint,
-            session_id,
-            dataset_handle,
+            kind=kind,
+            grid_path=grid_path,
+            data_path=data_path,
+            variable_name=variable_name,
+            data_paths=data_paths,
+            result_handle=result_handle,
+            lon_bounds=lon_bounds,
+            lat_bounds=lat_bounds,
+            width=width,
+            height=height,
+            title=title,
+            scale_factor=scale_factor,
+            units_label=units_label,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            time_index=time_index,
+            level_index=level_index,
+            lat_spec=lat_spec,
+            conservative=conservative,
+            coastlines=coastlines,
+            force_raster=force_raster,
+            use_remote=use_remote,
+            endpoint=endpoint,
+            session_id=session_id,
+            dataset_handle=dataset_handle,
         )
     except Exception as exc:
         from uxarray_mcp.remote.executor import RemoteError
@@ -898,12 +906,15 @@ def _plot(
     grid_path: str | None,
     data_path: str | None,
     variable_name: str | None,
+    data_paths: list[str] | None,
     result_handle: str | None,
     lon_bounds: Any,
     lat_bounds: Any,
     width: int,
     height: int,
     title: str | None,
+    scale_factor: float,
+    units_label: str | None,
     cmap: str,
     vmin: Any,
     vmax: Any,
@@ -966,6 +977,28 @@ def _plot(
                 "force_raster": force_raster,
             },
         )
+    elif k == "temporal_mean":
+        paths = data_paths or ([data_path] if data_path else None)
+        op, args = (
+            "plot_temporal_mean",
+            {
+                "grid_path": g,
+                "data_paths": _need(paths, "data_paths"),
+                "variable_name": _need(variable_name, "variable_name"),
+                "lon_bounds": lon_bounds,
+                "lat_bounds": lat_bounds,
+                "level_index": level_index,
+                "scale_factor": scale_factor,
+                "units_label": units_label,
+                "width": width,
+                "height": height,
+                "cmap": cmap,
+                "vmin": vmin,
+                "vmax": vmax,
+                "title": title,
+                "force_raster": force_raster,
+            },
+        )
     elif k == "profile":
         op, args = (
             "plot_profile",
@@ -983,7 +1016,9 @@ def _plot(
             },
         )
     else:
-        raise ValueError(f"Unknown kind {kind!r}. One of: mesh, field, profile.")
+        raise ValueError(
+            f"Unknown kind {kind!r}. One of: mesh, field, profile, temporal_mean."
+        )
     if coastlines and k == "mesh" and (use_remote or endpoint):
         raise ValueError(
             "coastlines=True renders locally only; drop it or run without use_remote."
@@ -1174,7 +1209,8 @@ def endpoint(
     Python/uxarray versions and round-trip seconds (a scheduler-backed
     endpoint can take a minute to answer cold). validate adds a header read
     of `path` on the worker. probe_path reads a file's header remotely.
-    check_yac reports whether conservative remapping is available there.
+    check_yac runs a conservative remap on the named endpoint (or locally
+    when none is given) and reports whether YAC works there.
     """
     from uxarray_mcp.remote import health
 
@@ -1185,6 +1221,10 @@ def endpoint(
         "default_endpoint": config.default_endpoint,
     }
     target = endpoint or config.default_endpoint
+    if target is None and act in ("validate", "status"):
+        out["passed"] = True
+        out["note"] = "No endpoint configured; local-only install is healthy."
+        return _emit(out, tool="endpoint", inputs=_inputs(action=act))
     if act == "status" and target:
         out["worker"] = health.worker_probe(
             target, timeout_seconds=probe_timeout_seconds
@@ -1202,9 +1242,12 @@ def endpoint(
             "status", "active"
         ) == "active" and "error" not in out.get("path", {})
     elif act == "check_yac":
-        probe = health.worker_probe(target, timeout_seconds=probe_timeout_seconds)
-        out["worker"] = probe
-        out["conservative_remap_available"] = bool(probe.get("yac_available"))
+        # Runs where `endpoint` says; with none given, checks this machine.
+        smoke = _run("yac_smoke", {}, use_remote=bool(endpoint), endpoint=endpoint)
+        out["yac"] = {k: v for k, v in smoke.items() if k != "_remote"}
+        if smoke.get("_remote"):
+            out["_remote"] = smoke["_remote"]
+        out["conservative_remap_available"] = bool(smoke.get("conservative_ok"))
     elif act != "status":
         raise ValueError(
             f"Unknown action {action!r}. One of: status, validate, probe_path, check_yac."

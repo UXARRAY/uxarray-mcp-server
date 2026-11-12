@@ -201,3 +201,48 @@ def remap_to_rectilinear(
         "_payload": remapped.to_dataset(name=selected),
     }
     return _finish(result, plan, coverage)
+
+
+def yac_smoke() -> dict[str, Any]:
+    """Prove YAC works where this runs: conservative remap of a unit field.
+
+    Remaps a constant-1 field from HEALPix zoom 2 to zoom 1. Conservative
+    remapping preserves the area integral, so the target must be 1
+    everywhere; anything else is a broken build, not a tolerance question.
+    """
+    import importlib.util
+    import os
+
+    import numpy as np
+    import uxarray as ux
+
+    for key in ("PMI_FD", "PMI_RANK", "PMI_SIZE"):
+        os.environ.pop(key, None)
+    out: dict[str, Any] = {
+        "yac_importable": importlib.util.find_spec("yac") is not None,
+        "conservative_ok": False,
+    }
+    if not out["yac_importable"]:
+        out["error"] = yac_unavailable_message("this worker")
+        return out
+    source = ux.Grid.from_healpix(zoom=2)
+    target = ux.Grid.from_healpix(zoom=1)
+    field = ux.UxDataArray(
+        np.ones(source.n_face), dims=["n_face"], uxgrid=source, name="one"
+    )
+    try:
+        remapped = field.remap.nearest_neighbor(
+            target, remap_to="faces", backend="yac", yac_method="conservative"
+        )
+    except Exception as exc:
+        out["error"] = f"{type(exc).__name__}: {exc}"[:400]
+        return out
+    values = np.asarray(remapped.values, dtype=float)
+    out.update(
+        {
+            "n_target": int(values.size),
+            "max_abs_error": float(np.nanmax(np.abs(values - 1.0))),
+            "conservative_ok": bool(np.allclose(values, 1.0, atol=1e-6)),
+        }
+    )
+    return out

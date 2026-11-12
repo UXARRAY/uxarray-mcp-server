@@ -57,6 +57,9 @@ def _trim_schema(tool: Any) -> None:
     ``get_schema()`` never reaches clients. The title strip recurses only
     into property *values*, so a real parameter named ``title`` survives.
     """
+    desc = getattr(tool, "description", None)
+    if isinstance(desc, str):  # Tool is a frozen dataclass
+        object.__setattr__(tool, "description", inspect.cleandoc(desc))
     params = getattr(tool, "parameters", None)
     if not isinstance(params, dict):
         return
@@ -139,5 +142,6 @@ def build_registry(name: str = "uxarray") -> ToolRegistry:
                 idempotent_hint=tool_name not in {"session", "export"},
                 open_world_hint=tool_name == "endpoint",
             )
-        _trim_schema(tool)
+        # update_tool_metadata replaces the frozen Tool; trim the live one.
+        _trim_schema(registry.get_tool(tool_name))
     return registry

@@ -132,6 +132,105 @@ def _with_dataset(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, 
     return wrapped
 
 
+def _plot_temporal_mean(
+    grid_path: str,
+    data_paths: list[str],
+    variable_name: str,
+    lon_bounds: list[float] | None = None,
+    lat_bounds: list[float] | None = None,
+    level_index: int = 0,
+    scale_factor: float = 1.0,
+    units_label: str | None = None,
+    width: int = 800,
+    height: int = 400,
+    cmap: str = "viridis",
+    vmin: float | None = None,
+    vmax: float | None = None,
+    title: str | None = None,
+    force_raster: bool = False,
+) -> dict[str, Any]:
+    """Time-mean of ``variable_name`` over every step in ``data_paths``, drawn on the mesh."""
+    import numpy as np
+    import uxarray as ux
+    import xarray as xr
+
+    from uxarray_mcp.core.coverage import compute_temporal_coverage
+    from uxarray_mcp.core.dims import face_slice_selection
+
+    grid = load_grid(grid_path)
+    with xr.open_mfdataset(
+        data_paths,
+        combine="by_coords",
+        data_vars="minimal",
+        coords="minimal",
+        compat="override",
+    ) as ds:
+        var = ds[variable_name]
+        n_steps = int(var.sizes.get("time", 1))
+        time_min = (
+            str(var["time"].values[0])[:19]
+            if "time" in var.coords and n_steps
+            else None
+        )
+        time_max = (
+            str(var["time"].values[-1])[:19]
+            if "time" in var.coords and n_steps
+            else None
+        )
+        mean = var.mean(dim="time") if "time" in var.dims else var
+        selection, reduced = face_slice_selection(mean.sizes, level_index=level_index)
+        mean = mean.isel(**selection)
+        values = np.asarray(mean.values, dtype=float) * float(scale_factor)
+        coverage = compute_temporal_coverage(var, mean) if "time" in var.dims else None
+    if values.ndim != 1 or values.size != grid.n_face:
+        raise ValueError(
+            f"{variable_name} is not face-centered on this grid after the time mean "
+            f"(shape {values.shape}, n_face {grid.n_face})."
+        )
+    uxda = ux.UxDataArray(values, dims=["n_face"], uxgrid=grid, name=variable_name)
+    uxda.attrs["units"] = units_label or var.attrs.get("units", "")
+    n_total = int(grid.n_face)
+    if lon_bounds is not None and lat_bounds is not None:
+        uxda = uxda.subset.bounding_box(
+            (float(lon_bounds[0]), float(lon_bounds[1])),
+            (float(lat_bounds[0]), float(lat_bounds[1])),
+        )
+    label = title or f"{variable_name} time mean ({n_steps} steps)"
+    png, info = render_variable(
+        uxda,
+        width=width,
+        height=height,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        title=label,
+        force_raster=force_raster,
+    )
+    finite = np.asarray(uxda.values, dtype=float)
+    finite = finite[np.isfinite(finite)]
+    stats = {
+        "min": float(finite.min()) if finite.size else None,
+        "max": float(finite.max()) if finite.size else None,
+        "mean": float(finite.mean()) if finite.size else None,
+    }
+    return {
+        "png": png,
+        **info,
+        "variable_name": variable_name,
+        "n_files": len(data_paths),
+        "n_time_steps": n_steps,
+        "time_min": time_min,
+        "time_max": time_max,
+        "n_faces_in_region": int(uxda.uxgrid.n_face),
+        "n_faces_total": n_total,
+        "scale_factor": scale_factor,
+        "units": uxda.attrs["units"],
+        "value_stats": stats,
+        "reduced_dims": reduced,
+        "temporal_coverage": coverage,
+    }
+
+
 OPS: dict[str, Callable[..., dict[str, Any]]] = {
     # discovery / inspection
     "scan_directory": catalog.scan,
@@ -159,6 +258,7 @@ OPS: dict[str, Callable[..., dict[str, Any]]] = {
     "remap_variable": remap.remap_variable,
     "regrid_dataset": remap.regrid_dataset,
     "remap_to_rectilinear": remap.remap_to_rectilinear,
+    "yac_smoke": remap.yac_smoke,
     # subset
     "subset_bbox": subset.subset_bbox,
     "subset_polygon": subset.subset_polygon,
@@ -169,6 +269,7 @@ OPS: dict[str, Callable[..., dict[str, Any]]] = {
     "plot_mesh": _plot_mesh,
     "plot_field": _plot_field,
     "plot_profile": _plot_profile,
+    "plot_temporal_mean": _plot_temporal_mean,
 }
 
 

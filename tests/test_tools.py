@@ -350,3 +350,40 @@ def test_remote_path_without_endpoint_is_a_clear_error(state_dir):
         t.compute(
             statistic="area", grid_path="/lcrc/does/not/exist.nc", sphere_radius=EARTH
         )
+
+
+def test_plot_temporal_mean_over_files(structured_mesh_files, state_dir, tmp_path):
+    import numpy as np
+    import xarray as xr
+
+    grid, data = structured_mesh_files
+    n_face = xr.open_dataset(data)["temperature"].size
+    paths = []
+    for i in range(2):
+        path = tmp_path / f"year{i}.nc"
+        xr.Dataset(
+            {
+                "temperature": (
+                    ["time", "n_face"],
+                    np.full((3, n_face), 280.0 + i),
+                    {"units": "K"},
+                )
+            },
+            coords={"time": np.arange(3) + 3 * i},
+        ).to_netcdf(path)
+        paths.append(str(path))
+    blocks = t.plot(
+        kind="temporal_mean",
+        grid_path=grid,
+        data_paths=paths,
+        variable_name="temperature",
+        scale_factor=2.0,
+        units_label="K2",
+        lon_bounds=[-90, 90],
+        lat_bounds=[-45, 45],
+    )
+    meta = json.loads(blocks[1]["text"])
+    assert meta["status"] in ("complete", "warning"), meta
+    assert meta["n_time_steps"] == 6 and meta["n_files"] == 2 and meta["units"] == "K2"
+    assert meta["value_stats"]["mean"] == pytest.approx(561.0)  # (280+281)/2 * 2
+    assert 0 < meta["n_faces_in_region"] < meta["n_faces_total"]

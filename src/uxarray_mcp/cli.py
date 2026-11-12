@@ -185,7 +185,7 @@ def cmd_endpoints_discover(args: argparse.Namespace) -> int:
         print("No Globus Compute endpoints are visible to your identity.")
         print("\nThat means one of:")
         print("  - you have not started an endpoint on the HPC machine yet")
-        print("    (see docs/operating-an-endpoint.md), or")
+        print("    (see docs/hpc.md), or")
         print("  - the endpoint belongs to someone else and they have not")
         print("    shared it with you -- ask them for the UUID directly.")
         return 0

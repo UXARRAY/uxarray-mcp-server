@@ -3078,27 +3078,27 @@ wheels = [
 
 [[package]]
 name = "toolregistry"
-version = "0.19.0"
+version = "0.21.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
     { name = "llm-rosetta" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/d2/463c77c3ebb7b451c9a176f5b01c38467a2daa265b4c93d97651eca07222/toolregistry-0.19.0.tar.gz", hash = "sha256:d85760a8f1442e60256faa58277d91a0781f72ef45dd4d3fb855c98590aed7f5", size = 462441, upload-time = "2026-10-23T17:57:12.456Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f1/05/fa4b1b2ab7f56cbff0a3dc9a2b691a139c599ede7a91799dcbf39b59ed50/toolregistry-0.21.0.tar.gz", hash = "sha256:16b6640ce01944cdf639a9db366d0d6947e4f94ee600d549aae2989feef3ce87", size = 631975, upload-time = "2026-11-09T20:46:20.486Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/98/5f7715d97a27093b07ade93e88de5b942102e4ccdd42afa7fb22f791b3cc/toolregistry-0.19.0-py3-none-any.whl", hash = "sha256:704a717a6ddb8165b1efff2b0fc219a11168fa48d5d372fc854d74a06fe756a0", size = 342713, upload-time = "2026-10-23T17:57:10.909Z" },
+    { url = "https://files.pythonhosted.org/packages/60/ee/2d353378c301b6b99840be5d010c315cf52d039bf0e83f9523726241b292/toolregistry-0.21.0-py3-none-any.whl", hash = "sha256:d306ff168271cf9175298644d05a595178f86a4a8338a969b79d9bfcfdcdeaa5", size = 453925, upload-time = "2026-11-09T20:46:18.688Z" },
 ]
 
 [[package]]
 name = "toolregistry-server"
-version = "0.7.0"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "toolregistry" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/90/d4a7a6b70b5ba18c93c09210f77e3e450748697550b9fd1cbff1081fcd52/toolregistry_server-0.7.0.tar.gz", hash = "sha256:ffe5b51dc03cf870455275458c6e659b7328399a5b82c82733199c8277ceee1e", size = 114277, upload-time = "2026-10-23T18:17:21.247Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/31/30/6ce651e634bcf2143078683dacf3a62301d8cb8403765867bdefcd64e58b/toolregistry_server-0.9.0.tar.gz", hash = "sha256:16808690b5dd15e2b6b5f342752f5463ffa666f04f13da3bcb10e203afc3b5d6", size = 389717, upload-time = "2026-11-09T20:50:04.949Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/29/e52fb61fab654d44a5438ecee48ac279a16afebd5c196cb0af9376cd1ab1/toolregistry_server-0.7.0-py3-none-any.whl", hash = "sha256:3de4fb1ce8700ab40b30b2aa17cf147017c5955cda9e606224dc33bc106cb8b0", size = 81845, upload-time = "2026-10-23T18:17:19.52Z" },
+    { url = "https://files.pythonhosted.org/packages/78/85/69ee16fdbd6ab252f1bdbe48f3aef031b18d495f1e3dec19caa8f8135188/toolregistry_server-0.9.0-py3-none-any.whl", hash = "sha256:bfa1cf6d1bfbe76a00d57f04e990d53a0857f6906faf84b17cbaf762a0fadc71", size = 276494, upload-time = "2026-11-09T20:50:03.096Z" },
 ]
 
 [package.optional-dependencies]
@@ -3285,6 +3285,7 @@ dependencies = [
     { name = "holoviews" },
     { name = "matplotlib" },
     { name = "mcp" },
+    { name = "netcdf4" },
     { name = "pyyaml" },
     { name = "toolregistry" },
     { name = "toolregistry-server", extra = ["mcp"] },
@@ -3298,9 +3299,7 @@ hpc = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "jsonschema" },
     { name = "mypy" },
-    { name = "packaging" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -3313,18 +3312,17 @@ requires-dist = [
     { name = "holoviews", specifier = ">=1.19.0" },
     { name = "matplotlib", specifier = ">=3.9.0" },
     { name = "mcp", specifier = ">=1.27,<3" },
+    { name = "netcdf4", specifier = ">=1.6" },
     { name = "pyyaml", specifier = ">=6.0.1" },
-    { name = "toolregistry", specifier = ">=0.19.0" },
-    { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.7.0" },
+    { name = "toolregistry", specifier = ">=0.21.0" },
+    { name = "toolregistry-server", extras = ["mcp"], specifier = ">=0.9.0" },
     { name = "uxarray", extras = ["geo", "viz"], specifier = ">=2026.10.1,<2026.11" },
 ]
 provides-extras = ["hpc"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "jsonschema", specifier = ">=4.20.0" },
     { name = "mypy", specifier = ">=1.10.0" },
-    { name = "packaging", specifier = ">=23.0" },
     { name = "pre-commit", specifier = ">=4.3.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },

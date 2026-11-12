@@ -1,201 +1,70 @@
 # Architecture
 
-The UXarray MCP Server is organized into three layers:
+```
+MCP client (Claude, Cline, …)
+        │  tools/list · tools/call
+        ▼
+server/   registry.py  – twelve tools, flat, tagged, schema trimmed
+          tools.py     – resolve handles → route local/remote → core.ops → contract
+          contract.py  – refusals, warning codes, provenance, JSON safety
+          state.py     – sessions, dataset handles, results, operations (JSON files)
+          app.py       – MCPAdapter + artifact resources
+        │
+        ├──────────────── local ──────────────────┐
+        ▼                                         ▼
+core/   ops.py  – name → function table      remote/  executor.py – Executor + operation_id
+        mesh · facts · inspect · area ·                shim.py     – the ONE shipped function
+        zonal · vector_calc · compare ·                health.py   – manager status, worker probe
+        remap · subset · temporal · export ·           config.py   – endpoints, path prefixes
+        coverage · plotting · catalog
+        (uxarray, numpy, matplotlib only)        Globus Compute → worker: `from uxarray_mcp.core import ops`
+```
 
-## Layer Overview
+## The rules
 
-<div class="arch-flow">
-  <div class="arch-box">
-    <strong>MCP Client</strong><br>
-    Claude, Cline, Continue, or another MCP-compatible client
-  </div>
-  <div class="arch-arrow">↓</div>
-  <div class="arch-box">
-    <strong>ToolRegistry Server</strong><br>
-    Registers tools via <code>uxarray_mcp.registry</code> and exposes them over MCP / OpenAPI
-  </div>
-  <div class="arch-arrow">↓</div>
-  <div class="arch-box">
-    <strong>Tools Layer</strong><br>
-    Input handling, routing, provenance, diagnostics, and optional HPC wrappers
-  </div>
-  <div class="arch-arrow">↓</div>
-  <div class="arch-box">
-    <strong>Domain Layer</strong><br>
-    Pure computation logic shared by local and remote execution paths
-  </div>
-  <div class="arch-arrow">↓</div>
-  <div class="arch-grid">
-    <div class="arch-box">
-      <strong>Local Path</strong><br>
-      UXarray runs directly on the machine hosting the MCP server
-    </div>
-    <div class="arch-box">
-      <strong>Remote Path</strong><br>
-      Globus Compute submits work to a configured endpoint on an HPC system
-    </div>
-  </div>
-</div>
+**`core/` is the only place science lives, and it imports no server code.**
+Nothing under `core/` may import `mcp`, `toolregistry`, pydantic, or any
+`uxarray_mcp.server`/`remote` module. `tests/test_core_isolation.py` runs
+`import uxarray_mcp.core` in a subprocess with those packages blocked. This
+is what lets a worker run `pip install --no-deps uxarray-mcp` beside
+`globus-compute-endpoint` without a pydantic conflict, and it is why remote
+execution needs no second implementation of anything.
 
-## Current High-Level Flow
+**One function crosses the wire.** `remote/shim.py: run_op(op, kwargs)` is
+serialized by Globus Compute (`AllCodeStrategies`) and calls
+`core.ops.call(op, **kwargs)` on the worker. Adding an operation means
+adding it to `core/ops.py`; it is immediately available remotely.
 
-### Local execution
+**Every remote call is an operation.** `remote/executor.py` writes an
+operation record before submitting, so a call that outlives the caller's
+timeout returns `{"status": "running", "operation_id"}` and `get_operation`
+collects it later. Failures are classified into stable error codes.
 
-1. The MCP client calls a front-door tool such as
-   `run_analysis(operation="inspect_mesh", grid_path="...")`.
-2. The front door routes to the implementation in `tools/` and chooses the local path.
-3. The shared computation in `domain/` runs through UXarray.
-4. The result gets a `_provenance` block and is returned to the client.
+**Results are contracts, not dicts.** `server/contract.py: finish()` adds
+`status`, `physically_interpretable`, `warning_codes`, `preconditions` and
+`_provenance`, and makes the payload JSON-safe (no NaN, no numpy). A failed
+precondition raises `Refusal`, which `guard` turns into an
+`outcome: "input_required"` payload with repairs. Core functions report
+coverage (`mesh_coverage`, `profile_coverage`, `source_coverage`, …); the
+server decides what refuses and what warns.
 
-### Remote execution
+**Payload is budget.** Every reply is re-sent on every later turn of a
+conversation. Tool schemas total ~13 kB (`tests/test_server.py` ratchets
+it); typical results are 1–2 kB; version-drift warnings are emitted once per
+process; images above 256 kB are returned as resource links, not base64.
 
-1. The MCP client calls a front-door tool such as
-   `run_analysis(operation="inspect_mesh", grid_path="...", use_remote=True)`.
-2. The implementation wrapper checks endpoint readiness and configuration.
-3. The remote agent submits a self-contained function from `remote/compute_functions.py` through Globus Compute.
-4. The endpoint receives that function and runs it in the remote worker environment.
-5. The result comes back to the local machine, where provenance is attached before returning it to the client.
+**Plotting is pixel-bounded.** Above `RASTERIZE_ABOVE_FACES` (200 000) a
+mesh or field is rasterized to the requested width×height rather than drawn
+as one polygon per face. The reply says which path ran (`render_mode`).
 
-## Important Terms
+## Adding an operation
 
-### Globus Compute
-
-The remote function-execution system used by this repository. It moves Python
-functions from the local machine to the remote endpoint and returns the result.
-
-### Endpoint
-
-A named Globus Compute service running on the remote machine or cluster. The
-endpoint manager stays connected to Globus and starts the child endpoint and
-worker processes that execute submitted functions.
-
-### Academy
-
-The lightweight agent abstraction used in `remote/agent.py` to organize local
-and remote actions. It is a convenience layer inside this repo, not the
-transport itself. Globus Compute is still the actual remote execution system.
-
-## Tool Surface — Two Profiles
-
-The registered tool surface is built by `uxarray_mcp.registry.build_registry()`
-and selected with `--profile`:
-
-- **`core` (default, 33 tools)** — 11 front-door gateway tools at the top
-  level, 12 control/status tools under the `session/` and `hpc/` namespaces,
-  `io-list_datasets`, two response-contract helpers under `contract/`, and
-  7 prompt helpers under `prompt/`. No deferred tools, no BM25 discovery.
-- **`deferred-full` (67 tools)** — the core set stays visible and 33 raw
-  implementation tools are registered with `defer=True`, so they do not
-  appear in the initial tool list. `discover_tools` (BM25 search) is added
-  so agents can find them by intent, and operators can promote them from
-  the admin panel.
-
-Low-level implementation functions such as `inspect_mesh`, `calculate_area`,
-`plot_mesh`, and `calculate_curl` stay importable from `uxarray_mcp.tools`
-for tests, scripts, and internal composition regardless of profile. In
-`core` they are reachable through the front-door dispatchers; they are not
-separately registered.
-
-See {doc}`serving` for the CLI flags and transports.
-
-## Tools Layer (`tools/`)
-
-The server exposes a small front-door tool surface. Those tools route
-to lower-level implementation functions in `tools/`, which handle input
-validation, domain calls, remote dispatch, provenance, and structured results.
-
-- **frontdoor.py** — Public MCP front doors: operation dispatch, plotting dispatch, endpoint diagnostics, session management, status, and result lookup
-- **inspection.py** — Core local implementations: mesh inspection, variable inspection, area calculation, zonal mean, dataset validation
-- **orchestration.py** — Deterministic one-shot pipelines (`analyze_dataset`) that chain inspection, validation, and analysis into a single structured result
-- **remote_tools.py** — HPC-enabled wrappers with pre-flight health checks and automatic fallback to local
-- **scientific_agent.py** — Autonomous four-stage agent (Analyze > Plan > Execute > Verify)
-- **vector_calc.py** — Gradient, curl, and divergence tools with optional HPC remote execution
-- **advanced.py** — Remapping, export, subsetting, comparison, temporal/ensemble tools
-- **plotting.py** — Mesh, geographic, variable, and zonal-mean plotting tools
-- **stateful.py** — Session, workflow, and progress-aware tools
-- **capabilities.py** — Tool discovery and filtering based on grid topology and data
-- **catalog.py** — Dataset discovery and cataloging
-- **execution_control.py** — Runtime mode switching (local / hpc / auto)
-
-## Domain Layer (`domain/`)
-
-Pure computation functions with no knowledge of MCP, I/O, or provenance. These are shared between local and HPC code paths.
-
-- **mesh.py** — Grid and dataset loading, including HEALPix and GIS (shapefile/GeoJSON) support
-- **area.py** — Face area statistics
-- **variable.py** — Variable metadata and statistics extraction
-- **zonal.py** — Zonal mean computation
-- **vector_calc.py** — Gradient, curl, and divergence computation, plus the vector-component sanity guardrail
-- **plotting.py** — Pure PNG-rendering functions (mesh, geographic, variable, zonal-mean)
-
-## Remote Layer (`remote/`)
-
-HPC infrastructure for offloading computations to remote clusters via Globus Compute.
-
-- **config.py** — YAML configuration loader
-- **agent.py** — Academy agent for Globus Compute orchestration
-- **compute_functions.py** — Remote-serializable functions (sent to the cluster)
-- **health.py** — Endpoint health checks
-
-## Key Design Decisions
-
-**Small public tool surface** — MCP clients see intent-shaped front doors such
-as `run_analysis`, `plot_dataset`, and `diagnose_endpoint`, not every
-implementation function. Lower-level functions remain available to Python
-callers and internal workflows.
-
-**Unified local/remote dispatch** — Front doors accept `use_remote` /
-`endpoint` parameters when remote execution is available. The dispatcher falls
-back locally or reports endpoint readiness issues instead of exposing separate
-HPC-only tool names.
-
-**Domain/tool separation** — Computation logic lives in `domain/` so the same code can run locally or be serialized and sent to a remote cluster without importing MCP dependencies.
-
-**Provenance on everything** — Every tool result gets a `_provenance` block attached automatically via `provenance.py`.
-
-**Validation gating** — The scientific agent runs dataset validation before zonal mean. If validation fails, zonal mean is skipped rather than producing unreliable results.
-
-**Two-profile promotion path** — The core profile keeps a small, predictable
-baseline for existing clients. New tools start in `deferred-full` and are
-promoted to core once they are stable, commonly useful, documented, and have
-clear provenance and security behavior.
-
-**Policy tags from day one** — Every tool carries `ToolTag` values
-(`READ_ONLY`, `FILE_SYSTEM`, `NETWORK`, `SLOW`) plus custom tags
-(`experimental`, `stateful`), so downstream policy code (admin filters, auth
-gates, audit logs) has concrete metadata to key off.
-
-**Prompt-as-tool** — The former `@mcp.prompt()` decorators are regular tools
-under the `prompt/` namespace. They return instruction text that guides a
-multi-step analysis rather than results, which keeps the surface uniform and
-removes the `fastmcp` dependency.
-
-**Pre-flight health checks** — Remote wrappers check endpoint manager state
-before submitting work. `diagnose_endpoint(action="status")` can additionally
-submit a lightweight worker probe to confirm a real scheduler worker responds.
-
-**AllCodeStrategies serialization** — Remote functions are serialized with
-`AllCodeStrategies`, so the HPC worker does not need `uxarray_mcp` installed —
-only `uxarray`, `xarray`, `netCDF4`, and `h5netcdf`. A practical consequence
-is that worker-side functions in `remote/compute_functions.py` cannot call
-module-level helpers: only the submitted function body travels to the worker,
-so shared logic must stay inlined per function.
-
-**Empty file guard** — Plotting paths check `st_size == 0` before loading and
-check for empty PNG bytes after rendering, raising `ValueError` with a message
-that points at the likely cause.
-
-## Maintenance Notes
-
-The current implementation favors a small number of broad tool modules while
-the MCP surface is still evolving. That keeps related behavior easy to audit
-for the first release, but the largest files should be split once the public
-contracts settle:
-
-- `remote/compute_functions.py` should be divided by remote capability family
-  (inspection, plotting, vector calculus, remapping, diagnostics).
-- `tools/advanced.py` should be divided into spatial, comparison, remapping,
-  temporal/ensemble, and export modules.
-
-Keep those refactors behavior-preserving and test-backed; they are polish and
-maintainability work, not blockers for the core conda package.
+1. Write the function in the right `core/` module: plain kwargs, returns a
+   JSON-safe dict with any coverage block and `warning_codes`; put a data
+   object to persist under `_payload`.
+2. Register it in `core/ops.py` and expose it through the right tool in
+   `server/tools.py` (a new `statistic=`/`shape=`/`kind=` value, not a new
+   tool). Add refusable checks there with `contract.check`.
+3. One test in `tests/test_core_<module>.py` (a real number) and one in
+   `tests/test_tools.py` (happy path + the refusal). Add a row to
+   `docs/tools.md`.
