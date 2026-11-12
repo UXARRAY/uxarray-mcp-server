@@ -1,24 +1,12 @@
-"""Shared variable inspection logic.
+"""Variable inspection: dims, dtype, location and finite-only statistics.
 
-The statistics here are the same kind of claim ``summarize_array`` makes, and
-they had the same defect. Measured on a 162-face global grid with a field
-masked over 145 of its faces, this module returned
-``{"min": 145.0, "max": 161.0, "mean": 153.0}``: the true statistics of the
-seventeen faces that held a value, presented as the statistics of the
-variable, with nothing saying nine tenths of it was absent. Land masks are
-ordinary in this data, so that was most fields. An all-NaN field was worse --
-``{"min": nan, "max": nan, "mean": nan}``, three ``RuntimeWarning``s on
-stderr, and ``nan`` is not a JSON number.
-
-``n_finite``/``n_total`` follow ``summarize_array``'s contract exactly: they
-appear only when they differ, because a count that always equals the size
-costs payload on every call and tells the caller nothing ``shape`` does not
-already say.
+``n_finite``/``n_total`` appear only when some entries are missing, so a
+masked field is never reported as if it were whole.
 """
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 
 def _numeric_statistics(values: Any) -> dict[str, Any]:
@@ -56,7 +44,7 @@ def _numeric_statistics(values: Any) -> dict[str, Any]:
     return stats
 
 
-def compute_variable_info(uxds: Any, variable_name: Optional[str] = None) -> dict:
+def compute_variable_info(uxds: Any, variable_name: str | None = None) -> dict:
     """Extract variable metadata and statistics from a UXarray dataset.
 
     Parameters
@@ -116,7 +104,7 @@ def compute_variable_info(uxds: Any, variable_name: Optional[str] = None) -> dic
                 var_info["statistics"] = _numeric_statistics(np.asarray(var.values))
             else:
                 var_info["statistics"] = None
-        except Exception:
+        except Exception:  # noqa: BLE001
             var_info["statistics"] = None
 
         variables_info.append(var_info)

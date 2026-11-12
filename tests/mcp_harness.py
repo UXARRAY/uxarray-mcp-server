@@ -31,12 +31,7 @@ from mcp import ClientSession
 from mcp.shared.memory import create_client_server_memory_streams
 from mcp.types import InitializeResult
 
-from uxarray_mcp.app import make_mcp_server
-
-#: Default profile for harness tests. ``core`` is what a first-run user gets
-#: and is a third of the size of ``deferred-full``, so the suite stays quick
-#: while still covering the path everyone actually takes.
-DEFAULT_PROFILE = "core"
+from uxarray_mcp.server.app import make_mcp_server
 
 
 def wire(model: Any) -> Any:
@@ -51,9 +46,7 @@ def wire(model: Any) -> Any:
 
 
 @asynccontextmanager
-async def connect(
-    *, profile: str = DEFAULT_PROFILE
-) -> AsyncIterator[tuple[ClientSession, InitializeResult]]:
+async def connect() -> AsyncIterator[tuple[ClientSession, InitializeResult]]:
     """Run the real MCP server in-process; yield a connected client session.
 
     The server is driven through ``Server.run`` with the same initialisation
@@ -64,7 +57,7 @@ async def connect(
         tools_changed_notification_options,
     )
 
-    server = make_mcp_server(profile=profile)
+    server = make_mcp_server()
 
     async with create_client_server_memory_streams() as (
         client_streams,

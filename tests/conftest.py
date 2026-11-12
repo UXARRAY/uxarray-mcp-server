@@ -74,15 +74,13 @@ def offline_config(_offline_config_file, monkeypatch):
     monkeypatch.setenv("UXARRAY_MCP_CONFIG", str(config_path))
     monkeypatch.setattr(config_module, "USER_CONFIG_PATH", absent_user)
 
-    # Caches one layer up would otherwise hand back objects built from
-    # whatever config was live when they were first populated.
-    agent_module = sys.modules.get("uxarray_mcp.remote.agent")
-    if agent_module is not None:
-        monkeypatch.setattr(agent_module, "_agent_instance", None)
-        monkeypatch.setattr(agent_module, "_agent_instances", {})
+    from uxarray_mcp.remote import executor
+
     health.invalidate_cache()
+    executor.reset()
     yield
     health.invalidate_cache()
+    executor.reset()
 
 
 @pytest.fixture

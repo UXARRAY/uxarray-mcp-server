@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from uxarray_mcp.core.anomaly_coverage import compute_anomaly_coverage
+from uxarray_mcp.core.coverage import (
+    compute_anomaly_coverage,
+    compute_profile_coverage,
+)
 from uxarray_mcp.core.dims import face_slice_selection
-from uxarray_mcp.core.profile_coverage import compute_profile_coverage
 
 
 def compute_zonal_mean_stats(

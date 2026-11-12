@@ -105,11 +105,11 @@ def open_remote_store(file_path: str) -> Any:
     for engine in ("h5netcdf", "scipy"):
         try:
             return xr.open_dataset(handle, engine=engine)
-        except Exception as exc:  # noqa: PERF203 - need each engine's reason
+        except Exception as exc:  # noqa: BLE001 - need each engine's reason
             errors.append(f"{engine}: {exc}")
             try:
                 handle.seek(0)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 handle = fsspec.open(file_path, "rb").open()
     raise ValueError(
         f"Could not open remote dataset {file_path}. Tried " + "; ".join(errors)
@@ -246,12 +246,12 @@ def open_grid_object(obj: Any) -> Any:
     except Exception as direct_error:
         try:
             ds = obj if isinstance(obj, xr.Dataset) else xr.open_dataset(obj)
-        except Exception:
+        except Exception:  # noqa: BLE001
             raise direct_error from None
         if is_scrip_weights(ds):
             return ux.open_grid(scrip_grid_from_weights(ds))
         raise ValueError(
-            f"{direct_error} Variables present: {sorted(ds.variables)[:40]}"
+            f"{direct_error} Variables present: {sorted(map(str, ds.variables))[:40]}"
         ) from direct_error
 
 
@@ -423,7 +423,7 @@ def load_dataset(grid_path: str, data_path: str) -> Any:
 
     try:
         return ux.open_dataset(grid_path, data_path)
-    except Exception as direct_error:
+    except Exception as direct_error:  # noqa: BLE001
         # ux.open_dataset reads the grid itself and so never sees the
         # weights-file adapter in load_grid. Two local paths used to stop
         # here, which made a remap-weights "grid" work for the temporal-mean
@@ -432,6 +432,6 @@ def load_dataset(grid_path: str, data_path: str) -> Any:
         # the problem, the original error is the one worth reading.
         try:
             grid = load_grid(grid_path)
-        except Exception:
+        except Exception:  # noqa: BLE001
             raise direct_error from None
         return ux.UxDataset(attach_grid(xr.open_dataset(data_path), grid), uxgrid=grid)

@@ -1,27 +1,12 @@
-"""Face area statistics, and the sphere they were measured on.
+"""Face area statistics, scaled onto the sphere they belong to.
 
-UXarray integrates face areas on the unit sphere and never applies the
-grid's radius: ``Grid.sphere_radius`` is documented as storing "the original
-radius for scaling results back to physical units", and defaults to ``1.0``.
-Measured on a 648-face global mesh, ``sum(face_areas)`` is 12.566371, which is
-4*pi steradians -- and a file that declares ``sphere_radius: 6371000.0``
-round-trips that attribute into the reloaded grid and still sums to 12.566371.
-
-So ``calculate_area`` was returning a dimensionless number with
-``area_units: null``, ``physically_interpretable: null`` and no warning codes,
-on grids that had said in their own metadata how big the sphere is. The
-docstring example in ``remote_tools.calculate_area`` promised
-``total_area: 5.10064e14``, the Earth's surface in square metres, which the
-tool has never returned.
-
-The radius is applied here instead. Areas scale as ``R**2``, so the whole
-correction is one multiply, and the block that says which radius was used
-travels with the numbers.
+UXarray integrates areas on the unit sphere and never applies the grid's
+radius; the radius is applied here and ``area_basis`` records which one.
 """
 
 from typing import Any
 
-from .mesh_coverage import compute_mesh_coverage
+from .coverage import compute_mesh_coverage
 
 #: UXarray's default when a grid declares nothing, and its unit-sphere basis.
 UNIT_SPHERE_RADIUS = 1.0

@@ -1,10 +1,54 @@
-"""Shared scientific computation layer for UXarray MCP Server.
+"""Pure scientific layer: plain-kwarg ops returning JSON-safe dicts.
 
-Functions here contain the pure domain logic used by both local tools
-(inspection.py) and remote HPC functions (compute_functions.py).
+Nothing here knows about sessions, provenance or the MCP transport, so the
+whole package imports on a worker that has only uxarray installed.
 """
 
 from .area import compute_area_stats
+from .compare import (
+    bias,
+    compare_fields,
+    normalize_units,
+    pattern_correlation_fields,
+    rmse,
+)
+from .coverage import (
+    anomaly_coverage_warning_codes,
+    compute_anomaly_coverage,
+    compute_mesh_coverage,
+    compute_profile_coverage,
+    compute_scattered_coverage,
+    compute_subset_coverage,
+    compute_target_coverage,
+    compute_temporal_coverage,
+    count_face_centers_in_bounds,
+    export_fidelity,
+    export_fidelity_warning_codes,
+    grid_target_coverage,
+    mesh_coverage_warning_codes,
+    mesh_extent,
+    mesh_is_closed,
+    method_is_conservative,
+    profile_coverage_warning_codes,
+    remap_coverage_warnings,
+    subset_coverage_warning_codes,
+    temporal_coverage_warning_codes,
+)
+from .export import (
+    drop_phantom_topology_attrs,
+    export_dataarray,
+    export_dataset,
+    widen_narrow_fill_values,
+    write_dataarray_artifact,
+    write_dataset_artifact,
+    write_grid_artifact,
+)
+from .fields import (
+    load_face_variable,
+    summarize_array,
+    summarize_dataset,
+    summarize_grid,
+)
 from .mesh import (
     attach_grid,
     is_healpix_spec,
@@ -19,20 +63,16 @@ from .mesh import (
     parse_healpix_zoom,
     scrip_grid_from_weights,
 )
-from .mesh_coverage import (
-    compute_mesh_coverage,
-    mesh_coverage_warning_codes,
-    mesh_is_closed,
+from .remap import regrid_dataset, remap_to_rectilinear, remap_variable
+from .remap_backend import RemapPlan, resolve_remap_plan, yac_unavailable_message
+from .subset import (
+    cross_section,
+    regrid_elements,
+    subset_bbox,
+    subset_near_point,
+    subset_polygon,
 )
-from .profile_coverage import (
-    compute_profile_coverage,
-    profile_coverage_warning_codes,
-)
-from .remap_coverage import (
-    compute_scattered_coverage,
-    compute_target_coverage,
-    method_is_conservative,
-)
+from .temporal import anomaly, ensemble_mean, ensemble_spread, temporal_mean
 from .variable import compute_variable_info
 from .vector_calc import (
     compute_azimuthal_mean,
@@ -43,32 +83,75 @@ from .vector_calc import (
 from .zonal import compute_zonal_anomaly_stats, compute_zonal_mean_stats
 
 __all__ = [
-    "load_grid",
-    "load_dataset",
-    "is_healpix_spec",
-    "is_remote_uri",
-    "is_opendap_uri",
-    "is_kerchunk_reference",
-    "open_remote_store",
-    "is_scrip_weights",
-    "scrip_grid_from_weights",
-    "open_grid_object",
+    "RemapPlan",
+    "anomaly",
+    "anomaly_coverage_warning_codes",
     "attach_grid",
-    "parse_healpix_zoom",
+    "bias",
+    "compare_fields",
+    "compute_anomaly_coverage",
     "compute_area_stats",
-    "compute_mesh_coverage",
-    "mesh_coverage_warning_codes",
-    "mesh_is_closed",
-    "compute_profile_coverage",
-    "profile_coverage_warning_codes",
-    "compute_target_coverage",
-    "compute_scattered_coverage",
-    "method_is_conservative",
-    "compute_variable_info",
-    "compute_zonal_mean_stats",
-    "compute_zonal_anomaly_stats",
-    "compute_gradient",
+    "compute_azimuthal_mean",
     "compute_curl",
     "compute_divergence",
-    "compute_azimuthal_mean",
+    "compute_gradient",
+    "compute_mesh_coverage",
+    "compute_profile_coverage",
+    "compute_scattered_coverage",
+    "compute_subset_coverage",
+    "compute_target_coverage",
+    "compute_temporal_coverage",
+    "compute_variable_info",
+    "compute_zonal_anomaly_stats",
+    "compute_zonal_mean_stats",
+    "count_face_centers_in_bounds",
+    "cross_section",
+    "drop_phantom_topology_attrs",
+    "ensemble_mean",
+    "ensemble_spread",
+    "export_dataarray",
+    "export_dataset",
+    "export_fidelity",
+    "export_fidelity_warning_codes",
+    "grid_target_coverage",
+    "is_healpix_spec",
+    "is_kerchunk_reference",
+    "is_opendap_uri",
+    "is_remote_uri",
+    "is_scrip_weights",
+    "load_dataset",
+    "load_face_variable",
+    "load_grid",
+    "mesh_coverage_warning_codes",
+    "mesh_extent",
+    "mesh_is_closed",
+    "method_is_conservative",
+    "normalize_units",
+    "open_grid_object",
+    "open_remote_store",
+    "parse_healpix_zoom",
+    "pattern_correlation_fields",
+    "profile_coverage_warning_codes",
+    "regrid_dataset",
+    "regrid_elements",
+    "remap_coverage_warnings",
+    "remap_to_rectilinear",
+    "remap_variable",
+    "resolve_remap_plan",
+    "rmse",
+    "scrip_grid_from_weights",
+    "subset_bbox",
+    "subset_coverage_warning_codes",
+    "subset_near_point",
+    "subset_polygon",
+    "summarize_array",
+    "summarize_dataset",
+    "summarize_grid",
+    "temporal_coverage_warning_codes",
+    "temporal_mean",
+    "widen_narrow_fill_values",
+    "write_dataarray_artifact",
+    "write_dataset_artifact",
+    "write_grid_artifact",
+    "yac_unavailable_message",
 ]

@@ -5,8 +5,8 @@ from __future__ import annotations
 import warnings as _warnings_module
 from typing import Any, Callable, TypeVar
 
+from uxarray_mcp.core.coverage import compute_profile_coverage
 from uxarray_mcp.core.dims import reduce_to_face
-from uxarray_mcp.core.profile_coverage import compute_profile_coverage
 from uxarray_mcp.core.zonal import extract_profile
 
 #: Appended to every "not face-centered" refusal.
@@ -22,6 +22,23 @@ _REGRID_REPAIR = (
 )
 
 _T = TypeVar("_T")
+
+
+def _scientific_status(
+    warnings: list[str],
+    warning_codes: list[str],
+    scale_by_radius: bool,
+    scaling_applied: bool,
+) -> dict[str, Any]:
+    """Status block: a warning means the number is not physically interpretable."""
+    return {
+        "status": "warning" if warnings else "complete",
+        "physically_interpretable": not warnings,
+        "warning_codes": warning_codes,
+        "warnings": warnings,
+        "physical_scaling_requested": bool(scale_by_radius),
+        "physical_scaling_applied": bool(scaling_applied),
+    }
 
 
 def _call_capturing_warnings(fn: Callable[[], _T]) -> tuple[_T, list[str]]:
@@ -275,21 +292,13 @@ def compute_gradient(
         "component_warnings": uxarray_warnings,
         "reduced_dims": reduced_dims,
     }
-    from uxarray_mcp.provenance import attach_scientific_status
-
-    return attach_scientific_status(
-        result,
-        warnings=uxarray_warnings,
-        warning_codes=["SPHERE_RADIUS_UNAVAILABLE"] if uxarray_warnings else [],
-        extra={
-            # Requested and applied are different facts, and only the second
-            # one decides whether the derivative is per metre or per radian.
-            # ``curl``/``divergence`` already report both; reporting them here
-            # too is what lets the front door gate all three the same way.
-            "physical_scaling_requested": bool(scale_by_radius),
-            "physical_scaling_applied": bool(scale_by_radius and not uxarray_warnings),
-        },
+    result["scientific_status"] = _scientific_status(
+        uxarray_warnings,
+        ["SPHERE_RADIUS_UNAVAILABLE"] if uxarray_warnings else [],
+        scale_by_radius,
+        scale_by_radius and not uxarray_warnings,
     )
+    return result
 
 
 def compute_curl(
@@ -403,19 +412,13 @@ def compute_curl(
         "component_evidence": component_evidence,
         "reduced_dims": reduced_dims,
     }
-    from uxarray_mcp.provenance import attach_scientific_status
-
-    return attach_scientific_status(
-        result,
-        warnings=component_warnings,
-        warning_codes=warning_codes,
-        extra={
-            "physical_scaling_requested": bool(scale_by_radius),
-            "physical_scaling_applied": bool(
-                scale_by_radius and not deduped_uxarray_warnings
-            ),
-        },
+    result["scientific_status"] = _scientific_status(
+        component_warnings,
+        warning_codes,
+        scale_by_radius,
+        scale_by_radius and not deduped_uxarray_warnings,
     )
+    return result
 
 
 def compute_divergence(
@@ -522,17 +525,13 @@ def compute_divergence(
         "component_evidence": component_evidence,
         "reduced_dims": reduced_dims,
     }
-    from uxarray_mcp.provenance import attach_scientific_status
-
-    return attach_scientific_status(
-        output,
-        warnings=component_warnings,
-        warning_codes=warning_codes,
-        extra={
-            "physical_scaling_requested": bool(scale_by_radius),
-            "physical_scaling_applied": bool(scale_by_radius and not uxarray_warnings),
-        },
+    output["scientific_status"] = _scientific_status(
+        component_warnings,
+        warning_codes,
+        scale_by_radius,
+        scale_by_radius and not uxarray_warnings,
     )
+    return output
 
 
 def compute_azimuthal_mean(

@@ -1,26 +1,13 @@
-"""Classification of non-spatial dimensions shared by the domain modules.
+"""Classify non-spatial dimensions and collapse them to a single face slice.
 
-Every face-centered operator here -- polygon plotting, vector calculus, zonal
-profiles -- needs the same thing from a real model file: collapse each
-dimension that is not the face dimension down to a single index so the array
-is 1-D.
-
-Which index to use depends on what the dimension *is*. A time axis takes the
-caller's ``time_index``; a vertical axis takes ``level_index``; anything else
-takes 0, because neither selector says anything about it. Applying
-``time_index`` to every extra dimension -- which the plotting path used to do
--- silently hands back level 3 of a multi-level field when the caller asked
-for time step 3, and nothing in the output says so.
-
-That second half matters as much as the first: a collapse that is not
-reported is how a caller ends up believing one level is the whole answer. So
-every selection made here is returned alongside the selection itself, for the
-tool layer to put in its provenance.
+Time axes take ``time_index``, vertical axes ``level_index``, anything else 0;
+every selection made is returned so the caller can report it.
 """
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 FACE_DIMS = frozenset({"n_face", "nCells"})
 
