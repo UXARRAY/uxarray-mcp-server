@@ -15,7 +15,7 @@ USER_CONFIG_PATH = Path.home() / ".config" / "uxarray-mcp" / "config.yaml"
 #: How long to wait on a remote execution before giving up.
 #:
 #: The old default of 300 s was below the cost of an ordinary science request:
-#: the ten-year CONUS precipitation mean in docs/demo-gdex-conus-precip.md runs
+#: the ten-year CONUS precipitation mean in case-studies/conus-precipitation-gdex runs
 #: 464 s, so it raised "timed out after 300 seconds" *after* the worker had
 #: already done the work — the result was discarded, not unfinished. A timeout
 #: that fires on correct, completed work teaches users to raise it blindly, so

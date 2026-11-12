@@ -6,6 +6,17 @@ built against; see `docs/release.md`. Versions through `0.3.1` were SemVer.
 
 ## Unreleased
 
+### Removed
+- Research material that lived beside the server: `benchmarks/`, `evals/`,
+  `prototypes/`, `notebooks/`, `artifacts/`, the ERA5 remap case study and
+  its committed NetCDF/PNG data, eleven one-off HPC probe scripts, the
+  Docker image and its workflow, the upstream-polling workflows, the Sphinx
+  site, and `SETUP.sh`. All of it is preserved at the git tag
+  `archive/pre-v2` (commit `2f7eb6d`); nothing was lost, it just no longer
+  ships with the server. The CONUS precipitation case study stays.
+- The `openapi`, `transfer` and `docs` extras. Globus Transfer support is
+  removed from the server (see tag above for the implementation).
+
 ## 2026.10.1 — 2026-10-30
 ## 2026.10.0 — 2026-10-23
 ### Added

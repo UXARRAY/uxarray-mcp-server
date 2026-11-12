@@ -81,32 +81,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-openapi = [
-    "toolregistry-server[openapi]>=0.7.0",
-]
 hpc = [
-    "academy-py>=0.3.1",
     "globus-compute-sdk>=4.5.0",
-]
-# Moving files is separate from running code on them, and is done by running
-# the `globus` command-line client rather than by linking a second SDK. The CLI
-# owns the tokens, the consents and the session, so this package holds no auth
-# code at all -- which is the only reason a two-person project can offer data
-# movement without also signing up to track Globus's scope rules.
-transfer = [
-    "globus-cli>=3.30",
-]
-docs = [
-    "sphinx>=7.0",
-    "sphinx-book-theme>=1.1.0",
-    "myst-parser>=3.0",
 ]
 
 [project.scripts]
 uxarray-mcp = "uxarray_mcp.cli:main"
 
 [project.urls]
-Documentation = "https://uxarray-mcp-server.readthedocs.io"
 Source = "https://github.com/UXARRAY/uxarray-mcp-server"
 Tracker = "https://github.com/UXARRAY/uxarray-mcp-server/issues"
 
@@ -145,9 +127,9 @@ exclude = ["tests/", "docs/"]
 module = "yaml"
 ignore_missing_imports = true
 
+
 [[tool.mypy.overrides]]
-# academy is an optional HPC dependency; the fallback stubs use type: ignore
-# which are unused when academy is installed in the pre-commit env.
+# academy fallback stubs; removed with remote/agent.py in v2.
 module = "uxarray_mcp.remote.agent"
 warn_unused_ignores = false
 
@@ -159,10 +141,6 @@ build-backend = "uv_build"
 
 [tool.ruff.lint]
 extend-select = ["I"]
-# Notebooks (and their jupytext-paired .py scripts) intentionally scatter
-# imports across per-cell (# %%) blocks, so E402 (module-import-not-at-top)
-# is expected style there, not a lint violation.
-per-file-ignores = { "notebooks/*.py" = ["E402"], "notebooks/*.ipynb" = ["E402"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["uxarray_mcp"]

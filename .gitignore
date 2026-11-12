@@ -1,269 +1,32 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
-*.py[codz]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+*.py[cod]
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
+build/
+dist/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py.cover
-.hypothesis/
-.pytest_cache/
-cover/
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-#poetry.toml
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-#pdm.lock
-#pdm.toml
-.pdm-python
-.pdm-build/
-
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-#pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.envrc
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
-
-# Abstra
-# Abstra is an AI-powered process automation framework.
-# Ignore directories containing user credentials, local state, and settings.
-# Learn more at https://abstra.io/docs
-.abstra/
-
-# Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
-#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer,
-#  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
-
-# Ruff stuff:
-.ruff_cache/
-
-# User-specific HPC configuration (contains personal endpoint UUIDs)
-# Copy config.yaml.example to config.yaml and fill in your own values
-config.yaml
-
-# PyPI configuration file
-.pypirc
-
-# Cursor
-#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
-#  refer to https://docs.cursor.com/context/ignore-files
-.cursorignore
-.cursorindexingignore
-
-# Marimo
-marimo/_static/
-marimo/_lsp/
-__marimo__/
-
-# Local scratch — generated artifacts, debug probes
-tmp/
-chrysalis_result/
-workflow_state.txt
-
-# Companion paper/poster (separate git repo at outputs/)
-outputs/
-
-# Prototype convergence agent (lives outside the MCP server scope)
-scripts/convergence_agent/
-
-# Claude Code local configuration (IDE settings, permissions — machine-specific)
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
 .claude/
 
-# macOS metadata
-.DS_Store
-
-# Generated plots / scratch scripts dropped at repo root.
-# Figures published with a case study are committed past this with `git add -f`.
-*.png
-save_plots.py
-
-# Artifacts written by case-studies/conus-precipitation-gdex/scripts/reproduce_conus_case_study.py
-# next to the case study it reproduces. The run is the point; its output is not reviewed.
-case-studies/**/*-reproduced.json
-case-studies/conus-precipitation-gdex/conus-precip-1yr-1979.json
-
-# R session leftovers.
-.Rhistory
-
-
-# Eval result JSON files are per-run and regenerated by the runners.
-evals/results/
-
-# Paper drafts and supporting material (kept in a separate repo).
-papers/
-
-# Facility-native path manifest — account-specific absolute paths.
-# Copy artifacts/facility_matrix/native_paths.example.json to fill it in.
-artifacts/facility_matrix/native_paths.json
-
-# Heavy benchmark artifacts (generated meshes + run reports)
-benchmarks/heavy/meshes/
-benchmarks/heavy/results/
-
-# Work in progress kept on disk but deliberately not tracked: a parked feature
-# branch's patch plus one-off analysis scripts that read evals/results/, which
-# is itself ignored. They are notes to a future reader, not part of the package.
-artifacts/parked-cache-tier/
-artifacts/payload_audit/
-artifacts/repair_ablation/
-evals/tool_retrieval/compare_retrievers.py
-
-# Case-study inputs downloaded from a data archive (GDEX, ESGF, ...). These are
-# gigabyte-scale netCDF files reproducible from the URLs recorded in the case
-# study's methods section, so they are fetched, not tracked.
+# Local config and scratch (never commit endpoint UUIDs or scratch runs)
+config.yaml
+.env
+*.log
+tmp/
+outputs/
 data/
+
+# Case-study reproductions (the committed PNG/JSON are the reference run)
+case-studies/**/*-reproduced.json
+case-studies/**/*-reproduced.png
+case-studies/conus-precipitation-gdex/conus-precip-1yr-1979.json
+case-studies/conus-precipitation-gdex/conus-precip-1yr-1979.png

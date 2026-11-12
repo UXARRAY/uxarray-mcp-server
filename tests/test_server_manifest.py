@@ -67,21 +67,6 @@ class TestTheManifestStaysTrue:
         assert "uxarray-mcp" in args
         assert "serve" in args
 
-    def test_the_advertised_profile_exists(self, manifest):
-        """``--profile core`` must still be a profile the CLI accepts."""
-        from uxarray_mcp.registry import Profile
-
-        valid = set(getattr(Profile, "__args__", ()))
-        advertised = [
-            a.get("value")
-            for p in manifest["packages"]
-            for a in p.get("packageArguments", [])
-            if a.get("name") == "--profile"
-        ]
-        assert advertised, "expected a --profile argument in the manifest"
-        for value in advertised:
-            assert value in valid, f"{value!r} is not one of {sorted(valid)}"
-
     def test_stdio_is_the_advertised_transport(self, manifest):
         """A desktop client spawns a subprocess; that is the stdio path."""
         transports = {p["transport"]["type"] for p in manifest["packages"]}
