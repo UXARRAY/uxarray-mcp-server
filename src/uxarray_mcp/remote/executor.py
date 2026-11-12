@@ -108,11 +108,12 @@ def _classify(exc: BaseException, endpoint: str) -> RemoteError:
             f"{missing} does not exist on {endpoint}. Check the path with "
             "endpoint(action='probe_path').",
         )
-    if "No module named 'uxarray_mcp" in text or "No module named 'uxarray'" in text:
+    missing = re.search(r"No module named '([\w.]+)'", text)
+    if missing:
         return RemoteError(
             WORKER_MISSING_PACKAGE,
-            f"The worker on {endpoint} cannot import uxarray-mcp or uxarray. "
-            "Install on the worker env: pip install uxarray[geo,viz] && "
+            f"The worker on {endpoint} cannot import {missing.group(1)!r}. In the "
+            'worker env run: pip install "uxarray[geo,viz]" netCDF4 h5netcdf && '
             "pip install --no-deps uxarray-mcp, then restart the endpoint.",
         )
     if "Failed to start" in text or "SEMANTICALLY_INVALID" in text:

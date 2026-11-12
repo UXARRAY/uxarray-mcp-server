@@ -110,6 +110,11 @@ def test_timeout_returns_redeemable_handle(stub, config):
             "ModuleNotFoundError: No module named 'uxarray_mcp'",
             executor.WORKER_MISSING_PACKAGE,
         ),
+        (
+            'File "coverage.py", line 16\n    import numpy as np\n'
+            "ModuleNotFoundError: No module named 'numpy'",
+            executor.WORKER_MISSING_PACKAGE,
+        ),
         ("ComputeAPIError ENDPOINT_NOT_ONLINE", executor.NO_WORKER),
         (
             "('POST', '.../submit', 'Bearer', 422, 'SEMANTICALLY_INVALID', "
