@@ -1,7 +1,43 @@
 # HPC: running tools where the data lives
 
-Your data is on a cluster. The server sends a function to that cluster through
-Globus Compute and a result comes back; nothing is copied.
+## 0. Do you need this page?
+
+**If your mesh files are on your laptop, no.** Every tool runs locally and
+nothing here applies. Stop reading.
+
+**If your files live on a cluster** (GLADE at NCAR, `/lcrc` at ANL, …) and
+you don't want to copy terabytes down, this page is how the same tools run
+*there* while you keep talking to the AI client *here*.
+
+**What Globus Compute is, in one paragraph.** It is a service that lets a
+program on your laptop run a Python function on a machine you have an account
+on, and get the return value back, without ssh, without a job script, and
+without the laptop ever touching the cluster's network. On the cluster you
+start one long-lived process called an *endpoint* (as yourself, from a login
+node); it registers with Globus and waits. When this server needs to inspect
+a file at `/glade/...`, it hands Globus a small function plus the path; the
+endpoint runs it inside a job on your allocation and returns a few kilobytes
+of JSON (or a PNG). The data never moves; only the question and the answer do.
+
+**What this looks like day to day.** You call the same thirteen tools. A path
+under a registered prefix (`/glade/`, `/lcrc/`) is routed to that endpoint
+automatically; results say `venue: hpc:<name>`. The first call after an idle
+period waits for the scheduler (30–90 s on Slurm/PBS; seconds on a login-node
+endpoint). A call that takes longer than the timeout hands you an
+`operation_id` to collect later instead of failing.
+
+**What you set up, once.**
+
+| Where | What | Time |
+|---|---|---|
+| Globus web | an identity linked to your institution | 5 min |
+| Cluster login node | clone this repo, create a conda env with `uxarray[geo,viz]` + `uxarray-mcp --no-deps`, run `scripts/endpoint.sh install/configure/start` | 20–30 min |
+| Laptop | `uxarray-mcp endpoints add <name> <uuid> --path-prefix /glade/` then `uxarray-mcp doctor --endpoint <name>` | 2 min |
+
+Sections 2–4 walk through those three rows. Section 5 is maintenance (how
+to update the worker). Sections 6–7 are site specifics and YAC. Section 8
+is the troubleshooting table. Section 1 explains the mechanism for the
+curious; you can skip it.
 
 ## 1. How remote execution works
 

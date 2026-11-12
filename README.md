@@ -54,21 +54,25 @@ square metres, and plot the mesh over the North Atlantic."*
 
 Parameters, refusal rules and result shapes: [docs/tools.md](docs/tools.md).
 
-## HPC
+## When your data is on a cluster
 
-Register an endpoint and the server routes any path under its prefix there
-automatically; results come back with `venue: hpc:<name>` and the worker's
-versions.
+Everything above runs on your laptop. If the files live on an HPC system
+you can also run the *same tools there* without copying data: you start one
+process on the cluster (a [Globus Compute](https://www.globus.org/compute)
+endpoint, running as you), register it here, and any path under its prefix
+is routed to it automatically. Results come back as a few kB of JSON with
+`venue: hpc:<name>`; the first call after idling waits for the scheduler.
 
 ```bash
 uxarray-mcp endpoints add chrysalis <endpoint-uuid> --path-prefix /lcrc/
 uxarray-mcp doctor --endpoint chrysalis
 ```
 
-Standing up an endpoint, keeping its worker current, site notes for
-Chrysalis / Improv / Casper, and YAC: [docs/hpc.md](docs/hpc.md). Read
-[SECURITY.md](SECURITY.md) first — an endpoint is shell access as your HPC
-user.
+[docs/hpc.md](docs/hpc.md) starts with "do you need this?", then the three
+one-time setup steps, keeping the worker current, site notes for Chrysalis /
+Improv / Casper, YAC, and a troubleshooting table. Read
+[SECURITY.md](SECURITY.md) before sharing an endpoint — it is shell access
+as your HPC user.
 
 ## Layout
 
