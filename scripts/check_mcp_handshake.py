@@ -23,10 +23,10 @@ async def _check(command: str) -> None:
                     f"Missing required tools: {sorted(required - names)}"
                 )
             result = await session.call_tool(
-                "get_capabilities", {"grid_path": "healpix:1"}
+                "inspect_dataset", {"grid_path": "healpix:1"}
             )
             if result.is_error:
-                raise RuntimeError(f"get_capabilities failed: {result.content}")
+                raise RuntimeError(f"inspect_dataset failed: {result.content}")
             print(
                 f"MCP handshake passed: {initialized.server_info.name} "
                 f"with {len(listed.tools)} tools"
