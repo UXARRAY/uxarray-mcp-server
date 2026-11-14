@@ -15,7 +15,7 @@ USER_CONFIG_PATH = Path.home() / ".config" / "uxarray-mcp" / "config.yaml"
 #: How long to wait on a remote execution before giving up.
 #:
 #: The old default of 300 s was below the cost of an ordinary science request:
-#: the ten-year CONUS precipitation mean in docs/demo-gdex-conus-precip.md runs
+#: the ten-year CONUS precipitation mean in case-studies/conus-precipitation-gdex runs
 #: 464 s, so it raised "timed out after 300 seconds" *after* the worker had
 #: already done the work — the result was discarded, not unfinished. A timeout
 #: that fires on correct, completed work teaches users to raise it blindly, so
@@ -93,40 +93,6 @@ def _is_uuid(value: str) -> bool:
 
 
 @dataclass(frozen=True)
-class GlobusTransferProfile:
-    """Where an endpoint's files live, in Globus Transfer's terms.
-
-    Compute and Transfer do not share an identifier: a Globus Compute endpoint
-    UUID says nothing about which collection serves that filesystem, so the
-    collection is configured explicitly rather than guessed.
-
-    ``remote_write_root`` is the only place a transfer may write. It is a
-    containment boundary, not a default directory -- a path outside it is
-    refused rather than relocated into it. ``remote_read_root`` widens what may
-    be read without widening what may be written, which is the common case: a
-    project's whole data tree is readable and one scratch subtree is writable.
-    Left unset, reads are confined to the write root as well.
-
-    ``collection_roots`` translates filesystem paths into collection paths. A
-    collection usually exposes a subtree as its own ``/``, so
-    ``/lcrc/group/e3sm/x`` is ``/x`` to a collection rooted at
-    ``/lcrc/group/e3sm``. Paths under no configured root are passed through
-    unchanged, because a wrong translation is worse than none: Globus rejects a
-    path it does not recognize, while a silently rewritten one can name a real
-    file that was never asked for.
-    """
-
-    remote_collection_id: str
-    local_collection_id: str | None = None
-    remote_write_root: str | None = None
-    remote_read_root: str | None = None
-    collection_roots: tuple[str, ...] = ()
-    # Optional containment for this machine's side of a transfer. Unset means
-    # the local filesystem is treated the way every other tool here treats it.
-    local_root: str | None = None
-
-
-@dataclass(frozen=True)
 class EndpointProfile:
     """Named Globus Compute endpoint profile."""
 
@@ -134,7 +100,7 @@ class EndpointProfile:
     endpoint_id: str
     path_prefixes: tuple[str, ...] = ()
     timeout_seconds: int | None = None
-    globus_transfer: GlobusTransferProfile | None = None
+    provider: str | None = None  # slurm | pbs | local, when known
     # Multi-user endpoints refuse a submit that carries no user_endpoint_config
     # ("did not signal readiness", HTTP 422) because the child endpoint is only
     # spawned once the client asks for one. An empty mapping is a valid ask and
@@ -326,34 +292,6 @@ def _coerce_prefixes(value: Any) -> tuple[str, ...]:
     return ()
 
 
-def _parse_transfer_profile(value: Any) -> GlobusTransferProfile | None:
-    """Read one endpoint's ``globus_transfer`` block, or nothing.
-
-    A block without ``remote_collection_id`` is dropped rather than half-built:
-    every transfer names a collection, so a profile that cannot is not a
-    profile, and the tools that read this treat ``None`` as "this endpoint does
-    not do transfers" -- which is the honest answer.
-    """
-    if not isinstance(value, dict):
-        return None
-    collection_id = value.get("remote_collection_id") or value.get("collection_id")
-    if not collection_id:
-        return None
-    local_collection_id = value.get("local_collection_id")
-    return GlobusTransferProfile(
-        remote_collection_id=str(collection_id),
-        local_collection_id=(str(local_collection_id) if local_collection_id else None),
-        remote_write_root=(
-            str(value["remote_write_root"]) if value.get("remote_write_root") else None
-        ),
-        remote_read_root=(
-            str(value["remote_read_root"]) if value.get("remote_read_root") else None
-        ),
-        collection_roots=_coerce_prefixes(value.get("collection_roots")),
-        local_root=str(value["local_root"]) if value.get("local_root") else None,
-    )
-
-
 def _parse_endpoint_profiles(raw_endpoints: Any) -> dict[str, EndpointProfile]:
     if not isinstance(raw_endpoints, dict):
         return {}
@@ -372,7 +310,9 @@ def _parse_endpoint_profiles(raw_endpoints: Any) -> dict[str, EndpointProfile]:
             endpoint_id=str(endpoint_id),
             path_prefixes=_coerce_prefixes(raw_profile.get("path_prefixes")),
             timeout_seconds=int(timeout) if timeout is not None else None,
-            globus_transfer=_parse_transfer_profile(raw_profile.get("globus_transfer")),
+            provider=(
+                str(raw_profile["provider"]) if raw_profile.get("provider") else None
+            ),
             user_endpoint_config=(
                 dict(raw_user_config) if isinstance(raw_user_config, dict) else None
             ),

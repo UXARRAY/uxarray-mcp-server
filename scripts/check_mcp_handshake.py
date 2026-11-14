@@ -11,22 +11,22 @@ from mcp.client.stdio import stdio_client
 
 
 async def _check(command: str) -> None:
-    server = StdioServerParameters(command=command, args=["serve", "--profile", "core"])
+    server = StdioServerParameters(command=command, args=["serve"])
     async with stdio_client(server) as (read, write):
         async with ClientSession(read, write) as session:
             initialized = await session.initialize()
             listed = await session.list_tools()
             names = {tool.name for tool in listed.tools}
-            required = {"get_capabilities", "run_analysis"}
+            required = {"inspect_dataset", "compute", "plot"}
             if not required.issubset(names):
                 raise RuntimeError(
                     f"Missing required tools: {sorted(required - names)}"
                 )
             result = await session.call_tool(
-                "get_capabilities", {"grid_path": "healpix:1"}
+                "inspect_dataset", {"grid_path": "healpix:1"}
             )
             if result.is_error:
-                raise RuntimeError(f"get_capabilities failed: {result.content}")
+                raise RuntimeError(f"inspect_dataset failed: {result.content}")
             print(
                 f"MCP handshake passed: {initialized.server_info.name} "
                 f"with {len(listed.tools)} tools"

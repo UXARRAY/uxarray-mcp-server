@@ -9,10 +9,10 @@
 # and library paths already filled in.
 #
 # The MCP server repo does NOT need to be cloned on the HPC machine for remote
-# analysis -- functions are serialised via AllCodeStrategies and run against
-# whatever is installed in the worker environment. You only need this one file.
-# Never add uxarray_mcp itself to the worker's PYTHONPATH; it drags in a
-# pydantic that conflicts with the one globus-compute-endpoint wants.
+# analysis -- the shim function is serialised via AllCodeStrategies and does
+# `from uxarray_mcp.core import ops` on the worker. So the worker env needs
+# uxarray-mcp installed, but with --no-deps: the full dependency tree drags in
+# a pydantic that conflicts with the one globus-compute-endpoint wants.
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
@@ -182,7 +182,11 @@ _install() {
   # hvplot and geopandas into extras; without them the worker imports
   # uxarray happily and then fails mid-render on the first coastline or
   # HEALPix grid. pyproject.toml floors the same spec.
-  python -m pip install globus-compute-endpoint "uxarray[geo,viz]" xarray netCDF4 h5netcdf matplotlib
+  python -m pip install "uxarray[geo,viz]" netCDF4 h5netcdf globus-compute-endpoint
+  # The worker imports uxarray_mcp.core. --no-deps keeps the server's
+  # mcp/toolregistry/pydantic tree off the worker, where it conflicts with
+  # globus-compute-endpoint.
+  python -m pip install --no-deps uxarray-mcp
   echo
   echo "Installed into: $(python -c 'import sys; print(sys.prefix)')"
   python -c 'import sys; print("python", ".".join(map(str, sys.version_info[:3])))'
@@ -342,6 +346,12 @@ _check() {
       _check_line "ok " "uxarray importable"
     else
       _check_line TODO "uxarray not importable in the worker env"
+      missing=1
+    fi
+    if python -c 'import uxarray_mcp.core' 2>/dev/null; then
+      _check_line "ok " "uxarray_mcp.core importable"
+    else
+      _check_line TODO "uxarray_mcp.core not importable -- run: pip install --no-deps uxarray-mcp"
       missing=1
     fi
   else

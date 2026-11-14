@@ -1,376 +1,153 @@
-"""Verify the toolregistry-based server builds correctly.
-
-These tests replace the previous FastMCP-based assertions. They
-exercise ``uxarray_mcp.registry.build_registry`` and
-``uxarray_mcp.app.make_registry`` to confirm the tool surface
-matches the agreed design spec.
-"""
+"""The surface clients receive: registry shape, schema bytes, MCP wire, CLI."""
 
 from __future__ import annotations
 
-import inspect
 import json
 
 import pytest
+from toolregistry_server.route_table import RouteTable
 
-from uxarray_mcp.app import make_mcp_server, make_registry
-from uxarray_mcp.registry import (
-    _CONDITIONAL_TOOLS,
-    _CONTROL_TOOLS,
-    _CORE_EXTRA_TOOLS,
-    _DEFERRED_TOOLS,
-    _PROMPT_TOOLS,
-    FRONTDOOR_NAMES,
-    build_registry,
-)
+from tests.mcp_harness import connect, wire
+from uxarray_mcp import __version__
+from uxarray_mcp.server.app import make_registry
+from uxarray_mcp.server.registry import TOOL_NAMES
 
-EXPECTED_FRONTDOOR = 11
-EXPECTED_CONTROL = 12  # 8 session + 4 hpc
-EXPECTED_CORE_EXTRA = 3  # list_datasets + 2 response-contract tools
-EXPECTED_PROMPTS = 7  # first_look, vorticity_analysis, cyclone_structure,
-# eddy_activity, model_evaluation, climatology_anomaly, hpc_diagnose
-EXPECTED_DEFERRED = 35  # +zonal_anomaly, +remap_to_rectilinear, +check_remote_yac,
-# +subset_advanced and +regrid_elements, which close the bounding_circle /
-# nearest_neighbor / topological_mean gaps found by replaying the
-# uxarray-community notebooks. Deferred rather than front-door on purpose:
-# #89 already measures run_analysis as too large to describe itself.
+#: Sent on every request; the old 33-tool surface was 36,271 bytes.
+SPEC_BYTE_BUDGET = 16_000
 
 
-@pytest.fixture(autouse=True)
-def _no_transfer_tools(monkeypatch):
-    """Pin the conditional transfer tools off for the count assertions.
-
-    They register only when an endpoint declares a ``globus_transfer`` block,
-    which is a property of whoever is running the tests, not of the code. The
-    counts below are about the tool plan; ``test_transfer_tools.py`` is where
-    the conditional registration is exercised in both states.
-    """
-    monkeypatch.setattr("uxarray_mcp.registry._transfers_are_configured", lambda: False)
+@pytest.fixture(scope="module")
+def routes():
+    return RouteTable(make_registry()).list_routes()
 
 
-# ---------------------------------------------------------------------------
-# Coverage invariants
-# ---------------------------------------------------------------------------
-
-
-def test_frontdoor_count():
-    assert len(FRONTDOOR_NAMES) == EXPECTED_FRONTDOOR
-
-
-def test_control_count():
-    total = sum(len(v) for v in _CONTROL_TOOLS.values())
-    assert total == EXPECTED_CONTROL
-
-
-def test_prompt_count():
-    total = sum(len(v) for v in _PROMPT_TOOLS.values())
-    assert total == EXPECTED_PROMPTS
-
-
-def test_namespace_plan_covers_every_public_tool():
-    """Every public tool is reachable through one of the buckets."""
-    import uxarray_mcp.tools as tools_mod
-
-    control = {n for v in _CONTROL_TOOLS.values() for n in v}
-    core_extra = {n for v in _CORE_EXTRA_TOOLS.values() for n in v}
-    deferred = {n for v in _DEFERRED_TOOLS.values() for n in v}
-    conditional = {n for v in _CONDITIONAL_TOOLS.values() for n in v}
-
-    covered = FRONTDOOR_NAMES | control | core_extra | deferred | conditional
-    missing = set(tools_mod.__all__) - covered
-    assert not missing, f"uncovered public tools: {sorted(missing)}"
-
-
-def test_buckets_are_disjoint():
-    """A tool must not appear in two buckets."""
-    control = {n for v in _CONTROL_TOOLS.values() for n in v}
-    core_extra = {n for v in _CORE_EXTRA_TOOLS.values() for n in v}
-    deferred = {n for v in _DEFERRED_TOOLS.values() for n in v}
-
-    overlap = (
-        (FRONTDOOR_NAMES & control)
-        | (FRONTDOOR_NAMES & core_extra)
-        | (FRONTDOOR_NAMES & deferred)
-        | (control & core_extra)
-        | (control & deferred)
-        | (core_extra & deferred)
-    )
-    assert not overlap, f"overlapping tools: {sorted(overlap)}"
-
-
-# ---------------------------------------------------------------------------
-# Profile shape
-# ---------------------------------------------------------------------------
-
-
-def test_core_profile_shape():
-    registry = make_registry(profile="core")
-    status = registry.get_tools_status()
-    enabled = [s for s in status if s["enabled"] and not s["defer"]]
-    deferred = [s for s in status if s["enabled"] and s["defer"]]
-
-    expected = (
-        EXPECTED_FRONTDOOR + EXPECTED_CONTROL + EXPECTED_CORE_EXTRA + EXPECTED_PROMPTS
-    )
-    assert len(enabled) == expected, (
-        f"expected {expected} enabled, got {len(enabled)}: "
-        f"{sorted(s['name'] for s in enabled)}"
-    )
-    assert deferred == []
-    assert "discover_tools" not in registry.list_tools()
-
-
-def test_deferred_full_profile_shape():
-    registry = build_registry(profile="deferred-full")
-    status = registry.get_tools_status()
-    enabled_visible = [s for s in status if s["enabled"] and not s["defer"]]
-    enabled_deferred = [s for s in status if s["enabled"] and s["defer"]]
-
-    expected_visible = (
-        EXPECTED_FRONTDOOR
-        + EXPECTED_CONTROL
-        + EXPECTED_CORE_EXTRA
-        + EXPECTED_PROMPTS
-        # discover_tools, plus call_deferred — toolregistry 0.18 registers
-        # the two together as INFRASTRUCTURE_TOOLS, because a deferred tool
-        # that discovery can find but nothing can invoke is not reachable.
-        + 2
-    )
-    assert len(enabled_visible) == expected_visible
-    assert len(enabled_deferred) == EXPECTED_DEFERRED
-    assert "discover_tools" in registry.list_tools()
-    assert "call_deferred" in registry.list_tools()
-
-
-def test_unknown_profile_raises():
-    with pytest.raises(ValueError):
-        build_registry(profile="bogus")  # type: ignore[arg-type]
-
-
-# ---------------------------------------------------------------------------
-# Front-door surface — backward compat checks
-# ---------------------------------------------------------------------------
-
-
-def test_public_tool_surface_includes_gateway_tools():
-    """All 11 original gateway tools are present at the top level."""
-    registry = make_registry(profile="core")
-    tools = registry.list_tools()
-    for name in FRONTDOOR_NAMES:
-        assert name in tools, f"gateway tool {name!r} missing from core"
-
-
-def test_no_hpc_suffixed_tool_names():
-    """The tool surface should not expose ``*_hpc`` duplicates."""
-    registry = make_registry(profile="core")
-    suffixed = [n for n in registry.list_tools() if n.endswith("_hpc")]
-    assert suffixed == [], f"Unexpected _hpc-suffixed tools: {suffixed}"
-
-
-def test_low_level_implementation_tools_hidden_in_core():
-    """Implementation verbs are not directly visible in core profile."""
-    registry = make_registry(profile="core")
-    tools = set(registry.list_tools())
-    hidden = {
-        "inspect_mesh",
-        "calculate_area",
-        "calculate_curl",
-        "plot_mesh",
-        "plot_variable",
+def _spec(route) -> dict:
+    return {
+        "name": route.tool_name,
+        "description": route.description,
+        "parameters": route.parameters_schema,
     }
-    assert hidden.isdisjoint(tools), f"leaked: {hidden & tools}"
 
 
-def _result_text(entry: object) -> str:
-    """Unwrap an ``execute_tool_calls`` entry.
-
-    toolregistry 0.15 returns a ``ToolCallResult`` where 0.11 returned a bare
-    string; accept either so the test tracks the payload, not the wrapper.
-    """
-    return getattr(entry, "result", entry)  # type: ignore[return-value]
+def test_exactly_the_documented_tools(routes):
+    assert [r.tool_name for r in routes] == list(TOOL_NAMES)
+    assert len(routes) == 13
 
 
-def test_front_door_dispatch_tools_accept_remote_kwargs():
-    """Remote execution is available through the intent-shaped tools."""
-    registry = make_registry(profile="core")
-    for name in ("analyze_dataset", "run_analysis", "plot_dataset"):
-        tool = registry.get_tool(name)
-        assert tool is not None, name
-        # toolregistry 0.15 wraps ``callable`` as (*args, **kwargs); the
-        # declared surface lives on ``fn`` and in the generated schema.
-        sig = inspect.signature(tool.fn)
-        assert "use_remote" in sig.parameters, name
-        assert "endpoint" in sig.parameters, name
-        assert "session_id" in sig.parameters, name
+def test_spec_stays_within_budget(routes):
+    total = sum(len(json.dumps(_spec(r))) for r in routes)
+    assert total <= SPEC_BYTE_BUDGET, f"{total} bytes"
 
 
-# ---------------------------------------------------------------------------
-# Prompt-as-tool
-# ---------------------------------------------------------------------------
+def test_served_schema_is_trimmed(routes):
+    for r in routes:
+        props = r.parameters_schema.get("properties") or {}
+        assert "toolcall_reason" not in props, r.tool_name
+        assert not any("title" in v for v in props.values() if isinstance(v, dict)), (
+            r.tool_name
+        )
+    plot = next(r for r in routes if r.tool_name == "plot")
+    assert plot.parameters_schema["properties"]["title"]["type"] == "string"
+    compute = next(r for r in routes if r.tool_name == "compute")
+    assert (
+        compute.parameters_schema["properties"]["lat_spec"]["anyOf"][1]["type"]
+        == "array"
+    )
 
 
-def test_prompt_tools_registered_in_core():
-    """Former @mcp.prompt() decorators are now prompt/ namespace tools."""
-    registry = make_registry(profile="core")
-    tools = registry.list_tools()
-    sep = registry._name_sep
-    for name in (
-        "first_look",
-        "vorticity_analysis",
-        "cyclone_structure",
-        "eddy_activity",
-        "model_evaluation",
-        "climatology_anomaly",
-        "hpc_diagnose",
-    ):
-        assert f"prompt{sep}{name}" in tools, f"prompt tool {name} missing"
+def test_every_tool_has_a_description_that_names_its_choices(routes):
+    for r in routes:
+        assert r.description and len(r.description) > 40, r.tool_name
 
 
-def test_prompt_tool_returns_text():
-    """Prompt tools return instruction text, not analysis results."""
-    registry = make_registry(profile="core")
-    sep = registry._name_sep
-    result = registry.execute_tool_calls(
-        [
-            {
-                "id": "call_1",
-                "function": {
-                    "name": f"prompt{sep}first_look",
-                    "arguments": json.dumps({"path": "/tmp/test.nc"}),
+def test_tags_mark_writers_and_slow_tools():
+    registry = make_registry()
+    tags = {
+        name: {t.value for t in registry.get_tool(name).metadata.tags}
+        for name in TOOL_NAMES
+    }
+    assert "read_only" in tags["inspect_dataset"] and "read_only" not in tags["export"]
+    assert "slow" in tags["remap"] and "slow" not in tags["list_datasets"]
+
+
+async def test_mcp_wire_initialize_and_list_tools():
+    async with connect() as (session, init):
+        info = wire(init)
+        assert info["serverInfo"]["name"] == "UXarray MCP"
+        assert info["serverInfo"]["version"] == __version__
+        listed = wire(await session.list_tools())
+        names = [t["name"] for t in listed["tools"]]
+        assert names == list(TOOL_NAMES)
+        for tool in listed["tools"]:
+            assert tool["inputSchema"]["type"] == "object"
+            assert "readOnlyHint" in tool.get("annotations", {})
+
+
+async def test_mcp_wire_call_returns_structured_result(state_dir):
+    async with connect() as (session, _):
+        res = wire(
+            await session.call_tool(
+                "compute",
+                {
+                    "statistic": "area",
+                    "grid_path": "healpix:1",
+                    "sphere_radius": 6371000.0,
                 },
-            }
-        ]
-    )
-    text = _result_text(result["call_1"])
-    assert "first-look analysis" in text.lower()
-    assert "/tmp/test.nc" in text
+            )
+        )
+        assert not res.get("isError")
+        payload = res.get("structuredContent") or json.loads(res["content"][0]["text"])
+        assert payload["status"] == "complete" and payload["n_face"] == 48
 
 
-def test_science_workflow_prompts_reference_real_operations():
-    """Each guided science prompt should chain real run_analysis operations."""
-    from uxarray_mcp.registry import (
-        climatology_anomaly,
-        cyclone_structure,
-        eddy_activity,
-        model_evaluation,
-    )
-
-    cyclone = cyclone_structure(
-        "g.nc", "d.nc", "wind", 280.0, 25.0, u_var="u", v_var="v"
-    )
-    assert 'operation="azimuthal_mean"' in cyclone
-    assert 'operation="curl"' in cyclone  # wind components present
-
-    # Without wind, the vorticity step is omitted.
-    cyclone_no_wind = cyclone_structure("g.nc", "d.nc", "pressure", 280.0, 25.0)
-    assert 'operation="curl"' not in cyclone_no_wind
-
-    eddy = eddy_activity("g.nc", "d.nc", "z500")
-    assert 'operation="zonal_anomaly"' in eddy
-    assert 'operation="gradient"' in eddy
-
-    evaluation = model_evaluation("g.nc", "model.nc", "ref.nc", "t2m")
-    for op in ("bias", "rmse", "pattern_correlation"):
-        assert f'operation="{op}"' in evaluation
-
-    clim = climatology_anomaly("d.nc", "t2m", grid_path="g.nc")
-    assert 'operation="temporal_mean"' in clim
-    assert 'operation="anomaly"' in clim
-    assert 'operation="calculate_zonal_mean"' in clim  # grid_path provided
+async def test_mcp_wire_refusal_is_a_result_not_an_error(state_dir):
+    async with connect() as (session, _):
+        res = wire(
+            await session.call_tool(
+                "compute", {"statistic": "area", "grid_path": "healpix:1"}
+            )
+        )
+        assert not res.get("isError")
+        payload = res.get("structuredContent") or json.loads(res["content"][0]["text"])
+        assert payload["outcome"] == "input_required"
 
 
-# ---------------------------------------------------------------------------
-# Policy tags
-# ---------------------------------------------------------------------------
+async def test_mcp_wire_plot_returns_an_image(state_dir):
+    async with connect() as (session, _):
+        res = wire(
+            await session.call_tool("plot", {"kind": "mesh", "grid_path": "healpix:1"})
+        )
+        types = [c["type"] for c in res["content"]]
+        assert "image" in types and "text" in types
 
 
-def test_set_execution_mode_is_file_system():
-    from toolregistry.tool import ToolTag
+def test_openapi_exposes_every_tool_with_hints():
+    from toolregistry_server.adapters.openapi.spec import build_openapi_schema
 
-    registry = build_registry(profile="core")
-    sep = registry._name_sep
-    tool = registry.get_tool(f"hpc{sep}set_execution_mode")
-    assert tool is not None
-    assert ToolTag.FILE_SYSTEM.value in tool.metadata.all_tags
-
-
-def test_session_tools_are_file_system():
-    from toolregistry.tool import ToolTag
-
-    registry = build_registry(profile="core")
-    sep = registry._name_sep
-    # Session tools persist/read records on disk, so they must carry
-    # FILE_SYSTEM in addition to stateful / read-only.
-    for name in (
-        "create_session",
-        "register_dataset",
-        "reset_session_state",
-        "get_session_state",
-        "get_result_handle",
-        "get_operation_status",
-        "list_operations",
-        "get_workflow_status",
-    ):
-        tool = registry.get_tool(f"session{sep}{name}")
-        assert tool is not None, name
-        assert ToolTag.FILE_SYSTEM.value in tool.metadata.all_tags, name
+    spec = build_openapi_schema(RouteTable(make_registry()))
+    paths = spec["paths"]
+    assert {f"/tools/default/{n}" for n in TOOL_NAMES} <= set(paths)
+    assert paths["/tools/default/export"]["post"]["x-read-only"] is False
+    assert paths["/tools/default/inspect_dataset"]["post"]["x-read-only"] is True
 
 
-def test_get_execution_mode_is_file_system_and_network():
-    from toolregistry.tool import ToolTag
+def test_cli_parser_has_only_the_kept_commands():
+    from uxarray_mcp.cli import build_parser
 
-    registry = build_registry(profile="core")
-    sep = registry._name_sep
-    # Reads config from disk and queries the Globus Compute endpoint when one
-    # is configured, so it touches both the filesystem and the network.
-    tool = registry.get_tool(f"hpc{sep}get_execution_mode")
-    assert tool is not None
-    assert ToolTag.FILE_SYSTEM.value in tool.metadata.all_tags
-    assert ToolTag.NETWORK.value in tool.metadata.all_tags
-
-
-def test_scientific_agent_is_experimental_and_deferred():
-    registry = build_registry(profile="deferred-full")
-    sep = registry._name_sep
-    tool = registry.get_tool(f"agent{sep}run_scientific_agent")
-    assert tool is not None
-    assert "experimental" in tool.metadata.custom_tags
-    assert tool.metadata.defer is True
+    parser = build_parser()
+    sub = next(a for a in parser._actions if a.dest == "command")
+    assert set(sub.choices) == {
+        "serve",
+        "openapi",
+        "endpoints",
+        "doctor",
+        "install-claude",
+    }
+    assert parser.parse_args(["serve"]).transport == "stdio"
 
 
-# ---------------------------------------------------------------------------
-# Live call
-# ---------------------------------------------------------------------------
+def test_cli_endpoints_list_without_config(capsys, tmp_path, monkeypatch):
+    from uxarray_mcp.cli import main
 
-
-def test_live_call_through_registry():
-    """Side-effect-free tool round-trips through the registry."""
-    registry = make_registry(profile="core")
-    sep = registry._name_sep
-    result = registry.execute_tool_calls(
-        [
-            {
-                "id": "call_1",
-                "function": {
-                    "name": f"hpc{sep}get_execution_mode",
-                    "arguments": "{}",
-                },
-            }
-        ]
-    )
-    payload = json.loads(_result_text(result["call_1"]))
-    assert "_provenance" in payload
-    assert payload["_provenance"]["tool"] == "get_execution_mode"
-    assert payload["mode"] in {"local", "auto", "remote"}
-
-
-# ---------------------------------------------------------------------------
-# MCP server construction
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_mcp_server_constructs():
-    """make_mcp_server() returns a working MCP Server object."""
-    server = make_mcp_server(profile="core")
-    assert server.name == "UXarray MCP"
+    assert main(["endpoints", "list"]) == 0
+    assert "No endpoints configured" in capsys.readouterr().out

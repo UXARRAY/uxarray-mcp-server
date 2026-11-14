@@ -9,7 +9,7 @@ USERNAME="${NCAR_USERNAME:-$USER}"   # override with NCAR_USERNAME if it differs
 # ---------------------------------------------------------------------------
 
 ENDPOINT_NAME="${ENDPOINT_NAME:-ucar-uxarray-yac}"
-CONDA_ENV="${CONDA_ENV:-/glade/work/$USERNAME/conda-envs/uxarray_dev}"
+CONDA_ENV="${CONDA_ENV:-/glade/work/$USERNAME/conda-envs/uxarray_312}"
 
 # YAC buys conservative remapping and nothing else. It is a separate build that
 # most people should skip: every tool except method="conservative" and the
@@ -38,18 +38,13 @@ YAC_PREFIX="$HOME/opt/yac-$YAC_VERSION"
 YAC_ACTIVATE="$YAC_PREFIX/activate-yac.sh"
 TMUX_SESSION="uxarray-endpoint"
 # NOTE: the repo is cloned on Casper only because this script lives in it. The
-# MCP server itself must never be importable by the worker: remote functions are
-# serialised via AllCodeStrategies and run with only uxarray + numpy +
-# matplotlib installed in the conda env. Never add uxarray_mcp to PYTHONPATH on
-# the worker — it causes pydantic version conflicts.
-#
-# One exception, and it is metadata only. The `uxarray-mcp` *distribution* must
-# stay installed in the conda env, because every remote_* function reports
-# provenance through an inlined importlib.metadata.version("uxarray-mcp") that
-# has no fallback — remove it and every tool call raises PackageNotFoundError
-# after doing all its work. Install it --no-deps so the metadata exists without
-# the toolregistry/pydantic tree. scripts/ucar_update.sh does this correctly;
-# do not hand-roll the pip line.
+# shim function is serialised via AllCodeStrategies and does
+# `from uxarray_mcp.core import ops` on the worker, so `uxarray-mcp` must be
+# installed in the conda env -- but with --no-deps. The full dependency tree
+# (mcp, toolregistry, toolregistry-server) pins a pydantic that conflicts with
+# globus-compute-endpoint's. scripts/ucar_update.sh does this correctly; do not
+# hand-roll the pip line. worker_init unsets PYTHONPATH so nothing from a
+# checkout in $HOME shadows the installed packages.
 #
 # NOTE: this script changes no versions. `restart` only replaces the worker
 # processes so they re-import what is already on disk. To move a version, use
@@ -71,7 +66,7 @@ processes. To update uxarray or uxarray-mcp on the worker, use
 Environment overrides:
   ENDPOINT_NAME   Globus Compute endpoint profile name (default: ucar-uxarray-yac)
   NCAR_USERNAME   NCAR login, if it differs from $USER
-  CONDA_ENV       Worker conda env (default: /glade/work/$USER/conda-envs/uxarray_dev)
+  CONDA_ENV       Worker conda env (default: /glade/work/$USER/conda-envs/uxarray_312)
   WITH_YAC        1 to build YAC into worker_init (default: 0 -- see below)
   YAC_VERSION     YAC prefix under ~/opt to use when WITH_YAC=1 (default: 3.20.2)
 
@@ -178,8 +173,8 @@ _check_mpi() {
     echo "  if conservative remaps still fail, look at memory next."
   elif [[ "$unset_ok" == "1" ]]; then
     echo "VERDICT: a stale PMI_FD is the problem, and unsetting it fixes it."
-    echo "  uxarray-mcp >= 2026.10.1 does this itself before every YAC remap,"
-    echo "  so first check the endpoint is not running an older server."
+    echo "  The uxarray-mcp shim does this itself before every remote operation,"
+    echo "  so first check the worker is not running an older uxarray-mcp."
     echo "  To fix it at the endpoint, add to worker_init:"
     echo "      unset PMI_FD PMI_RANK PMI_SIZE"
     echo "  Then: $(basename "$0") restart"

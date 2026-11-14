@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Reproduce all results in case-studies/conus-precipitation-gdex/README.md.
 
 Runs remote HPC operations against Casper at NSF NCAR via Globus Compute
@@ -13,7 +12,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 GRID_PATH = (
     "/glade/p/cesmdata/cseg/inputdata/share/scripgrids/ne120np4_pentagons_100310.nc"
@@ -36,6 +35,10 @@ CMAP = "YlGnBu"
 WIDTH = 1000
 HEIGHT = 560
 
+# How long each get_operation() call blocks while a remote task that outlived
+# the endpoint timeout keeps running.
+POLL_WAIT_SECONDS = 60.0
+
 
 def get_data_paths(start_year: int = 1979, end_year: int = 1988) -> list[str]:
     paths = []
@@ -45,91 +48,183 @@ def get_data_paths(start_year: int = 1979, end_year: int = 1988) -> list[str]:
     return paths
 
 
-def run_act1() -> Dict[str, Any]:
-    """Act I: Remote capabilities query."""
+def wait_for_operation(result: dict[str, Any]) -> dict[str, Any]:
+    """Poll get_operation until a `status: running` result finishes."""
+    from uxarray_mcp.server import tools
+
+    while isinstance(result, dict) and result.get("status") == "running":
+        op_id = result.get("operation_id")
+        if not op_id:
+            break
+        print(f"... still running on the worker (operation {op_id}); waiting")
+        result = tools.get_operation(operation_id=op_id, wait_seconds=POLL_WAIT_SECONDS)
+    return result
+
+
+def run_act1() -> dict[str, Any]:
+    """Act I: Remote mesh inspection."""
     print("=" * 70)
-    print("ACT I: Remote Capabilities Query")
+    print("ACT I: Remote Mesh Inspection")
     print(f"Grid: {GRID_PATH}")
     print(f"Endpoint: {ENDPOINT}")
     print("=" * 70)
 
-    from uxarray_mcp.tools.capabilities import get_capabilities
+    from uxarray_mcp.server import tools
 
     t0 = time.time()
-    res = get_capabilities(
+    res = tools.inspect_dataset(
         grid_path=GRID_PATH,
         use_remote=True,
         endpoint=ENDPOINT,
     )
+    res = wait_for_operation(res)
     elapsed = time.time() - t0
 
-    grid_summary = res.get("grid_summary") or {}
     prov = res.get("_provenance") or {}
+    remote = prov.get("remote") or {}
 
     print(f"ELAPSED           {elapsed:.1f} s")
-    print(f"format            {grid_summary.get('format')}")
-    print(f"n_face            {grid_summary.get('n_face')}")
-    print(f"n_node            {grid_summary.get('n_node')}")
-    print(f"n_edge            {grid_summary.get('n_edge')}")
-    print(f"execution_venue   {prov.get('execution_venue')}")
-    print(f"applicable_tools  {len(res.get('mcp_server_tools') or [])} tools")
+    print(f"format            {res.get('format')}")
+    print(f"n_face            {res.get('n_face')}")
+    print(f"n_node            {res.get('n_node')}")
+    print(f"n_edge            {res.get('n_edge')}")
+    print(f"size_class        {res.get('size_class')}")
+    print(f"plot_hint         {res.get('plot_hint')}")
+    print(f"venue             {prov.get('venue')}")
+    print(f"worker            {remote.get('hostname')}")
+    print(
+        f"worker versions   python {remote.get('python_version')}   "
+        f"uxarray {remote.get('uxarray_version')}"
+    )
     print("-" * 70)
 
-    assert grid_summary.get("n_face") == 777602, (
-        f"Expected 777602 faces, got {grid_summary.get('n_face')}"
+    assert res.get("n_face") == 777602, (
+        f"Expected 777602 faces, got {res.get('n_face')}"
     )
-    assert grid_summary.get("n_node") == 780456, (
-        f"Expected 780456 nodes, got {grid_summary.get('n_node')}"
+    assert res.get("n_node") == 780456, (
+        f"Expected 780456 nodes, got {res.get('n_node')}"
     )
-    assert grid_summary.get("n_edge") == 2329471, (
-        f"Expected 2329471 edges, got {grid_summary.get('n_edge')}"
+    assert res.get("n_edge") == 2329471, (
+        f"Expected 2329471 edges, got {res.get('n_edge')}"
     )
     print("✓ Act I checks passed successfully!")
     return res
 
 
-def extract_plot_result(mcp_contents: list[Any]) -> tuple[Dict[str, Any], bytes | None]:
-    meta: Dict[str, Any] = {}
+def _decode_png(data: Any) -> bytes | None:
+    if isinstance(data, (bytes, bytearray)):
+        return bytes(data)
+    if isinstance(data, str) and data:
+        return base64.b64decode(data)
+    return None
+
+
+def extract_plot_result(mcp_contents: Any) -> tuple[dict[str, Any], bytes | None]:
+    """Split a `plot` reply into its JSON metadata and PNG bytes.
+
+    `plot` returns `[image | resource_link, text]`. The image block carries
+    inline base64 under 256 kB; above that the first block is a
+    `resource_link` whose `uri` is a `file://` path to the stored PNG and the
+    text block's `image_path` points at the same file. A result collected
+    through `get_operation` is a single dict carrying `png` directly.
+    """
+    meta: dict[str, Any] = {}
     png_bytes: bytes | None = None
 
-    for block in mcp_contents:
-        if isinstance(block, dict):
-            btype = block.get("type")
-            if btype == "text":
-                text = block.get("text", "{}")
-                try:
-                    meta = json.loads(text)
-                except Exception:
-                    meta = {"raw_text": text}
-            elif btype == "image":
-                src = block.get("source") or {}
-                data = src.get("data")
-                if data:
-                    png_bytes = base64.b64decode(data)
-        else:
-            btype = getattr(block, "type", None)
-            if btype == "text":
-                text = getattr(block, "text", "{}")
-                try:
-                    meta = json.loads(text)
-                except Exception:
-                    meta = {"raw_text": text}
-            elif btype == "image":
-                src = getattr(block, "source", None)
-                if isinstance(src, dict) and "data" in src:
-                    png_bytes = base64.b64decode(src["data"])
-                elif src is not None and hasattr(src, "data"):
-                    png_bytes = base64.b64decode(src.data)
-                elif hasattr(block, "data"):
-                    png_bytes = base64.b64decode(block.data)
+    if isinstance(mcp_contents, dict):
+        meta = dict(mcp_contents)
+        png_bytes = _decode_png(meta.pop("png", None))
+        return meta, png_bytes
 
-    if not png_bytes and "png_b64" in meta:
-        png_bytes = base64.b64decode(meta["png_b64"])
+    def _get(block: Any, name: str, default: Any = None) -> Any:
+        if isinstance(block, dict):
+            return block.get(name, default)
+        return getattr(block, name, default)
+
+    for block in mcp_contents:
+        btype = _get(block, "type")
+        if btype == "text":
+            text = _get(block, "text", "{}")
+            try:
+                meta = json.loads(text)
+            except json.JSONDecodeError:
+                meta = {"raw_text": text}
+        elif btype == "image":
+            src = _get(block, "source") or {}
+            png_bytes = _decode_png(_get(src, "data")) or _decode_png(
+                _get(block, "data")
+            )
+        elif btype == "resource_link":
+            uri = _get(block, "uri") or ""
+            if uri.startswith("file://"):
+                stored = Path(uri[len("file://") :])
+                if stored.is_file():
+                    png_bytes = stored.read_bytes()
+
+    if not png_bytes and meta.get("image_path"):
+        stored = Path(str(meta["image_path"]))
+        if stored.is_file():
+            png_bytes = stored.read_bytes()
 
     return meta, png_bytes
 
 
-def run_act2(output_dir: Path) -> Dict[str, Any]:
+def _plot_temporal_mean(paths: list[str]) -> tuple[dict[str, Any], bytes | None]:
+    from uxarray_mcp.server import tools
+
+    res = tools.plot(
+        kind="temporal_mean",
+        grid_path=GRID_PATH,
+        data_paths=paths,
+        variable_name="PRECT",
+        lon_bounds=LON_BOUNDS,
+        lat_bounds=LAT_BOUNDS,
+        scale_factor=SCALE_FACTOR,
+        units_label=UNITS_LABEL,
+        title=REGION_NAME,
+        cmap=CMAP,
+        width=WIDTH,
+        height=HEIGHT,
+        use_remote=True,
+        endpoint=ENDPOINT,
+    )
+    meta, png_bytes = extract_plot_result(res)
+    if meta.get("status") == "running":
+        meta, png_bytes = extract_plot_result(wait_for_operation(meta))
+    if meta.get("status") == "error":
+        raise RuntimeError(
+            f"remote plot failed: {meta.get('error_code')}: {meta.get('message')}"
+        )
+    return meta, png_bytes
+
+
+def _print_plot_report(elapsed: float, meta: dict[str, Any]) -> None:
+    prov = meta.get("_provenance") or {}
+    remote = prov.get("remote") or {}
+    vstats = meta.get("value_stats") or {}
+
+    print(f"ELAPSED           {elapsed:.1f} s")
+    print(f"n_files           {meta.get('n_files')}")
+    print(f"n_time_steps      {meta.get('n_time_steps')}")
+    print(f"time span         {meta.get('time_min')}  →  {meta.get('time_max')}")
+    n_sub = meta.get("n_faces_in_region")
+    n_tot = meta.get("n_faces_total")
+    frac = (n_sub / n_tot * 100.0) if n_sub and n_tot else 0.0
+    print(f"n_faces_in_region {n_sub}  of {n_tot}   ({frac:.2f}% of the mesh)")
+    print(
+        f"value_stats       min {vstats.get('min'):.3f}   "
+        f"mean {vstats.get('mean'):.3f}   "
+        f"max {vstats.get('max'):.3f} {UNITS_LABEL}"
+    )
+    print(f"render_mode       {meta.get('render_mode')}")
+    print(f"venue             {prov.get('venue')}")
+    print(f"worker            {remote.get('hostname')}")
+    print(f"provenance.tool   {prov.get('tool')}")
+    print(f"provenance.op_id  {remote.get('operation_id')}")
+    print(f"worker elapsed    {remote.get('worker_elapsed_seconds')} s")
+
+
+def run_act2(output_dir: Path) -> dict[str, Any]:
     """Act II: 1-Year Remote Precipitation Mean (1979)."""
     print("\n" + "=" * 70)
     print("ACT II: 1-Year Remote Precipitation Mean (1979)")
@@ -139,53 +234,11 @@ def run_act2(output_dir: Path) -> Dict[str, Any]:
     print(f"Endpoint: {ENDPOINT}")
     print("=" * 70)
 
-    from uxarray_mcp.tools.frontdoor import plot_dataset
-
     t0 = time.time()
-    res = plot_dataset(
-        plot_type="temporal_mean",
-        grid_path=GRID_PATH,
-        data_paths=paths,
-        variable_name="PRECT",
-        lon_bounds=LON_BOUNDS,
-        lat_bounds=LAT_BOUNDS,
-        scale_factor=SCALE_FACTOR,
-        units_label=UNITS_LABEL,
-        region_name=REGION_NAME,
-        cmap=CMAP,
-        width=WIDTH,
-        height=HEIGHT,
-        coastlines=True,
-        use_remote=True,
-        endpoint=ENDPOINT,
-    )
+    meta, png_bytes = _plot_temporal_mean(paths)
     elapsed = time.time() - t0
 
-    meta, png_bytes = extract_plot_result(res)
-    prov = meta.get("_provenance") or {}
-    worker = (meta.get("_worker_runtime") or {}).get("hostname") or prov.get(
-        "remote_hostname"
-    )
-    vstats = meta.get("value_stats") or {}
-
-    print(f"ELAPSED           {elapsed:.1f} s")
-    print(f"n_files           {meta.get('n_files')}")
-    print(f"n_time_steps      {meta.get('n_time_steps')}")
-    print(f"time span         {meta.get('time_start')}  →  {meta.get('time_end')}")
-    n_sub = meta.get("n_face_subset")
-    n_tot = meta.get("n_face_total")
-    frac = (n_sub / n_tot * 100.0) if n_sub and n_tot else 0.0
-    print(f"n_face_subset     {n_sub}  of {n_tot}   ({frac:.2f}% of the mesh)")
-    print(
-        f"value_stats       min {vstats.get('min'):.3f}   "
-        f"mean {vstats.get('mean'):.3f}   "
-        f"max {vstats.get('max'):.3f} {UNITS_LABEL}   "
-        f"n_nonfinite {vstats.get('n_nonfinite')}"
-    )
-    print(f"execution_venue   {meta.get('execution_venue')}")
-    print(f"worker            {worker}")
-    print(f"provenance.tool   {prov.get('tool')}")
-    print(f"provenance.op_id  {prov.get('operation_id')}")
+    _print_plot_report(elapsed, meta)
 
     if png_bytes:
         out_png = output_dir / "conus-precip-1yr-1979.png"
@@ -193,24 +246,24 @@ def run_act2(output_dir: Path) -> Dict[str, Any]:
         print(f"Saved plot: {out_png} ({len(png_bytes)} bytes)")
 
     out_json = output_dir / "conus-precip-1yr-1979.json"
-    out_json.write_text(json.dumps(meta, indent=2))
+    out_json.write_text(json.dumps(meta, indent=2, default=str))
     print(f"Saved metadata: {out_json}")
 
     print("-" * 70)
     assert meta.get("n_time_steps") == 1460, (
         f"Expected 1460 time steps, got {meta.get('n_time_steps')}"
     )
-    assert meta.get("n_face_subset") == 23510, (
-        f"Expected 23510 subset faces, got {meta.get('n_face_subset')}"
+    assert meta.get("n_faces_in_region") == 23510, (
+        f"Expected 23510 faces in region, got {meta.get('n_faces_in_region')}"
     )
-    assert meta.get("n_face_total") == 777602, (
-        f"Expected 777602 total faces, got {meta.get('n_face_total')}"
+    assert meta.get("n_faces_total") == 777602, (
+        f"Expected 777602 total faces, got {meta.get('n_faces_total')}"
     )
     print("✓ Act II checks passed successfully!")
     return meta
 
 
-def run_act3(output_dir: Path) -> Dict[str, Any]:
+def run_act3(output_dir: Path) -> dict[str, Any]:
     """Act III: 10-Year Remote Precipitation Mean (1979-1988)."""
     print("\n" + "=" * 70)
     print("ACT III: 10-Year Remote Precipitation Mean (1979-1988)")
@@ -220,53 +273,12 @@ def run_act3(output_dir: Path) -> Dict[str, Any]:
     print(f"Endpoint: {ENDPOINT}")
     print("=" * 70)
 
-    from uxarray_mcp.tools.frontdoor import plot_dataset
-
     t0 = time.time()
-    res = plot_dataset(
-        plot_type="temporal_mean",
-        grid_path=GRID_PATH,
-        data_paths=paths,
-        variable_name="PRECT",
-        lon_bounds=LON_BOUNDS,
-        lat_bounds=LAT_BOUNDS,
-        scale_factor=SCALE_FACTOR,
-        units_label=UNITS_LABEL,
-        region_name=REGION_NAME,
-        cmap=CMAP,
-        width=WIDTH,
-        height=HEIGHT,
-        coastlines=True,
-        use_remote=True,
-        endpoint=ENDPOINT,
-    )
+    meta, png_bytes = _plot_temporal_mean(paths)
     elapsed = time.time() - t0
 
-    meta, png_bytes = extract_plot_result(res)
-    prov = meta.get("_provenance") or {}
-    worker = (meta.get("_worker_runtime") or {}).get("hostname") or prov.get(
-        "remote_hostname"
-    )
+    _print_plot_report(elapsed, meta)
     vstats = meta.get("value_stats") or {}
-
-    print(f"ELAPSED           {elapsed:.1f} s")
-    print(f"n_files           {meta.get('n_files')}")
-    print(f"n_time_steps      {meta.get('n_time_steps')}")
-    print(f"time span         {meta.get('time_start')}  →  {meta.get('time_end')}")
-    n_sub = meta.get("n_face_subset")
-    n_tot = meta.get("n_face_total")
-    frac = (n_sub / n_tot * 100.0) if n_sub and n_tot else 0.0
-    print(f"n_face_subset     {n_sub}  of {n_tot}   ({frac:.2f}% of the mesh)")
-    print(
-        f"value_stats       min {vstats.get('min'):.3f}   "
-        f"mean {vstats.get('mean'):.3f}   "
-        f"max {vstats.get('max'):.3f} {UNITS_LABEL}   "
-        f"n_nonfinite {vstats.get('n_nonfinite')}"
-    )
-    print(f"execution_venue   {meta.get('execution_venue')}")
-    print(f"worker            {worker}")
-    print(f"provenance.tool   {prov.get('tool')}")
-    print(f"provenance.op_id  {prov.get('operation_id')}")
 
     if png_bytes:
         out_png = output_dir / "conus-precip-10yr-reproduced.png"
@@ -274,7 +286,7 @@ def run_act3(output_dir: Path) -> Dict[str, Any]:
         print(f"Saved plot: {out_png} ({len(png_bytes)} bytes)")
 
     out_json = output_dir / "conus-precip-10yr-reproduced.json"
-    out_json.write_text(json.dumps(meta, indent=2))
+    out_json.write_text(json.dumps(meta, indent=2, default=str))
     print(f"Saved metadata: {out_json}")
 
     print("-" * 70)
@@ -282,14 +294,11 @@ def run_act3(output_dir: Path) -> Dict[str, Any]:
     assert meta.get("n_time_steps") == 14600, (
         f"Expected 14600 time steps, got {meta.get('n_time_steps')}"
     )
-    assert meta.get("n_face_subset") == 23510, (
-        f"Expected 23510 subset faces, got {meta.get('n_face_subset')}"
+    assert meta.get("n_faces_in_region") == 23510, (
+        f"Expected 23510 faces in region, got {meta.get('n_faces_in_region')}"
     )
-    assert meta.get("n_face_total") == 777602, (
-        f"Expected 777602 total faces, got {meta.get('n_face_total')}"
-    )
-    assert vstats.get("n_nonfinite") == 0, (
-        f"Expected 0 non-finite values, got {vstats.get('n_nonfinite')}"
+    assert meta.get("n_faces_total") == 777602, (
+        f"Expected 777602 total faces, got {meta.get('n_faces_total')}"
     )
     # Verify value stats match published case study within rounding tolerance.
     # The type is asserted first so a missing field fails as a missing field

@@ -122,12 +122,12 @@ globus-compute-endpoint configure-tutorial   # if applicable
    - No interactive shell login.
 
    This single change reduces blast radius by ~95%. See the template
-   request in [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md#service-account-request-template).
+   request in [docs/hpc.md](docs/hpc.md).
 
 2. **Multi-User Endpoint (MEP) with function allowlist.**
    Globus Compute can be configured to only execute pre-registered functions
    identified by SHA-256 hash. Convert the endpoint from "remote shell" into
-   "bounded RPC." See [docs/operating-an-endpoint.md](docs/operating-an-endpoint.md#mep-allowlist).
+   "bounded RPC." See [docs/hpc.md](docs/hpc.md).
 
 3. **Globus Auth policy requiring high-assurance session.**
    Forces a recent MFA login at the configured IdP before submission. A
@@ -187,26 +187,16 @@ these to decide what to run without asking.
 
 **They are advisory, not a security control.** The specification lets a client
 ignore them entirely, and nothing here enforces them. Real enforcement is the
-precondition layer, the endpoint's own `remote_read_root` / `remote_write_root`,
-and the Globus consents behind both.
+endpoint's own allow-list and the Globus consents behind it.
 
-What the three categories mean in `src/uxarray_mcp/annotations.py`:
+What the hints mean, as set in `src/uxarray_mcp/server/registry.py`:
 
 | Hint | Claim |
 |---|---|
 | `readOnlyHint: true` | No side effect anywhere — writes no file, mutates no session, submits no remote work. Not merely "does not write the file it was given". |
-| `destructiveHint: true` | Can overwrite or relocate data the user cares about: a transfer landing on a cluster path, an export to a caller-supplied filename. |
+| `readOnlyHint: false` | Writes somewhere: `export` writes a file, `session` mutates state, `endpoint` submits a probe. |
 | `openWorldHint: true` | The result depends on a machine we cannot see, so a failure is not necessarily a bug in the call. |
 
-A tool that is not deliberately classified carries **no annotation at all**,
-which clients read as "unknown". That is the honest default: a wrong
-`readOnlyHint` is worse than a missing one, because it gets auto-approved and
-the user never sees the prompt that would have caught it.
-
-If you add a tool that writes anywhere, leave it out of `_READ_ONLY`. The
-tests in `tests/test_tool_annotations.py` fail on a tool whose name implies a
-write while claiming to be read-only, but naming is a heuristic and the
-judgement is yours.
 
 ---
 
@@ -222,9 +212,8 @@ someone else's code. Two jobs watch it, and they answer different questions:
 | `.github/dependabot.yml` | Is anything we pin simply out of date? |
 
 The audit scans the **fully exported graph** (`uv export --all-extras
---all-groups`), not the installed environment. Dev-only and extra-only
-packages run in CI and ship in the Docker image, so an advisory in one of them
-is still ours. It runs on lockfile changes and weekly on a schedule, because
+--all-groups`), not the installed environment, so an advisory in a dev-only
+or extra-only package is still ours. It runs on lockfile changes and weekly on a schedule, because
 an advisory can be published against a version we already pin — no push would
 ever trigger that.
 

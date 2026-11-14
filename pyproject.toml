@@ -8,120 +8,47 @@ classifiers = [
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
-    "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "License :: OSI Approved :: Apache Software License",
 ]
 authors = [
     { name = "Rajeev Jain", email = "rajeeja@gmail.com" },
     { name = "Dayan Abdulla", email = "dayanabdulla000@gmail.com" },
 ]
-license = { file = "LICENSE" }
-# The floor is 3.12; there is deliberately no upper bound.
-#
-# This used to read ">=3.12,<3.13" because of globus/globus-compute#2139: a
-# 3.13 submitter against a 3.12 worker raises WorkerLost on non-trivial
-# payloads. That is a real constraint, but it belongs to the *HPC* path only,
-# and pinning the whole package for it made every local-only user -- the large
-# majority -- pay for a feature they never enable. It also blocked the conda
-# recipe and any container base that is not exactly 3.12.
-#
-# The constraint is now enforced where it actually applies: `uxarray_mcp.remote`
-# checks the submitter's Python at import time and refuses to configure an
-# endpoint from an unsupported interpreter, and `remote.health` already warns on
-# submitter/worker minor-version skew at probe time. A local install on 3.12 or
-# 3.13 works and never touches that code.
-#
-# The 3.12 floor is also imposed by uxarray[geo,viz]>=2026.10.1, which itself
-# requires Python >=3.12. All other runtime dependencies (mcp,
-# toolregistry-server, holoviews) declare >=3.10.
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+# uxarray[geo,viz]>=2026.10.1 needs 3.12; no upper bound.
 requires-python = ">=3.12"
 dependencies = [
-    # 0.7.0 is the floor: it pairs with toolregistry 0.19 below, whose
-    # schema change alters what every served tool advertises.
-    "toolregistry-server[mcp]>=0.7.0",
-    # Imported directly (ToolRegistry, ToolTag), so it is declared directly
-    # rather than leaned on transitively. 0.16.0 taught is_content_block_list
-    # about audio/resource_link/resource; 0.17 froze ToolMetadata, so the
-    # policy-tag merge has to mutate the tag sets in place rather than
-    # rebind them, and 0.18 registers call_deferred beside discover_tools.
-    # 0.19 is the floor because it emits `anyOf` for a heterogeneous union
-    # instead of dropping branches (Oaklight/ToolRegistry#269). Below it,
-    # `lat_spec` reached clients as an untyped blob and we repaired the
-    # schema on the way out; that repair is gone, so an older registry
-    # would silently under-advertise the parameter. See #165.
-    "toolregistry>=0.19.0",
-    # Both SDK generations are in range and register handlers differently:
-    # 1.27.2 has the per-method decorators and no `add_request_handler`, 2.1.1
-    # has `add_request_handler` and no decorators. `resources.py` registers
-    # through whichever is present, and `tests/test_artifact_resources.py`
-    # passes on both.
+    # 0.9.0 requires toolregistry>=0.20.1; both move together.
+    "toolregistry-server[mcp]>=0.9.0",
+    "toolregistry>=0.21.0",
     "mcp>=1.27,<3",
     "holoviews>=1.19.0",
     "matplotlib>=3.9.0",
-    # 6.0.1, not 6.0: PyYAML 6.0 ships no wheel for CPython 3.12 and its sdist
-    # cannot build against a modern Cython, failing with `'build_ext' object has
-    # no attribute 'cython_sources'`. Nothing hit it in normal CI because that
-    # resolves to the newest PyYAML; the weekly `lowest-direct` job installs the
-    # floor we actually declare, and had failed on it every run since
-    # 2026-08-10.
+    "netcdf4>=1.6",
     "pyyaml>=6.0.1",
-    # `[geo,viz]`, not a bare `uxarray`. 2026.9.1 moved cartopy, healpix,
-    # hvplot, geopandas and the rest out of uxarray's required set and into
-    # extras (UXARRAY/uxarray#1548). This server imports cartopy directly in
-    # four modules, opens `healpix:<zoom>` grids in most tools, and renders
-    # through hvplot, so it needs both groups; they arrived transitively
-    # before and would have gone missing silently on the next resolve.
-    # Installing 2026.9.1 without them fails 95 tests with
-    # OptionalDependencyNotFoundError.
+    # [geo,viz]: cartopy, healpix, hvplot, geopandas are extras upstream and
+    # this server imports them directly.
     "uxarray[geo,viz]>=2026.10.1,<2026.11",
 ]
 
 [project.optional-dependencies]
-openapi = [
-    "toolregistry-server[openapi]>=0.7.0",
-]
 hpc = [
-    "academy-py>=0.3.1",
     "globus-compute-sdk>=4.5.0",
-]
-# Moving files is separate from running code on them, and is done by running
-# the `globus` command-line client rather than by linking a second SDK. The CLI
-# owns the tokens, the consents and the session, so this package holds no auth
-# code at all -- which is the only reason a two-person project can offer data
-# movement without also signing up to track Globus's scope rules.
-transfer = [
-    "globus-cli>=3.30",
-]
-docs = [
-    "sphinx>=7.0",
-    "sphinx-book-theme>=1.1.0",
-    "myst-parser>=3.0",
 ]
 
 [project.scripts]
 uxarray-mcp = "uxarray_mcp.cli:main"
 
 [project.urls]
-Documentation = "https://uxarray-mcp-server.readthedocs.io"
 Source = "https://github.com/UXARRAY/uxarray-mcp-server"
 Tracker = "https://github.com/UXARRAY/uxarray-mcp-server/issues"
 
 [dependency-groups]
 dev = [
-    # Declared so the outputSchema conformance tests cannot silently skip.
-    # jsonschema arrives transitively today, which means a resolver change
-    # would turn the checks that hold every result to its published envelope
-    # into a green no-op.
-    "jsonschema>=4.20.0",
     "mypy>=1.10.0",
-    # Same reason as jsonschema: the suite-integrity check reads the declared
-    # uxarray floor out of the packaging metadata so it cannot drift from this
-    # file, and it needs a specifier parser to do that.
-    "packaging>=23.0",
     "pre-commit>=4.3.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.0.0",
@@ -129,9 +56,7 @@ dev = [
 ]
 
 [tool.mypy]
-# Type-check against the floor, not the container's interpreter: 3.11 is the
-# lowest version we claim to support, so that is where checking has to happen.
-python_version = "3.11"
+python_version = "3.12"
 check_untyped_defs = true
 ignore_missing_imports = true
 warn_unused_ignores = true
@@ -145,11 +70,6 @@ exclude = ["tests/", "docs/"]
 module = "yaml"
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-# academy is an optional HPC dependency; the fallback stubs use type: ignore
-# which are unused when academy is installed in the pre-commit env.
-module = "uxarray_mcp.remote.agent"
-warn_unused_ignores = false
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.14.0"]
@@ -159,10 +79,6 @@ build-backend = "uv_build"
 
 [tool.ruff.lint]
 extend-select = ["I"]
-# Notebooks (and their jupytext-paired .py scripts) intentionally scatter
-# imports across per-cell (# %%) blocks, so E402 (module-import-not-at-top)
-# is expected style there, not a lint violation.
-per-file-ignores = { "notebooks/*.py" = ["E402"], "notebooks/*.ipynb" = ["E402"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["uxarray_mcp"]

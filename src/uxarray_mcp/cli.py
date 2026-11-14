@@ -2,11 +2,10 @@
 
 Subcommands
 -----------
-- ``serve`` — run the MCP server (stdio transport)
-- ``setup`` — write a minimal user config to ``~/.config/uxarray-mcp/config.yaml``
-- ``doctor`` — validate local Globus auth, endpoint health, and optional remote probes
-- ``endpoints`` — manage named Globus Compute endpoints in the user config
-- ``transfer setup`` — get Globus Transfer working: CLI, login, consent, config
+- ``serve`` — run the MCP server (stdio by default)
+- ``openapi`` — run the same tools as a REST/OpenAPI server
+- ``endpoints`` — discover, list, add, remove Globus Compute endpoints
+- ``doctor`` — validate the install and, when configured, an endpoint
 - ``install-claude`` — print or write the Claude Desktop ``mcpServers`` block
 
 The CLI is registered via the ``uxarray-mcp`` entry point in pyproject.toml.
@@ -25,13 +24,11 @@ from typing import Any
 import yaml
 
 from uxarray_mcp.remote.config import (
-    DEFAULT_TIMEOUT_SECONDS,
     USER_CONFIG_PATH,
     discover_config_path,
     discover_config_search_paths,
     load_config,
 )
-from uxarray_mcp.transfer_setup import cmd_transfer_setup
 
 
 def _read_user_config(path: Path) -> dict[str, Any]:
@@ -68,65 +65,23 @@ def _ensure_hpc_block(data: dict[str, Any]) -> dict[str, Any]:
 
 def cmd_serve(args: argparse.Namespace) -> int:
     """Run the MCP server."""
-    from uxarray_mcp.app import UXarrayApp
+    from uxarray_mcp.server.app import UXarrayApp
 
-    app = UXarrayApp()
-    transport = getattr(args, "transport", "stdio")
-    mcp_transport = "streamable-http" if transport == "http" else transport
-    app.serve_mcp(
-        transport=mcp_transport,
-        host=getattr(args, "host", "127.0.0.1"),
-        port=getattr(args, "port", 8001),
-        profile=getattr(args, "profile", "core"),
+    transport = args.transport
+    UXarrayApp().serve_mcp(
+        transport="streamable-http" if transport == "http" else transport,
+        host=args.host,
+        port=args.port,
     )
     return 0
 
 
 def cmd_openapi(args: argparse.Namespace) -> int:
-    """Run the OpenAPI/REST server."""
-    from uxarray_mcp.app import UXarrayApp
+    """Run the OpenAPI/REST server (same tools, HTTP instead of MCP)."""
+    from uxarray_mcp.server.app import UXarrayApp
 
-    app = UXarrayApp()
-    app.serve_openapi(
-        host=getattr(args, "host", "0.0.0.0"),
-        port=getattr(args, "port", 8000),
-        profile=getattr(args, "profile", "core"),
-    )
+    UXarrayApp().serve_openapi(host=args.host, port=args.port)
     return 0
-
-
-# ---------------------------------------------------------------------------
-# setup
-# ---------------------------------------------------------------------------
-
-
-def cmd_setup(args: argparse.Namespace) -> int:
-    """Write a starter config to the user config path."""
-    target = Path(args.path).expanduser() if args.path else USER_CONFIG_PATH
-    if target.exists() and not args.force:
-        print(
-            f"Config already exists at {target}. Pass --force to overwrite.",
-            file=sys.stderr,
-        )
-        return 2
-
-    starter: dict[str, Any] = {
-        "hpc": {
-            "execution_mode": args.execution_mode,
-            "timeout_seconds": DEFAULT_TIMEOUT_SECONDS,
-            "default_endpoint": None,
-            "endpoints": {},
-        }
-    }
-    _write_user_config(target, starter)
-    print(f"Wrote starter config to {target}")
-    print("Add an endpoint with:  uxarray-mcp endpoints add <name> <uuid>")
-    return 0
-
-
-# ---------------------------------------------------------------------------
-# endpoints
-# ---------------------------------------------------------------------------
 
 
 def _user_write_target() -> Path:
@@ -149,7 +104,9 @@ def cmd_endpoints_list(args: argparse.Namespace) -> int:
             print("No endpoints configured. No config file was found. Searched:")
             for p in discover_config_search_paths():
                 print(f"  - {p}")
-            print("\nWrite a starter config with:  uxarray-mcp setup")
+            print(
+                "\nAdd one with:  uxarray-mcp endpoints add <name> <uuid> --path-prefix /..."
+            )
         else:
             print(f"No endpoints configured in {loaded}.")
             print("\nAdd one with:  uxarray-mcp endpoints add <name> <uuid>")
@@ -237,7 +194,7 @@ def cmd_endpoints_discover(args: argparse.Namespace) -> int:
         print("No Globus Compute endpoints are visible to your identity.")
         print("\nThat means one of:")
         print("  - you have not started an endpoint on the HPC machine yet")
-        print("    (see docs/operating-an-endpoint.md), or")
+        print("    (see docs/hpc.md), or")
         print("  - the endpoint belongs to someone else and they have not")
         print("    shared it with you -- ask them for the UUID directly.")
         return 0
@@ -324,94 +281,17 @@ def cmd_endpoints_remove(args: argparse.Namespace) -> int:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    from uxarray_mcp.tools.execution_control import (
-        probe_path_access,
-        validate_hpc_setup,
-    )
+    """Validate local install and, when configured, one endpoint."""
+    from uxarray_mcp.server.tools import endpoint
 
-    sample_path = args.sample_path[0] if args.sample_path else None
-    report = validate_hpc_setup(
-        run_remote_probe=not args.skip_remote_probe,
-        probe_timeout_seconds=args.timeout_seconds,
-        sample_path=sample_path,
+    report = endpoint(
+        action="validate",
         endpoint=args.endpoint,
+        path=args.sample_path,
+        probe_timeout_seconds=args.timeout_seconds,
     )
-
-    if len(args.sample_path) > 1:
-        report["additional_path_probes"] = [
-            probe_path_access(
-                path,
-                use_remote=True,
-                inspect_netcdf=not args.no_netcdf,
-                endpoint=args.endpoint,
-            )
-            for path in args.sample_path[1:]
-        ]
-
-    if getattr(args, "summary", False):
-        print(render_doctor_summary(report))
-    else:
-        print(json.dumps(report, indent=2, sort_keys=True))
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report.get("passed") else 1
-
-
-def render_doctor_summary(report: dict[str, Any]) -> str:
-    """A short human report over the same structure ``doctor`` already builds.
-
-    The JSON is the contract and stays the default -- scripts parse it. But
-    the first thing a new user runs should not be two hundred lines of nested
-    objects they have to read to find one failing line, so ``--summary`` folds
-    it to one line per check plus the fix.
-
-    Nothing is recomputed here. Every field comes from the report, so the
-    summary cannot disagree with the JSON beside it.
-    """
-    lines: list[str] = []
-    passed = report.get("passed")
-    lines.append("PASS  overall" if passed else "FAIL  overall")
-
-    mode = report.get("mode")
-    if mode:
-        lines.append(f"      mode: {mode}")
-
-    for check in report.get("checks", []):
-        mark = "ok  " if check.get("passed") else "FAIL"
-        name = check.get("name", "?")
-        summary = str(check.get("summary", "")).strip()
-        lines.append(f"  {mark}  {name}: {summary}")
-        guidance = str(check.get("guidance", "") or "").strip()
-        if guidance and not check.get("passed"):
-            for part in guidance.splitlines():
-                if part.strip():
-                    lines.append(f"        {part.strip()}")
-
-    # Compute and Transfer are different services with different consents, and
-    # this is the moment a user discovers that a working endpoint still cannot
-    # move a file. Say so here rather than only in docs/data-transfer.md.
-    transfer = next(
-        (c for c in report.get("checks", []) if c.get("name") == "transfer"), None
-    )
-    if (
-        transfer is not None
-        and "no globus_transfer" in str(transfer.get("summary", "")).lower()
-    ):
-        lines.append("")
-        lines.append(
-            "  Note: this endpoint runs code but moves no files. Globus Transfer"
-        )
-        lines.append(
-            "  is a separate service with its own login and consent; set it up"
-        )
-        lines.append("  with `uxarray-mcp transfer setup` only if you need it.")
-
-    lines.append("")
-    lines.append("  Full detail: uxarray-mcp doctor   (without --summary)")
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# install-claude
-# ---------------------------------------------------------------------------
 
 
 def _build_claude_block(name: str) -> dict[str, Any]:
@@ -470,16 +350,6 @@ def build_parser() -> argparse.ArgumentParser:
     # --- serve (MCP) ---
     serve = sub.add_parser("serve", help="Run the MCP server.")
     serve.add_argument(
-        "--profile",
-        choices=("core", "deferred-full"),
-        default="core",
-        help=(
-            "core: gateway + control + list_datasets + prompts (33 tools). "
-            "deferred-full: also load 33 raw tools as deferred, gated "
-            "behind discover_tools / admin promotion."
-        ),
-    )
-    serve.add_argument(
         "--transport",
         choices=("stdio", "sse", "http"),
         default="stdio",
@@ -489,38 +359,10 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=8001, help="Port for SSE/HTTP.")
     serve.set_defaults(func=cmd_serve)
 
-    # --- openapi ---
     openapi = sub.add_parser("openapi", help="Run the OpenAPI/REST server.")
-    openapi.add_argument(
-        "--profile",
-        choices=("core", "deferred-full"),
-        default="core",
-        help=(
-            "core: gateway + control + list_datasets + prompts (33 tools). "
-            "deferred-full: also load 33 raw tools as deferred, gated "
-            "behind discover_tools / admin promotion."
-        ),
-    )
-    openapi.add_argument(
-        "--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)."
-    )
-    openapi.add_argument("--port", type=int, default=8000, help="Port (default: 8000).")
+    openapi.add_argument("--host", default="127.0.0.1")
+    openapi.add_argument("--port", type=int, default=8000)
     openapi.set_defaults(func=cmd_openapi)
-
-    setup = sub.add_parser("setup", help="Write a starter user config.")
-    setup.add_argument("--path", default=None, help="Override target path.")
-    setup.add_argument(
-        "--execution-mode",
-        default="auto",
-        choices=["local", "auto", "hpc"],
-        help=(
-            "Default execution mode (default: auto). 'auto' runs local-only "
-            "until you add an endpoint with `endpoints add`, then uses it "
-            "automatically. Most users never need to change this."
-        ),
-    )
-    setup.add_argument("--force", action="store_true", help="Overwrite existing file.")
-    setup.set_defaults(func=cmd_setup)
 
     endpoints = sub.add_parser("endpoints", help="Manage Globus Compute endpoints.")
     ep_sub = endpoints.add_subparsers(dest="endpoints_command", required=True)
@@ -562,81 +404,14 @@ def build_parser() -> argparse.ArgumentParser:
     ep_remove.add_argument("name")
     ep_remove.set_defaults(func=cmd_endpoints_remove)
 
-    # Globus Transfer is its own service with its own login, so it gets its own
-    # noun rather than another flag on `setup`, which configures compute.
-    transfer = sub.add_parser(
-        "transfer", help="Set up Globus Transfer (file movement)."
-    )
-    tr_sub = transfer.add_subparsers(dest="transfer_command", required=True)
-
-    tr_setup = tr_sub.add_parser(
-        "setup",
-        help="Check and fix everything a transfer needs.",
-        description=(
-            "Walk the seven things that must be true before a file can move: "
-            "the globus CLI, a login, Globus Connect Personal running with a "
-            "writable share, both collection UUIDs, consent for the remote "
-            "collection, and the config block. Offers to fix each."
-        ),
-    )
-    tr_setup.add_argument(
-        "--endpoint",
-        default=None,
-        help="Named endpoint to configure, as used by `endpoints add`.",
-    )
-    tr_setup.add_argument(
-        "--check",
-        action="store_true",
-        help="Report only; change nothing and ask nothing.",
-    )
-    tr_setup.add_argument(
-        "--yes",
-        action="store_true",
-        help="Take every default without asking. Skips anything needing a browser.",
-    )
-    tr_setup.set_defaults(func=cmd_transfer_setup)
-
     doctor = sub.add_parser(
-        "doctor",
-        help="Check that the install is healthy (local-only or HPC).",
-        description=(
-            "Run local-only by default; add an HPC endpoint (`endpoints add`) "
-            "to also validate remote readiness. With no endpoint configured, "
-            "this reports a passing local-only result — HPC is opt-in."
-        ),
+        "doctor", help="Check the install and, if configured, an endpoint."
     )
+    doctor.add_argument("--endpoint", default=None, help="Named endpoint to validate.")
     doctor.add_argument(
-        "--sample-path",
-        action="append",
-        default=[],
-        help="Remote file path to test-read (repeatable). Requires an endpoint.",
+        "--sample-path", default=None, help="Remote file to test-read on the worker."
     )
-    doctor.add_argument(
-        "--timeout-seconds",
-        type=int,
-        default=180,
-        help="Seconds to wait for the remote worker probe (ignored if no endpoint).",
-    )
-    doctor.add_argument(
-        "--endpoint",
-        default=None,
-        help="Named endpoint to validate. Omit to check the default/local-only setup.",
-    )
-    doctor.add_argument(
-        "--skip-remote-probe",
-        action="store_true",
-        help="Skip submitting a test job to the endpoint (config/auth checks only).",
-    )
-    doctor.add_argument(
-        "--no-netcdf",
-        action="store_true",
-        help="Skip opening --sample-path as NetCDF; just check readability.",
-    )
-    doctor.add_argument(
-        "--summary",
-        action="store_true",
-        help="Print a short readable report instead of the full JSON.",
-    )
+    doctor.add_argument("--timeout-seconds", type=int, default=180)
     doctor.set_defaults(func=cmd_doctor)
 
     claude = sub.add_parser(

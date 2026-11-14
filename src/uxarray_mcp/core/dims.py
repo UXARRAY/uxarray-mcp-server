@@ -1,0 +1,97 @@
+"""Classify non-spatial dimensions and collapse them to a single face slice.
+
+Time axes take ``time_index``, vertical axes ``level_index``, anything else 0;
+every selection made is returned so the caller can report it.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
+from typing import Any
+
+FACE_DIMS = frozenset({"n_face", "nCells"})
+
+# Matched case-insensitively. A dimension whose name merely *contains* "time"
+# (``valid_time``, ``time_counter``) is also treated as time-like, matching
+# what the zonal profile path has always done.
+TIME_DIM_NAMES = frozenset({"time", "time_counter"})
+
+# Exact matches only -- these are short enough that a substring rule would
+# misfire (``z`` appears inside plenty of unrelated names).
+LEVEL_DIM_NAMES = frozenset({"lev", "level", "levels", "plev", "z", "nvertlevels"})
+
+# Substrings that make a dimension vertical. ``lev`` covers the long tail of
+# real spellings -- ``n_level``, ``nlev``, ``num_levels``, ``nVertLevels`` --
+# which an exact list kept missing; this project's own multi-level fixture
+# uses ``n_level``, and it was classified "other" and pinned to index 0 with
+# no way for a caller to reach the other three.
+LEVEL_DIM_SUBSTRINGS = ("lev", "depth", "height", "altitude", "isobaric")
+
+
+def classify_dim(dim: Any) -> str:
+    """Return ``"time"``, ``"level"``, or ``"other"`` for a dimension name."""
+    name = str(dim).lower()
+    if name in TIME_DIM_NAMES or "time" in name:
+        return "time"
+    if name in LEVEL_DIM_NAMES or any(s in name for s in LEVEL_DIM_SUBSTRINGS):
+        return "level"
+    return "other"
+
+
+def face_slice_selection(
+    sizes: Mapping[Any, int],
+    *,
+    time_index: int = 0,
+    level_index: int = 0,
+    keep: Iterable[Any] = FACE_DIMS,
+) -> tuple[dict[str, int], dict[str, dict[str, Any]]]:
+    """Plan the collapse of every dimension in ``sizes`` outside ``keep``.
+
+    Returns ``(selection, reduced)``. ``selection`` is ready to hand to
+    ``.isel(**selection)``. ``reduced`` describes each dimension that was
+    genuinely collapsed -- name, kind, index chosen, and original size --
+    and omits size-1 dimensions, which carry no information to lose.
+    """
+    keep_set = {str(d) for d in keep}
+    selection: dict[str, int] = {}
+    reduced: dict[str, dict[str, Any]] = {}
+
+    for dim, size in sizes.items():
+        name = str(dim)
+        if name in keep_set:
+            continue
+        size = int(size)
+        if size == 1:
+            selection[name] = 0
+            continue
+        kind = classify_dim(name)
+        index = {"time": time_index, "level": level_index}.get(kind, 0)
+        selection[name] = index
+        reduced[name] = {"kind": kind, "index": index, "size": size}
+
+    return selection, reduced
+
+
+def reduce_to_face(
+    var: Any,
+    *,
+    time_index: int = 0,
+    level_index: int = 0,
+) -> tuple[Any, dict[str, dict[str, Any]]]:
+    """Select a single time/level slice so ``var`` is 1-D face-centered.
+
+    Applies :func:`face_slice_selection` to ``var.sizes`` and performs the
+    ``isel``. Returns ``(reduced_var, reduced_dims)``; the second element
+    names every axis that was collapsed, the index used, and how many were
+    available, because a derivative or a map from one level of a 40-level
+    field is not the field's, and the caller cannot tell from the numbers.
+
+    Shared by plotting and vector calculus so the two cannot disagree about
+    what ``time_index`` and ``level_index`` reach.
+    """
+    selection, reduced = face_slice_selection(
+        var.sizes, time_index=time_index, level_index=level_index
+    )
+    if not selection:
+        return var, reduced
+    return var.isel(**selection), reduced

@@ -26,7 +26,7 @@
 set -euo pipefail
 
 USERNAME="${NCAR_USERNAME:-$USER}"
-CONDA_ENV="${CONDA_ENV:-/glade/work/$USERNAME/conda-envs/uxarray_dev}"
+CONDA_ENV="${CONDA_ENV:-/glade/work/$USERNAME/conda-envs/uxarray_312}"
 PY="$CONDA_ENV/bin/python"
 
 # Pin either package by exporting a full pip requirement specifier, e.g.
@@ -164,20 +164,14 @@ _update() {
 # ---------------------------------------------------------------------------
 # NO-DEPS: why uxarray-mcp is installed without its dependency tree.
 #
-# The worker never runs the MCP server. Remote functions are serialised by
-# value (AllCodeStrategies) and execute against uxarray + numpy + matplotlib
-# alone; ucar_endpoint.sh's worker_init even unsets PYTHONPATH to keep the
-# server off the import path. Installing the full tree pulls toolregistry and
-# toolregistry-server[mcp], whose pydantic pins conflict with the endpoint's.
+# The worker never runs the MCP server. The shim function is serialised by
+# value (AllCodeStrategies) and does `from uxarray_mcp.core import ops` on the
+# worker, so the package must be importable there -- but core/ only needs
+# uxarray, numpy and matplotlib. Installing the full tree pulls mcp,
+# toolregistry and toolregistry-server[mcp], whose pydantic pins conflict with
+# the endpoint's, and the endpoint stops importing.
 #
-# But the distribution cannot simply be removed either. Every remote_* function
-# reports provenance through an inlined
-#     importlib.metadata.version("uxarray-mcp")
-# with no fallback, so an absent distribution raises PackageNotFoundError and
-# every tool call dies *after* doing all its work. Until that lambda grows a
-# guard, the metadata has to exist.
-#
-# --no-deps threads both: the version string resolves, nothing else is pulled
+# --no-deps threads both: uxarray_mcp.core imports, nothing else is pulled
 # in, and the stale `uxarray<2026.10` pin that an old uxarray-mcp carries is
 # not enforced against a current uxarray. That pin is what produces
 #
@@ -187,7 +181,7 @@ _update() {
 # Update uxarray-mcp FIRST so its metadata is current before uxarray moves,
 # or pip reports the conflict against a pin that is about to be replaced.
 # ---------------------------------------------------------------------------
-_update uxarray_mcp "$UXARRAY_MCP_SPEC" "uxarray-mcp (provenance metadata only)" --no-deps
+_update uxarray_mcp "$UXARRAY_MCP_SPEC" "uxarray-mcp (core/ only, --no-deps)" --no-deps
 _update uxarray     "$UXARRAY_SPEC"     "uxarray (the worker's compute library)"
 
 echo "==> Versions the worker will now import"
@@ -210,13 +204,14 @@ for name in ("uxarray", "xarray", "numpy", "matplotlib", "uxarray_mcp"):
     except Exception as exc:
         print(f"    {name:12} IMPORT FAILED  {type(exc).__name__}: {exc}")
 
-# The provenance path the remote functions actually take. It reads the
-# distribution, not the module, so it can disagree with the line above.
+# What the shim imports on every remote call. An editable install can leave
+# the distribution metadata behind the module, so report both.
 try:
-    print(f"\n    uxarray-mcp distribution metadata: {md.version('uxarray-mcp')}")
+    import uxarray_mcp.core  # noqa: F401
+    print(f"\n    uxarray_mcp.core importable; distribution metadata: {md.version('uxarray-mcp')}")
 except Exception as exc:
-    print(f"\n    uxarray-mcp distribution metadata: MISSING ({type(exc).__name__})")
-    print("    Remote tool calls will fail in _worker_runtime. Reinstall with:")
+    print(f"\n    uxarray_mcp.core / distribution: MISSING ({type(exc).__name__})")
+    print("    Remote tool calls will fail with WORKER_MISSING_PACKAGE. Reinstall with:")
     print(f"      {sys.executable} -m pip install --no-deps uxarray-mcp")
 PY
 

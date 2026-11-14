@@ -16,9 +16,9 @@ PYTHON="${PYTHON:-/usr/bin/python3.12}"
 VENV="$HOME/venvs/globus-compute"
 TMUX_SESSION="uxarray-endpoint"
 # NOTE: the repo is cloned on Improv only because this script lives in it. The
-# MCP server itself must never be importable by the worker: remote functions are
-# serialised via AllCodeStrategies and only require uxarray + numpy in the
-# worker venv. Never add uxarray_mcp to PYTHONPATH.
+# shim function is serialised via AllCodeStrategies and imports uxarray_mcp.core
+# on the worker, so the venv needs uxarray-mcp installed --no-deps (the full
+# dependency tree pulls a pydantic that conflicts with globus-compute-endpoint).
 
 usage() {
   cat <<'EOF'
@@ -248,11 +248,15 @@ _upgrade_venv() {
   # hvplot and geopandas into extras; without them the worker imports
   # uxarray happily and then fails mid-render on the first coastline or
   # HEALPix grid. pyproject.toml floors the same spec.
-  pip install "globus-compute-endpoint>=4.9.0" "uxarray[geo,viz]" xarray netCDF4 h5netcdf numpy matplotlib
+  pip install "uxarray[geo,viz]" netCDF4 h5netcdf "globus-compute-endpoint>=4.9.0"
+  # The worker imports uxarray_mcp.core; --no-deps keeps the server's
+  # mcp/toolregistry/pydantic tree out of the venv.
+  pip install --no-deps uxarray-mcp
 
   echo "==> Verifying"
   python --version
   python -c "import uxarray; print('uxarray OK')"
+  python -c "import uxarray_mcp.core; print('uxarray_mcp.core OK')"
   globus-compute-endpoint --version
 
   echo ""

@@ -16,7 +16,7 @@ YAC_SHIM_LIB="$HOME/local/yac-runtime-shims/lib"
 # Override to test a freshly built YAC without editing this file:
 #   YAC_VERSION=3.18 chrysalis_endpoint.sh restart
 # Bump the default only once that build is verified on the endpoint. 3.20.2 was
-# verified on chr-0104 under srun via `yac_smoke_test.py --yac-prefix`: the
+# verified on chr-0104 under srun via endpoint(action="check_yac"): the
 # uxarray helper resolved to the 3.20.2 .so and the 192->768 remap returned the
 # same mean as 3.18 to 16 digits. worker_init bakes the prefix in at configure
 # time, so changing this needs `configure <mode>` again, then `restart`.
