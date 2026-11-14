@@ -173,3 +173,37 @@ returned `status: "running"`, or reads the stored operation record.
 | `model_evaluation` | `climatology_anomaly` | `hpc_diagnose`, plus the
 paths/variables that topic needs. Returns a numbered plan naming the exact
 tool calls to make and how to read their results — instructions, not data.
+
+---
+
+## Less common: REST and tool metadata
+
+Most users only need MCP. Two extras come from the
+[toolregistry-server](https://github.com/Oaklight/toolregistry-server) layer.
+
+**REST / OpenAPI.** `uxarray-mcp openapi --port 8000` serves the same
+thirteen tools over HTTP (bound to 127.0.0.1 by default). Each tool is
+`POST /tools/default/<name>` with the arguments as a JSON body; results and
+refusals are identical to MCP. `GET /openapi.json` is the spec, `/docs` an
+interactive page, `GET /tools` the listing.
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/tools/default/inspect_dataset \
+     -H 'content-type: application/json' -d '{"grid_path": "healpix:1"}'
+```
+
+It has no authentication; do not bind it to a public interface.
+
+**Hints.** Every tool advertises MCP annotations (in OpenAPI as `x-read-only`,
+`x-idempotent`, `x-open-world`, `x-destructive`) so a client can auto-approve
+safe calls. No tool is destructive.
+
+| Tools | read-only | idempotent | open-world |
+|---|---|---|---|
+| all others | yes | yes | no |
+| `export`, `session` (write files / state) | no | no | no |
+| `endpoint` (talks to Globus) | no | yes | yes |
+
+Internally the registry also tags tools `file_system`, `network` and `slow`
+(`compute`, `vector_calc`, `compare`, `remap`, `plot`); see
+`server/registry.py`.

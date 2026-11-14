@@ -52,7 +52,8 @@ square metres, and plot the mesh over the North Atlantic."*
 | `get_operation` | Collect a remote result that outlived its call |
 | `guide` | Step-by-step plans: first_look, vorticity, cyclone_structure, eddy_activity, model_evaluation, climatology_anomaly, hpc_diagnose |
 
-Parameters, refusal rules and result shapes: [docs/tools.md](docs/tools.md).
+Parameters, refusal rules and result shapes: [docs/tools.md](docs/tools.md)
+(which also covers the optional REST/OpenAPI server and tool hints).
 
 ## When your data is on a cluster
 

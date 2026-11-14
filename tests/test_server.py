@@ -121,6 +121,16 @@ async def test_mcp_wire_plot_returns_an_image(state_dir):
         assert "image" in types and "text" in types
 
 
+def test_openapi_exposes_every_tool_with_hints():
+    from toolregistry_server.adapters.openapi.spec import build_openapi_schema
+
+    spec = build_openapi_schema(RouteTable(make_registry()))
+    paths = spec["paths"]
+    assert {f"/tools/default/{n}" for n in TOOL_NAMES} <= set(paths)
+    assert paths["/tools/default/export"]["post"]["x-read-only"] is False
+    assert paths["/tools/default/inspect_dataset"]["post"]["x-read-only"] is True
+
+
 def test_cli_parser_has_only_the_kept_commands():
     from uxarray_mcp.cli import build_parser
 
